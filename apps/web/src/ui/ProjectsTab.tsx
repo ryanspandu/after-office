@@ -145,7 +145,10 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
                   <LuChevronRight />
                 </button>
               ) : (
-                <span className="ws__fold ws__fold--none" />
+                // nothing inside to show: a dot where the chevron would be
+                <span className="ws__fold ws__fold--none" aria-hidden>
+                  <i className="ws__dot" />
+                </span>
               )}
               <button
                 className="ws__head"
@@ -178,9 +181,9 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <div className="ws__empty muted">{w.shared ? 'New projects get their folder here.' : 'No projects in this folder yet.'}</div>
-              )}
+              ) : w.shared ? (
+                <div className="ws__empty muted">New projects get their folder here.</div>
+              ) : null}
             </section>
           )
         })}

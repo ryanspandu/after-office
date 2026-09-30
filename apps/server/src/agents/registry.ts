@@ -170,7 +170,7 @@ export const pendingFor = (agentId: string) => [...pending.values()].filter((f) 
 
 export function clearPendingFor(agentId: string, keep?: (f: Pending) => boolean) {
   // a delegation waiting for the owner isn't about the manager's screen: it stays until the owner decides
-  for (const [id, f] of pending) if (f.agentId === agentId && !['delegation', 'hire', 'check'].includes(f.kind) && !keep?.(f)) resolvePending(id, {})
+  for (const [id, f] of pending) if (f.agentId === agentId && !['delegation', 'hire', 'check', 'daily'].includes(f.kind) && !keep?.(f)) resolvePending(id, {})
 }
 
 export const currentRateLimits = () => rateLimits

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { LuChevronRight, LuCornerLeftUp, LuDownload, LuFile, LuFileArchive, LuFileImage, LuFileText, LuFolder, LuLink, LuRefreshCw, LuX } from 'react-icons/lu'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { LuChevronRight, LuCornerLeftUp, LuDownload, LuFile, LuFileArchive, LuFileImage, LuFileText, LuFolder, LuLink, LuRefreshCw, LuUpload, LuX } from 'react-icons/lu'
 import type { FolderEntry, FolderListing } from '@after-office/shared'
 import { api } from '../state/auth'
 import { useNow } from '../state/clock'
@@ -24,8 +24,32 @@ export function FileBrowser({ root }: { root: string }) {
   // ticked entries of the folder on screen (names); cleared when moving to another folder
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [zipping, setZipping] = useState(false)
+  // files the owner adds to the folder on screen (the agents can use them right away)
+  const [uploading, setUploading] = useState(0)
+  const uploadInput = useRef<HTMLInputElement>(null)
 
   const rootName = root.split('/').filter(Boolean).pop() ?? root
+  const upload = async (files: File[]) => {
+    if (!files.length) return
+    setUploading(files.length)
+    const problems: string[] = []
+    for (const file of files) {
+      try {
+        const r = await api(`/api/workspaces/files?${new URLSearchParams({ root, path })}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/octet-stream', 'x-file-name': encodeURIComponent(file.name) },
+          body: file,
+        })
+        if (!r.ok) problems.push((await r.json().catch(() => null))?.error ?? `Could not add ${file.name}`)
+      } catch {
+        problems.push(`Could not add ${file.name}`)
+      }
+      setUploading((n) => n - 1)
+    }
+    setUploading(0)
+    await load(path)
+    if (problems.length) setError(problems.join(' · '))
+  }
   const load = useCallback(
     async (dir: string) => {
       setLoading(true)
@@ -91,7 +115,15 @@ export function FileBrowser({ root }: { root: string }) {
 
   const crumbs = path ? path.split('/') : []
   return (
-    <div className="fb">
+    <div
+      className="fb"
+      onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return
+        e.preventDefault()
+        void upload([...e.dataTransfer.files])
+      }}
+    >
       <div className="fb__bar">
         <input
           className="check fb__all"
@@ -121,6 +153,19 @@ export function FileBrowser({ root }: { root: string }) {
             </span>
           ))}
         </nav>
+        <input
+          ref={uploadInput}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            void upload([...(e.target.files ?? [])])
+            e.target.value = ''
+          }}
+        />
+        <button className="icon-btn small ghost" onClick={() => uploadInput.current?.click()} disabled={uploading > 0} data-tip={uploading ? `Adding ${uploading}…` : 'Upload files here'} aria-label="Upload files">
+          {uploading ? <LuRefreshCw className="spin" /> : <LuUpload />}
+        </button>
         <button className="icon-btn small ghost" onClick={() => void load(path)} disabled={loading} data-tip="Refresh" aria-label="Refresh">
           <LuRefreshCw className={loading ? 'spin' : ''} />
         </button>

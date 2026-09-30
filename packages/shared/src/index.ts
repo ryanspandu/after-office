@@ -117,7 +117,7 @@ export interface LiveFollowUp {
   id: string
   agentId: string
   /** `delegation`: the manager wants to hand out a task and approval is on */
-  kind: 'permission' | 'plan' | 'question' | 'delegation' | 'hire' | 'check'
+  kind: 'permission' | 'plan' | 'question' | 'delegation' | 'hire' | 'check' | 'daily'
   tool: string
   /** One-line summary (command, file, first question). */
   message: string
@@ -445,7 +445,7 @@ export interface FollowUp {
   id: string
   agentId: string
   /** `plan` = an agent in plan mode waiting for its plan to be approved; `delegation` = a task from the manager. */
-  kind: 'permission' | 'question' | 'review' | 'plan' | 'delegation' | 'hire' | 'check'
+  kind: 'permission' | 'question' | 'review' | 'plan' | 'delegation' | 'hire' | 'check' | 'daily'
   message: string
   createdAt: number
   /** Long body shown in the detail view: the full plan, question context, review notes… */

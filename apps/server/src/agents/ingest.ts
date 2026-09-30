@@ -6,7 +6,7 @@ import { agentsRepo } from '../db'
 import { answerPermissionByKeys, answerPlan, AgentError, applyDeferredMode, readDialogOptions, takeDeferredMode } from './manager'
 import { addPending, clearPendingFor, currentRateLimits, getPending, patchPending, resolvePending, runtimeOf, setRateLimits, updateRuntime } from './registry'
 import { applyHook, applyStatusline, type HookPayload, type StatuslinePayload } from './state'
-import { decideCheck, decideDelegation, deliver, handleStop, noteFileWritten, onPromptSubmitted } from '../work/work'
+import { decideCheck, decideCron, decideDelegation, deliver, handleStop, noteFileWritten, onPromptSubmitted } from '../work/work'
 import { writtenFile } from './files'
 import { decideHire } from '../work/hires'
 import { connectorWriteGate } from './connectors'
@@ -136,6 +136,7 @@ export async function decide(id: string, d: FollowUpDecision, who: { device: str
   if (f.kind === 'delegation') return decideDelegation(f, d)
   if (f.kind === 'hire') return decideHire(f, d)
   if (f.kind === 'check') return decideCheck(f, d)
+  if (f.kind === 'daily') return decideCron(f, d)
 
   if (f.kind === 'plan') {
     if (d.type !== 'plan' || !d.option) throw new AgentError('Plans need one of the dialog options')

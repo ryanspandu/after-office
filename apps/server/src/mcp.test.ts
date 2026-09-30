@@ -284,6 +284,61 @@ describe('after-office MCP', () => {
     for (const id of ['bm-wait', 'bm-rev', task.id]) tasksRepo.remove(id)
   })
 
+  test('daily jobs: create, change, pause, delete; with the same approval rules as tasks', async () => {
+    const { cronsRepo, settingsRepo } = await import('./db')
+    const { updateSettings } = await import('./work/settings')
+    const { getPending } = await import('./agents/registry')
+    const { decide } = await import('./agents/ingest')
+    const { onPromptSubmitted } = await import('./work/work')
+    updateSettings({ managerApproval: false })
+    onPromptSubmitted('mgr', 'hai') // not right after a report
+    // applied right away
+    const made = await call('create_daily_job', { name: 'Morning check', agent: 'Rio', prompt: 'Check the site.', times: ['09:00'], days: ['mon', 'fri'] })
+    expect(made.isError).toBeFalsy()
+    expect(made.content[0].text).toContain('done')
+    const job = cronsRepo.all().find((c) => c.name === 'Morning check')!
+    expect(job).toMatchObject({ agentId: 'w2', times: ['09:00'], days: [1, 5], enabled: true })
+    expect(reportsRepo.latest()[0].title).toContain('New daily job "Morning check"')
+    // bad input is refused
+    expect((await call('create_daily_job', { name: 'x', agent: 'nobody', prompt: 'y', times: ['09:00'] })).isError).toBe(true)
+    expect((await call('create_daily_job', { name: 'x', agent: 'Rio', prompt: 'y', times: ['25:00'] })).isError).toBe(true)
+    // only the fields given change; enabled:false pauses it
+    expect((await call('update_daily_job', { job: 'Morning check', times: ['08:30'], enabled: false })).isError).toBeFalsy()
+    expect(cronsRepo.get(job.id)).toMatchObject({ times: ['08:30'], days: [1, 5], enabled: false, prompt: 'Check the site.' })
+    const listed = JSON.parse((await call('list_daily_jobs', {})).content[0].text)
+    expect(listed.jobs.find((j: { id: string }) => j.id === job.id)).toMatchObject({ agent: 'Rio', days: ['mon', 'fri'], enabled: false })
+
+    // the owner approves the manager's work first: the change waits in "Needs your attention"
+    updateSettings({ managerApproval: true })
+    const asked = await call('update_daily_job', { job: job.id, prompt: 'Check the site and the shop.' })
+    expect(asked.content[0].text).toContain("owner's approval")
+    expect(cronsRepo.get(job.id)!.prompt).toBe('Check the site.')
+    const [waiting] = JSON.parse(settingsRepo.get('pendingCronChanges')!) as { id: string }[]
+    const card = getPending(`daily:${waiting.id}`)!
+    expect(card.kind).toBe('daily')
+    expect(card.input).toMatchObject({ previousPrompt: 'Check the site.', prompt: 'Check the site and the shop.' })
+    await decide(card.id, { type: 'allow' })
+    expect(cronsRepo.get(job.id)!.prompt).toBe('Check the site and the shop.')
+    // a rejected delete: nothing changes, the manager is told
+    await call('delete_daily_job', { job: job.id })
+    const [del] = JSON.parse(settingsRepo.get('pendingCronChanges')!) as { id: string }[]
+    queueRepo.removeAgent('mgr')
+    await decide(`daily:${del.id}`, { type: 'deny', note: 'keep it' })
+    expect(cronsRepo.get(job.id)).toBeTruthy()
+    expect(queueRepo.next('mgr')?.text).toContain('rejected this change')
+    queueRepo.removeAgent('mgr')
+
+    // approval off, but right after an agent's report: asked, with why
+    updateSettings({ managerApproval: false })
+    onPromptSubmitted('mgr', '[After Office] Report from Nova on task "x" (finished, task id x).\n<<<REPORT\nok\nREPORT>>>')
+    expect((await call('delete_daily_job', { job: job.id })).content[0].text).toContain("owner's approval")
+    const [guarded] = JSON.parse(settingsRepo.get('pendingCronChanges')!) as { id: string }[]
+    expect(String(getPending(`daily:${guarded.id}`)!.input.reason)).toContain('report')
+    await decide(`daily:${guarded.id}`, { type: 'allow' })
+    expect(cronsRepo.get(job.id)).toBeNull()
+    onPromptSubmitted('mgr', 'hai')
+  })
+
   test('workers cannot reach any of these tools', async () => {
     expect((await rpc('w1', 'tools/call', { name: 'delete_task', arguments: { task: 'mt-1' } })).status).toBe(403)
   })

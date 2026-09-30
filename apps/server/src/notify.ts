@@ -242,7 +242,7 @@ export function startNotifications() {
       if (seenFollowUps.size > 500) seenFollowUps.delete(seenFollowUps.values().next().value!)
       const f = e.followUp
       const what =
-        f.kind === 'plan' ? 'has a plan for you to approve' : f.kind === 'question' ? 'has a question' : f.kind === 'delegation' ? 'wants to hand out a task' : `wants to use ${f.tool}`
+        f.kind === 'plan' ? 'has a plan for you to approve' : f.kind === 'question' ? 'has a question' : f.kind === 'delegation' ? 'wants to hand out a task' : f.kind === 'daily' ? 'wants to change a daily job' : `wants to use ${f.tool}`
       void notify('permission', `${name(f.agentId)} ${what}`, f.message)
     } else if (e.type === 'work' && e.work.reports) {
       for (const r of e.work.reports) {

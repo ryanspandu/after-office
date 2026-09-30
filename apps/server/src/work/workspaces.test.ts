@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { agentsRepo, projectsRepo, queueRepo, tasksRepo } from '../db'
 import { workRoutes } from '../routes/work'
 import { startTask, taskFolder } from './work'
-import { recentCommits, workspaces } from './workspaces'
+import { addFolderFile, recentCommits, workspaces } from './workspaces'
 
 // The Projects tab reads the agents' folders: a repo folder is one project; any other folder holds several.
 
@@ -142,6 +142,28 @@ describe('file manager', () => {
     expect((await q('/workspaces/file', '&path=leak.env')).status).toBe(403)
     expect((await workRoutes.request(`/workspaces/files?root=${encodeURIComponent(AGENTS_DIR)}`)).status).toBe(403)
     agentsRepo.remove('fm-a')
+  })
+
+  test('uploads a new file into the folder on screen: inside it only, plain names, never over a file', async () => {
+    const { AGENTS_DIR } = await import('../fsroots')
+    const root = join(AGENTS_DIR, 'up-agent')
+    mkdirSync(join(root, 'docs'), { recursive: true })
+    writeFileSync(join(AGENTS_DIR, 'up-outside.md'), 'x')
+    symlinkSync(AGENTS_DIR, join(root, 'out'))
+    agentsRepo.insert({ id: 'up-a', name: 'UP', tmux_session: 'ao-up', cwd: root, desk: 994, role: '', model: 'haiku', permission_mode: 'default', session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'worker' })
+    const bytes = new TextEncoder().encode('# brief')
+    expect(addFolderFile(root, '', 'brief.md', bytes)).toEqual({ name: 'brief.md', size: bytes.byteLength })
+    expect(readFileSync(join(root, 'brief.md'), 'utf8')).toBe('# brief')
+    // a name with a path in it lands in the folder on screen, as its last part
+    expect(addFolderFile(root, 'docs', '../../evil/notes.md', bytes).name).toBe('notes.md')
+    expect(readFileSync(join(root, 'docs', 'notes.md'), 'utf8')).toBe('# brief')
+    expect(() => addFolderFile(root, '', 'brief.md', bytes)).toThrow('already there')
+    expect(() => addFolderFile(root, '', '.env', bytes)).toThrow('normal name')
+    expect(() => addFolderFile(root, '', 'empty.md', new Uint8Array())).toThrow('empty')
+    expect(() => addFolderFile(root, '..', 'x.md', bytes)).toThrow('Invalid folder')
+    expect(() => addFolderFile(root, 'out', 'x.md', bytes)).toThrow('Outside')
+    expect(() => addFolderFile(AGENTS_DIR, '', 'x.md', bytes)).toThrow()
+    agentsRepo.remove('up-a')
   })
 })
 

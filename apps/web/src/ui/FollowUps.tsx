@@ -5,7 +5,7 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import { create } from 'zustand'
 import remarkGfm from 'remark-gfm'
 import { FILE_HREF, FileLinkButton, remarkFileLinks, useFileLinks } from './fileLinks'
-import { LuUserPlus, LuCrown, LuCheck, LuCircleHelp, LuClipboardList, LuEye, LuMaximize2, LuSend, LuShieldAlert, LuX } from 'react-icons/lu'
+import { LuUserPlus, LuCrown, LuCheck, LuCircleHelp, LuClipboardList, LuEye, LuMaximize2, LuSend, LuShieldAlert, LuX, LuCalendarClock } from 'react-icons/lu'
 import { DEFAULT_MODEL, defaultRulePacks, isEffort, isModelChoice, MODELS, type AgentEffort, type AgentFigure, type FollowUp, type FollowUpDecision, type HireEdits, type LiveFollowUp } from '@after-office/shared'
 import { EFFORT_OPTIONS } from './effort'
 import { liveApi, useLive, useWorkReady } from '../state/live'
@@ -31,10 +31,11 @@ const KIND: Record<FollowUp['kind'], { label: string; icon: ReactNode }> = {
   delegation: { label: 'New task', icon: <LuCrown /> },
   hire: { label: 'Hire', icon: <LuUserPlus /> },
   check: { label: 'Check', icon: <LuShieldAlert /> },
+  daily: { label: 'Daily job', icon: <LuCalendarClock /> },
 }
 
 /** Things the manager asked the owner to approve. */
-const APPROVAL = new Set<FollowUp['kind']>(['delegation', 'hire', 'check'])
+const APPROVAL = new Set<FollowUp['kind']>(['delegation', 'hire', 'check', 'daily'])
 
 /** How the human answered. Phase 2 turns this into keystrokes/text for the agent's tmux session. */
 export type Decision =
@@ -105,6 +106,23 @@ export function fromLive(f: LiveFollowUp): Item {
         `**Task:** ${String(input.title ?? '')}`,
         input.previous ? `**Replaces:** \`${String(input.previous)}\`` : '',
         "Runs on the server in the agent's folder every time it finishes this task, without asking again. Approve only a command you'd run yourself.",
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    }
+  }
+  if (f.kind === 'daily') {
+    // the manager's daily job change: what it sets up (a recurring prompt) and, for an edit, the prompt it replaces
+    return {
+      ...base,
+      kind: 'daily',
+      tool: undefined,
+      detail: [
+        typeof input.reason === 'string' ? `⚠️ **${input.reason}**` : '',
+        `**Agent:** ${String(input.agent ?? '')} · **When:** ${String(input.schedule ?? '')}`,
+        input.action === 'delete' ? '' : `**Prompt, every run:**\n\n${String(input.prompt ?? '')}`,
+        typeof input.previousPrompt === 'string' ? `**Replaces:**\n\n${input.previousPrompt}` : '',
+        input.action === 'delete' ? 'It stops running and is removed.' : 'Typed into the agent\'s session on this schedule, without asking again.',
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -270,7 +288,7 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
       <Modal open={viewAll} onClose={() => setViewAll(false)} title="Needs your attention" description={`${items.length} open items`} width={880}>
         <div className="modal__body">
           <div className="seg" style={{ alignSelf: 'flex-start' }}>
-            {(['all', 'plan', 'permission', 'question', 'delegation', 'hire', 'check', 'review'] as const).map((k) => (
+            {(['all', 'plan', 'permission', 'question', 'delegation', 'hire', 'check', 'daily', 'review'] as const).map((k) => (
               <button key={k} className={filter === k ? 'active' : ''} onClick={() => setFilter(k)}>
                 {k === 'all' ? 'All' : KIND[k].label}
                 <span className="seg__count">{k === 'all' ? items.length : items.filter((i) => i.kind === k).length}</span>
@@ -585,7 +603,7 @@ export function FollowUpDetail({
                 disabled={item.kind === 'hire' && !!hire && (!hire.name.trim() || !hire.role.trim())}
                 onClick={() => onResolve({ type: 'approve', note, ...(item.kind === 'hire' && hire ? { hire } : {}) })}
               >
-                <LuCheck /> {item.kind === 'hire' ? 'Approve & hire' : item.kind === 'check' ? 'Approve check' : 'Approve & start'}
+                <LuCheck /> {item.kind === 'hire' ? 'Approve & hire' : item.kind === 'check' ? 'Approve check' : item.kind === 'daily' ? 'Approve' : 'Approve & start'}
               </button>
             </>
           )}

@@ -602,7 +602,7 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
 export const requireJsonForWrites: MiddlewareHandler = async (c, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) return next()
   const type = c.req.header('content-type')?.split(';')[0].trim().toLowerCase()
-  const upload = type === 'application/octet-stream' && c.req.method === 'POST' && /^\/api\/agents\/[^/]+\/uploads$/.test(c.req.path) && !!c.req.header('x-file-name')
+  const upload = type === 'application/octet-stream' && c.req.method === 'POST' && /^\/api\/(agents\/[^/]+\/uploads|workspaces\/files)$/.test(c.req.path) && !!c.req.header('x-file-name')
   if (type !== 'application/json' && !upload) return c.json({ error: 'Expected application/json' }, 415)
   const site = c.req.header('sec-fetch-site')
   if (site && site !== 'same-origin' && site !== 'none') return c.json({ error: 'Cross-site request refused' }, 403)

@@ -106,3 +106,33 @@ export async function tickCrons(now = new Date()) {
       await runCron(latest, slot).catch((e) => console.error(`[cron] ${cron.name}:`, e.message))
     }
 }
+
+// ── what a daily job may be (the dashboard's edits and the manager's tools) ──
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+const CRON_ID_RE = /^[\w-]{1,64}$/
+const need = (v: unknown, max: number, field: string) => {
+  if (typeof v !== 'string' || !v.trim() || v.length > max) throw new AgentError(`${field} is required (max ${max} characters)`)
+  return v.trim()
+}
+
+/** A daily job as sent (by the dashboard or the manager), checked; its run history stays the server's. */
+export function cleanCron(id: string, b: Partial<CronJob>, prev: CronJob | null): CronJob {
+  if (!CRON_ID_RE.test(id)) throw new AgentError('Invalid id')
+  const times = [...new Set(Array.isArray(b.times) ? b.times : [])].filter((t) => TIME_RE.test(t)).sort()
+  const days = [...new Set(Array.isArray(b.days) ? b.days : [])].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort()
+  if (!times.length) throw new AgentError('Add at least one time (HH:MM)')
+  if (!days.length) throw new AgentError('Pick at least one day')
+  return {
+    id,
+    name: need(b.name, 120, 'Name'),
+    prompt: need(b.prompt, 20_000, 'Prompt'),
+    times,
+    days,
+    agentId: typeof b.agentId === 'string' ? b.agentId : null,
+    enabled: b.enabled !== false,
+    fresh: !!b.fresh,
+    // run history is server-owned
+    lastRuns: prev?.lastRuns ?? [],
+  }
+}

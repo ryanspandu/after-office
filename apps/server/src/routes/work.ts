@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, Project, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
 import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, projectsRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
-import { deleteOrphanFolder, folderFile, listFolder, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
+import { addFolderFile, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
 import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder } from '../work/projectFolders'
 import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDevice, sendPush } from '../push'
@@ -12,8 +12,9 @@ import { updateSettings } from '../work/settings'
 import { cleanTagIds, deleteTag, putTag } from '../work/tags'
 import { listPreviews } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
-import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
+import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
+import { requireSameOrigin } from '../agents/term'
 
 // /api routes for tasks, projects, cron jobs and settings (live mode). Every change is pushed to all dashboards.
 
@@ -84,28 +85,6 @@ function autoStartFields(b: Partial<OfficeTask>, prev: OfficeTask | null): Parti
   // fired already, and the schedule hasn't changed since: don't fire again
   const keep = prev?.autoStartedAt && prev.autoStart === autoStart && prev.startAt === startAt
   return { autoStart: autoStart || undefined, startAt, mode: b.mode, autoStartedAt: keep ? prev!.autoStartedAt : undefined }
-}
-
-const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
-
-function cleanCron(id: string, b: Partial<CronJob>, prev: CronJob | null): CronJob {
-  if (!ID_RE.test(id)) throw bad('Invalid id')
-  const times = [...new Set(Array.isArray(b.times) ? b.times : [])].filter((t) => TIME_RE.test(t)).sort()
-  const days = [...new Set(Array.isArray(b.days) ? b.days : [])].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort()
-  if (!times.length) throw bad('Add at least one time (HH:MM)')
-  if (!days.length) throw bad('Pick at least one day')
-  return {
-    id,
-    name: str(b.name, 120, 'Name'),
-    prompt: str(b.prompt, 20_000, 'Prompt'),
-    times,
-    days,
-    agentId: typeof b.agentId === 'string' ? b.agentId : null,
-    enabled: b.enabled !== false,
-    fresh: !!b.fresh,
-    // run history is server-owned
-    lastRuns: prev?.lastRuns ?? [],
-  }
 }
 
 // ── projects ──
@@ -332,6 +311,18 @@ workRoutes.delete('/crons/:id/trigger', (c) => {
 workRoutes.get('/workspaces', async (c) => c.json(await workspaces(c.req.query('fresh') === '1')))
 // file manager: read-only, inside a folder the Projects tab shows
 workRoutes.get('/workspaces/files', (c) => c.json(listFolder(c.req.query('root') ?? '', c.req.query('path') ?? '')))
+// a file the owner uploads into the folder on screen (raw bytes; x-file-name, ?root= the folder, ?path= inside it)
+workRoutes.post('/workspaces/files', requireSameOrigin, async (c) => {
+  let name = 'file'
+  try {
+    name = decodeURIComponent(c.req.header('x-file-name') ?? '') || 'file'
+  } catch {
+    name = c.req.header('x-file-name') ?? 'file'
+  }
+  if (Number(c.req.header('content-length') ?? 0) > UPLOAD_MAX) throw new AgentError(`${name} is bigger than ${UPLOAD_MAX / 1024 / 1024} MB`, 413)
+  const data = new Uint8Array(await c.req.arrayBuffer())
+  return c.json(addFolderFile(c.req.query('root') ?? '', c.req.query('path') ?? '', name, data))
+})
 workRoutes.get('/workspaces/file', (c) => {
   const f = folderFile(c.req.query('root') ?? '', c.req.query('path') ?? '')
   return fileResponse(f.real, f.size, c.req.query('inline') === '1')

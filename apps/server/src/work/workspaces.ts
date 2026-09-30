@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { closeSync, constants, existsSync, lstatSync, openSync, readdirSync, readFileSync, realpathSync, writeSync } from 'node:fs'
 import { zip, type ZipEntry } from './zip'
 import type { FolderEntry, FolderListing } from '@after-office/shared'
 import { IMAGE, MAX_BYTES } from '../agents/files'
@@ -12,7 +12,7 @@ import { git } from './git'
 
 // The Projects tab: what the agents are working on, read from their folders. An agent's folder that is a git repo
 // is one project; any other folder is a home for several, one per subfolder. Git runs with the agents' rights and
-// safe flags (work/git.ts); nothing here writes anything.
+// safe flags (work/git.ts). The only write: a file the owner uploads into a folder (addFolderFile).
 
 const MAX_PROJECTS = 40
 const SKIP = new Set(['node_modules', 'dist', 'build', 'venv', '__pycache__'])
@@ -239,6 +239,38 @@ export function listFolder(root: string, rel = ''): FolderListing {
 }
 
 /** A file inside `root` for preview / download: a real file (no symlink), not too big. */
+/** Largest file the owner can upload into a folder. */
+export const UPLOAD_MAX = 20 * 1024 * 1024
+
+/**
+ * A file the owner uploads into the folder on screen (the Files browser): the same rules as browsing (inside `root`,
+ * no links out, nothing hidden), a plain name, and never over an existing file.
+ */
+export function addFolderFile(root: string, rel: string, name: string, data: Uint8Array) {
+  if (rel.split('/').some((part) => part === '..' || part.startsWith('.'))) throw new AgentError('Invalid folder', 400)
+  const { real } = inside(root, rel)
+  if (!lstatSync(real).isDirectory()) throw new AgentError('Not a folder', 400)
+  const file = basename(name.replace(/\\/g, '/')).trim()
+  if (!file || file.startsWith('.') || file.length > 200 || file.includes('\0')) throw new AgentError('Give the file a normal name')
+  if (!data.byteLength) throw new AgentError(`${file} is empty`)
+  if (data.byteLength > UPLOAD_MAX) throw new AgentError(`${file} is bigger than ${UPLOAD_MAX / 1024 / 1024} MB`, 413)
+  const path = join(real, file)
+  let fd: number
+  try {
+    // new only (never over a file, never through a link); 0664: the agents (another user on the VPS) can edit it too
+    fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o664)
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new AgentError(`${file} is already there: rename it first`, 409)
+    throw e
+  }
+  try {
+    writeSync(fd, data)
+  } finally {
+    closeSync(fd)
+  }
+  return { name: file, size: data.byteLength }
+}
+
 export function folderFile(root: string, rel: string) {
   const { real } = inside(root, rel)
   const st = lstatSync(join(allowed(root), rel))

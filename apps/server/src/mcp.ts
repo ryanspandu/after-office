@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 import { DEFAULT_MODEL, divisionOf, MODEL_CHOICES, RULE_PACKS, type OfficeTask, type RulePackId } from '@after-office/shared'
-import { agentsRepo, commentsRepo, connectorsOf, projectsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
+import { agentsRepo, commentsRepo, connectorsOf, cronsRepo, projectsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
 import { knownConnectors, listConnectors } from './agents/connectors'
 import { diffSince } from './work/git'
 import { AgentError } from './agents/manager'
@@ -11,7 +11,7 @@ import { requestHire } from './work/hires'
 import { bossMode, countBoss } from './work/settings'
 import { noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
-import { isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn } from './work/work'
+import { isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone } from './work/work'
 import { listTags, tagIdsByName, tagNames } from './work/tags'
 import { cleanPacks } from './agents/rules'
 
@@ -335,6 +335,144 @@ function buildServer(managerId: string) {
     async () => {
       const list = projectsRepo.all().map((p) => ({ id: p.id, name: p.name, folder: p.folder ?? null, brief: p.brief ?? null, check: p.check ?? null }))
       return list.length ? json(list) : text('No projects yet.')
+    },
+  )
+
+  // ── daily jobs: the same approval rules as delegate_task (work/managerCrons.ts) ──
+  const dailyAgent = (ref: string) => {
+    const key = ref.trim()
+    const row = agentsRepo.get(key) ?? agentsRepo.all().find((a) => a.name.toLowerCase() === key.toLowerCase())
+    if (!row) throw new AgentError(`No agent "${ref}"; call list_agents for names and ids`, 404)
+    return row
+  }
+  const findCron = (ref: string) => {
+    const key = ref.trim().toLowerCase()
+    const c = cronsRepo.get(ref.trim()) ?? cronsRepo.all().find((x) => x.name.toLowerCase() === key)
+    if (!c) throw new AgentError(`No daily job "${ref}"; see list_daily_jobs`, 404)
+    return c
+  }
+  const dayNumbers = (days?: string[]) => {
+    if (!days) return undefined
+    const names = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+    return days.map((d) => names.indexOf(d.trim().toLowerCase().slice(0, 3))).filter((n) => n >= 0)
+  }
+  const applied = (result: 'applied' | 'approval', what: string) =>
+    result === 'applied' ? `${what}: done.` : `${what}: waiting for the owner's approval in the dashboard; if they reject it you get a message.`
+  const DAYS = z.array(z.enum(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'])).min(1).max(7)
+  const TIMES = z.array(z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)).min(1).max(24)
+
+  server.registerTool(
+    'list_daily_jobs',
+    {
+      description: `Daily jobs (recurring prompts typed into an agent's session on a schedule, office timezone ${timezone()}), and your changes still waiting for the owner.`,
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        const names = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+        return json({
+          jobs: cronsRepo.all().map((c) => ({
+            id: c.id,
+            name: c.name,
+            agent: c.agentId ? (agentsRepo.get(c.agentId)?.name ?? c.agentId) : null,
+            times: c.times,
+            days: c.days.map((d) => names[d]),
+            enabled: c.enabled,
+            freshContext: !!c.fresh,
+            prompt: c.prompt,
+            lastRuns: c.lastRuns?.slice(-3),
+          })),
+          waiting: pendingCronChanges(),
+        })
+      } catch (e) {
+        return fail(e)
+      }
+    },
+  )
+
+  server.registerTool(
+    'create_daily_job',
+    {
+      description:
+        "Set up a daily job: this prompt is typed into the agent's Claude Code session at these times on these days (office " +
+        'timezone), and its result comes back as a report. For recurring work only; one-off work is delegate_task.',
+      inputSchema: {
+        name: z.string().min(1).max(120).describe('short name, e.g. "Morning SEO check"'),
+        agent: z.string().describe('agent id or name from list_agents (may be you)'),
+        prompt: z.string().min(1).max(20_000).describe('what the agent does each run, and what its report should say'),
+        times: TIMES.describe('times of day, "HH:MM" 24h, e.g. ["09:00"]'),
+        days: DAYS.optional().describe('days of the week; default every day'),
+        freshContext: z.boolean().optional().describe('start each run with /clear (a clean context); default false'),
+      },
+    },
+    async ({ name, agent, prompt, times, days, freshContext }) => {
+      try {
+        const cron = cronFrom({
+          name,
+          prompt,
+          times,
+          days: dayNumbers(days) ?? [0, 1, 2, 3, 4, 5, 6],
+          agentId: dailyAgent(agent).id,
+          fresh: !!freshContext,
+          enabled: true,
+        })
+        return text(`${applied(changeCron(managerId, { action: 'create', cron }), `Daily job "${cron.name}" (id ${cron.id})`)}`)
+      } catch (e) {
+        return fail(e)
+      }
+    },
+  )
+
+  server.registerTool(
+    'update_daily_job',
+    {
+      description: 'Change a daily job: only the fields you give change (e.g. enabled:false pauses it).',
+      inputSchema: {
+        job: z.string().describe('daily job id or name from list_daily_jobs'),
+        name: z.string().min(1).max(120).optional(),
+        agent: z.string().optional().describe('agent id or name'),
+        prompt: z.string().min(1).max(20_000).optional(),
+        times: TIMES.optional(),
+        days: DAYS.optional(),
+        freshContext: z.boolean().optional(),
+        enabled: z.boolean().optional().describe('false pauses it, true runs it again'),
+      },
+    },
+    async ({ job, name, agent, prompt, times, days, freshContext, enabled }) => {
+      try {
+        const previous = findCron(job)
+        const cron = cronFrom(
+          {
+            name,
+            prompt,
+            times,
+            days: dayNumbers(days),
+            agentId: agent ? dailyAgent(agent).id : undefined,
+            fresh: freshContext,
+            enabled,
+          },
+          previous,
+        )
+        return text(applied(changeCron(managerId, { action: 'update', cron, previous }), `Daily job "${cron.name}"`))
+      } catch (e) {
+        return fail(e)
+      }
+    },
+  )
+
+  server.registerTool(
+    'delete_daily_job',
+    {
+      description: 'Remove a daily job for good (to pause it, update_daily_job with enabled:false).',
+      inputSchema: { job: z.string().describe('daily job id or name from list_daily_jobs') },
+    },
+    async ({ job }) => {
+      try {
+        const previous = findCron(job)
+        return text(applied(changeCron(managerId, { action: 'delete', previous }), `Deleting "${previous.name}"`))
+      } catch (e) {
+        return fail(e)
+      }
     },
   )
 

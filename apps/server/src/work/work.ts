@@ -19,6 +19,7 @@ import { restoreApprovals } from './managerTasks'
 import { tickCrons } from './crons'
 import { endBossMode } from './bossMode'
 import { publicAccess, watchPublicAccess } from './publicAccess'
+import { dropProjectSessions } from './dropSessions'
 
 
 // Tasks, cron jobs and the prompt queue. Handing work to an agent is just typing a prompt into its session; if the
@@ -637,8 +638,10 @@ function watchStuck(now: number) {
 
 
 export function startWorkJobs() {
+  dropProjectSessions()
   restoreApprovals()
   void import('./hires').then((m) => m.restoreHires())
+  void import('./managerCrons').then((m) => m.restoreCronChanges())
   const safe = (fn: () => Promise<unknown>) => () => void fn().catch((e) => console.error('[work]', e))
   setInterval(safe(tickCrons), 20_000)
   setInterval(safe(() => tickTasks()), 20_000)
@@ -654,3 +657,5 @@ export * from './reports'
 export * from './crons'
 export * from './bossMode'
 export * from './publicAccess'
+export * from './managerCrons'
+export * from './dropSessions'
