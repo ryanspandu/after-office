@@ -8,6 +8,10 @@
 #   Private, only on your Tailscale network (https://<name>.<tailnet>.ts.net, no public web ports):
 #     ssh -t root@VPS 'bash /root/after-office-deploy/setup-vps.sh --tailscale'
 #     ssh -t root@VPS 'bash /root/after-office-deploy/setup-vps.sh --tailscale --funnel-trigger'   # + public webhooks
+#   Private, on your own domain but still only on your tailnet (DNS at Cloudflare; the certificate comes through a DNS
+#   challenge, so no port is ever opened to the internet; the A record points at the server's Tailscale IP):
+#     ssh -t root@VPS 'bash /root/after-office-deploy/setup-vps.sh --tailscale --domain office.example.com --dns cloudflare'
+#   (asks for a Cloudflare API token: "Edit zone DNS" for that zone; or CF_API_TOKEN=… in the environment)
 #   (TS_AUTHKEY=tskey-… in the environment logs in without the interactive link.)
 # Options for agents that write and run code (add them to either form above, or later on a re-run):
 #     --dev-tools   Node.js 22 LTS, build tools, Python, jq, ripgrep, sqlite3, GitHub CLI, Playwright's browser libraries,
@@ -32,7 +36,7 @@
 # transcripts through ACLs and drives their tmux server through /run/after-office/tmux.sock.
 set -euo pipefail
 
-USAGE='usage: setup-vps.sh your.domain.com | setup-vps.sh --tailscale [--funnel-trigger] [--hostname NAME]  [--dev-tools] [--containers] [--apt "pkgs"] [--android] [--preview-ports 3000-3009] [--no-swap] [--repo URL | --no-repo] [--branch NAME]'
+USAGE='usage: setup-vps.sh your.domain.com | setup-vps.sh --tailscale [--funnel-trigger] [--hostname NAME] [--domain NAME --dns cloudflare]  [--dev-tools] [--containers] [--apt "pkgs"] [--android] [--preview-ports 3000-3009] [--no-swap] [--repo URL | --no-repo] [--branch NAME]'
 DOMAIN=''
 TAILSCALE=0
 FUNNEL=0
@@ -43,6 +47,7 @@ EXTRA_APT=''
 ANDROID=0
 PREVIEW_PORTS=3000-3009
 SWAP=1
+DNS_PROVIDER=''
 REPO=''
 NO_REPO=0
 BRANCH=''
@@ -58,6 +63,8 @@ while [ $# -gt 0 ]; do
     --android) ANDROID=1 ;;
     --preview-ports) PREVIEW_PORTS=${2:?$USAGE}; shift ;;
     --no-swap) SWAP=0 ;;
+    --domain) DOMAIN=${2:?$USAGE}; shift ;;
+    --dns) DNS_PROVIDER=${2:?$USAGE}; shift ;;
     --repo) REPO=${2:?$USAGE}; shift ;;
     --no-repo) NO_REPO=1 ;;
     --branch) BRANCH=${2:?$USAGE}; shift ;;
@@ -68,6 +75,12 @@ while [ $# -gt 0 ]; do
 done
 if [ "$TAILSCALE" = 0 ] && [ -z "$DOMAIN" ]; then echo "$USAGE" >&2; exit 1; fi
 if [ "$FUNNEL" = 1 ] && [ "$TAILSCALE" = 0 ]; then echo '--funnel-trigger needs --tailscale' >&2; exit 1; fi
+if [ -n "$DNS_PROVIDER" ] && [ "$DNS_PROVIDER" != cloudflare ]; then echo '--dns: only cloudflare is supported' >&2; exit 1; fi
+# a domain on the tailnet: Let's Encrypt can't reach the server, so the certificate needs the DNS challenge
+if [ "$TAILSCALE" = 1 ] && [ -n "$DOMAIN" ] && [ "$DNS_PROVIDER" != cloudflare ]; then
+  echo '--tailscale with a domain needs --dns cloudflare (the certificate is issued through Cloudflare DNS)' >&2
+  exit 1
+fi
 # root, logged in as root or through sudo from your own user (e.g. "ubuntu" on providers that don't hand out root)
 if [ "$(id -u)" != 0 ]; then echo "Run this as root: sudo bash $0 $ARGS" >&2; exit 1; fi
 SUDO_HOME=''
@@ -90,7 +103,7 @@ echo "==> packages"
 apt-get update
 apt-get install -y tmux git curl rsync unzip acl ufw ca-certificates gnupg unattended-upgrades \
   debian-keyring debian-archive-keyring apt-transport-https
-if [ "$TAILSCALE" = 0 ] && ! command -v caddy >/dev/null; then
+if { [ "$TAILSCALE" = 0 ] || [ -n "$DOMAIN" ]; } && ! command -v caddy >/dev/null; then
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
   chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list
@@ -295,7 +308,7 @@ if [ "$TAILSCALE" = 1 ]; then
     tailscale up --hostname="$TS_HOSTNAME" ${TS_AUTHKEY:+--auth-key="$TS_AUTHKEY"}
   fi
   TS_NAME=$(tailscale status --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
-  PUBLIC_URL="https://$TS_NAME"
+  PUBLIC_URL="https://${DOMAIN:-$TS_NAME}"
 else
   PUBLIC_URL="https://$DOMAIN"
 fi
@@ -342,30 +355,115 @@ systemctl daemon-reload
 systemctl enable after-office-agents after-office
 systemctl restart after-office-agents
 
-if [ "$TAILSCALE" = 1 ]; then
+# /etc/caddy/Caddyfile for $DOMAIN: the dashboard, and previews on https://<domain>:<port> → the dashboard's preview
+# proxy (signed-in only; strips the session cookie)
+write_caddyfile() {
+  sed "s/office.example.com/$DOMAIN/" "$HERE/Caddyfile" > /etc/caddy/Caddyfile
+  if [ "$DNS_PROVIDER" = cloudflare ]; then
+    # certificates through a DNS record at Cloudflare instead of a request from Let's Encrypt to this server
+    sed -i 's#^\tadmin unix//run/caddy/admin.sock$#&\n\tacme_dns cloudflare {env.CF_API_TOKEN}#' /etc/caddy/Caddyfile
+  fi
+  for p in $PORT_LIST; do
+    printf '\n%s:%s {\n\treverse_proxy 127.0.0.1:%s {\n\t\tflush_interval -1\n\t}\n}\n' "$DOMAIN" "$p" "$((p + 10000))" >> /etc/caddy/Caddyfile
+  done
+}
+
+if [ "$DNS_PROVIDER" = cloudflare ]; then
+  echo "==> Cloudflare: API token, Caddy with the Cloudflare DNS module, the A record"
+  CF_ENV=/etc/caddy/cloudflare.env
+  if [ -z "${CF_API_TOKEN:-}" ] && [ -f "$CF_ENV" ]; then CF_API_TOKEN=$(sed -n 's/^CF_API_TOKEN=//p' "$CF_ENV"); fi
+  CF_HDR=$(mktemp)
+  trap 'rm -f "$CF_HDR"' EXIT
+  chmod 600 "$CF_HDR"
+  # the token goes to curl in a file, never on a command line (other processes can read those)
+  cf() { curl -sS -H @"$CF_HDR" -H 'Content-Type: application/json' "https://api.cloudflare.com/client/v4/$1" "${@:2}"; }
+  cf_ok() { python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("success") else 1)'; }
+  token_ok() { printf 'Authorization: Bearer %s\n' "$CF_API_TOKEN" > "$CF_HDR"; cf user/tokens/verify | cf_ok; }
+  until [ -n "${CF_API_TOKEN:-}" ] && token_ok; do
+    [ -n "${CF_API_TOKEN:-}" ] && echo "    That token isn't accepted by Cloudflare."
+    if [ ! -t 0 ]; then echo "    ! No working Cloudflare token: set CF_API_TOKEN=… and run this again." >&2; exit 1; fi
+    echo "    A Cloudflare API token: dash.cloudflare.com/profile/api-tokens -> Create Token -> \"Edit zone DNS\","
+    echo "    Zone Resources: Include -> Specific zone -> your domain's zone."
+    read -r -s -p "    Paste it (not shown): " CF_API_TOKEN || exit 1
+    echo
+  done
+  ( umask 077; printf 'CF_API_TOKEN=%s\n' "$CF_API_TOKEN" > "$CF_ENV" )
+  chown root:root "$CF_ENV"
+  # systemd reads it as root and hands it to Caddy only
+  install -d /etc/systemd/system/caddy.service.d
+  printf '[Service]\nEnvironmentFile=%s\n' "$CF_ENV" > /etc/systemd/system/caddy.service.d/cloudflare.conf
+  systemctl daemon-reload
+
+  # the packaged Caddy has no DNS providers: a build with the Cloudflare module from caddyserver.com, set up the way
+  # Caddy's docs describe (the package's binary is kept aside, apt upgrades don't overwrite this one)
+  if ! caddy list-modules 2>/dev/null | grep -q '^dns.providers.cloudflare'; then
+    curl -fsSL -o /usr/bin/caddy.custom "https://caddyserver.com/api/download?os=linux&arch=$(dpkg --print-architecture)&p=github.com%2Fcaddy-dns%2Fcloudflare"
+    chmod 755 /usr/bin/caddy.custom
+    /usr/bin/caddy.custom list-modules | grep -q '^dns.providers.cloudflare'
+    dpkg-divert --list /usr/bin/caddy | grep -q caddy.default || dpkg-divert --divert /usr/bin/caddy.default --rename /usr/bin/caddy
+    update-alternatives --install /usr/bin/caddy caddy /usr/bin/caddy.default 10
+    update-alternatives --install /usr/bin/caddy caddy /usr/bin/caddy.custom 50
+  fi
+
+  # the A record: the server's Tailscale IP on a tailnet domain (DNS only, not proxied: Cloudflare can't reach it)
+  if [ "$TAILSCALE" = 1 ]; then
+    TARGET_IP=$(tailscale ip -4 | head -1)
+    ZONE_ID=''
+    name=$DOMAIN
+    while [ -z "$ZONE_ID" ] && [ "${name#*.}" != "$name" ]; do
+      ZONE_ID=$(cf "zones?name=$name" | python3 -c 'import json,sys; r=json.load(sys.stdin).get("result") or []; print(r[0]["id"] if r else "")' || true)
+      name=${name#*.}
+    done
+    if [ -n "$ZONE_ID" ]; then
+      RECORD_ID=$(cf "zones/$ZONE_ID/dns_records?type=A&name=$DOMAIN" | python3 -c 'import json,sys; r=json.load(sys.stdin).get("result") or []; print(r[0]["id"] if r else "")' || true)
+      BODY=$(printf '{"type":"A","name":"%s","content":"%s","ttl":1,"proxied":false,"comment":"After Office (Tailscale IP)"}' "$DOMAIN" "$TARGET_IP")
+      if [ -n "$RECORD_ID" ]; then OUT=$(cf "zones/$ZONE_ID/dns_records/$RECORD_ID" -X PUT --data "$BODY")
+      else OUT=$(cf "zones/$ZONE_ID/dns_records" -X POST --data "$BODY"); fi
+      if printf '%s' "$OUT" | cf_ok; then echo "    $DOMAIN -> $TARGET_IP (DNS only)"
+      else echo "    ! Couldn't set the A record: $(printf '%s' "$OUT" | python3 -c 'import json,sys; print("; ".join(e.get("message","") for e in json.load(sys.stdin).get("errors",[])))' 2>/dev/null)"; fi
+    else
+      echo "    ! The token can't see the zone of $DOMAIN. Add it yourself in Cloudflare: A  $DOMAIN  $TARGET_IP  (DNS only)"
+    fi
+  fi
+fi
+
+if [ "$TAILSCALE" = 1 ] && [ -n "$DOMAIN" ]; then
+  echo "==> Caddy for $DOMAIN, on the tailnet only (the firewall keeps 80/443 closed to the internet)"
+  # Caddy answers on 443 and the preview ports: Tailscale must not serve them too
+  tailscale serve reset >/dev/null 2>&1 || true
+  write_caddyfile
+  systemctl enable caddy >/dev/null 2>&1 || true
+  systemctl restart caddy
+elif [ "$TAILSCALE" = 1 ]; then
   echo "==> Tailscale serve: $PUBLIC_URL -> the dashboard (HTTPS certificate from Tailscale)"
   # needs MagicDNS + HTTPS certificates on in the tailnet (the command prints a link to turn them on if they're off)
   tailscale serve --bg --https=443 http://127.0.0.1:8787
   # previews: https://<name>:<port> → the dashboard's preview proxy (signed-in only; strips the session cookie)
   for p in $PORT_LIST; do tailscale serve --bg --https="$p" "http://127.0.0.1:$((p + 10000))"; done
+  # a Caddy from an earlier public setup would still answer on 80/443
+  systemctl disable --now caddy >/dev/null 2>&1 || true
+else
+  # an earlier --tailscale setup would still serve the dashboard (and hold 443 on the tailnet): Caddy takes over.
+  # Tailscale itself stays (e.g. SSH over the tailnet).
+  if command -v tailscale >/dev/null; then
+    tailscale serve reset >/dev/null 2>&1 || true
+    tailscale funnel reset >/dev/null 2>&1 || true
+    set_env OFFICE_TRIGGER_URL ""
+  fi
+  echo "==> Caddy site for $DOMAIN"
+  write_caddyfile
+  systemctl enable caddy >/dev/null 2>&1 || true
+  systemctl restart caddy
+fi
+if [ "$TAILSCALE" = 1 ]; then
   if [ "$FUNNEL" = 1 ]; then
-    # public, but only /trigger and on its own port: the dashboard on 443 stays tailnet-only
+    # public, but only /trigger and on its own port: the dashboard stays tailnet-only
     tailscale funnel --bg --https=8443 --set-path=/trigger http://127.0.0.1:8787/trigger
     set_env OFFICE_TRIGGER_URL "https://$TS_NAME:8443"
   else
     tailscale funnel --https=8443 off >/dev/null 2>&1 || true
     set_env OFFICE_TRIGGER_URL ""
   fi
-  # a Caddy from an earlier public setup would still answer on 80/443
-  systemctl disable --now caddy >/dev/null 2>&1 || true
-else
-  echo "==> Caddy site for $DOMAIN"
-  sed "s/office.example.com/$DOMAIN/" "$HERE/Caddyfile" > /etc/caddy/Caddyfile
-  # previews: https://<domain>:<port> → the dashboard's preview proxy (signed-in only; strips the session cookie)
-  for p in $PORT_LIST; do
-    printf '\n%s:%s {\n\treverse_proxy 127.0.0.1:%s {\n\t\tflush_interval -1\n\t}\n}\n' "$DOMAIN" "$p" "$((p + 10000))" >> /etc/caddy/Caddyfile
-  done
-  systemctl restart caddy
 fi
 
 echo "==> firewall"

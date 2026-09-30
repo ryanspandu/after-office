@@ -145,6 +145,23 @@ Options and tips:
   ufw delete allow OpenSSH && ufw allow in on tailscale0 to any port 22
   ```
   After that, `sync.sh` uses the tailnet name: `deploy/sync.sh office@after-office`.
+- **Your own domain, still private** (e.g. `https://office.example.com`, DNS at Cloudflare):
+  ```bash
+  bash ~/after-office/deploy/setup-vps.sh --tailscale --domain office.example.com --dns cloudflare --dev-tools --containers
+  ```
+  - It asks for a Cloudflare API token (or takes `CF_API_TOKEN=…` from the environment): dash.cloudflare.com →
+    My Profile → API Tokens → Create Token → template **Edit zone DNS**, Zone Resources: *Specific zone* → your domain.
+    It's kept in `/etc/caddy/cloudflare.env` (root only) and handed to Caddy alone.
+  - It sets the **A record** `office.example.com → the server's Tailscale IP (100.x.y.z)`, *DNS only*. Anyone can look
+    the name up, but that address only answers inside your tailnet.
+  - **Caddy** serves the dashboard and the preview ports on that name. Its certificate comes from Let's Encrypt through
+    a **DNS challenge** (a TXT record Caddy sets through the token), so no port is ever opened to the internet: 80/443
+    stay closed, as with plain Tailscale. The packaged Caddy has no DNS modules, so the script installs Caddy's own
+    build with the Cloudflare module (`/usr/bin/caddy.custom`, the package's binary kept as `caddy.default`); it isn't
+    updated by apt, so run the setup again now and then (`rm /usr/bin/caddy.custom` first to fetch a fresh build).
+  - `https://after-office.<tailnet>.ts.net` stops answering (Caddy takes 443 over). Web push: turn notifications on
+    again from the app opened on the new address (a new address is a new app to the browser).
+  - Back to the `.ts.net` name: run the setup again without `--domain`.
 - **Share with someone else:** use *Share* on the machine in the admin console. They still need the dashboard login.
 - **Switching:** you can switch from a public domain setup to Tailscale (or back) by running the script again with the other option.
 - **Why Tailscale and not WireGuard by hand:** Tailscale *is* WireGuard, with the key exchange, NAT traversal, device list and HTTPS certificates handled for you.
