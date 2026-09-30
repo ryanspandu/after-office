@@ -18,6 +18,11 @@
 #     --android     JDK 17 and the Android SDK command-line tools (React Native / Android builds; see docs/deploy.md)
 #     --preview-ports 3000-3009   ports agents run their apps on, opened from the dashboard (default 3000-3009)
 #     --no-swap     don't add the 4 GB swap file (added only when the machine has no swap)
+# The dashboard's code, from GitHub (instead of deploy/sync.sh from your machine):
+#     --repo URL    check it out into /opt/after-office, build and start it, and ask for the dashboard login. A private
+#                   repo over SSH (git@github.com:…) gets a read-only deploy key for the 'office' user: the script shows
+#                   it and waits while you add it on GitHub. Run from a git clone, the clone's origin is used by default
+#                   (--no-repo: don't). --branch NAME: another branch than the clone's (or main).
 # Safe to run again.
 #
 # Two Unix users:
@@ -27,7 +32,7 @@
 # transcripts through ACLs and drives their tmux server through /run/after-office/tmux.sock.
 set -euo pipefail
 
-USAGE='usage: setup-vps.sh your.domain.com | setup-vps.sh --tailscale [--funnel-trigger] [--hostname NAME]  [--dev-tools] [--containers] [--apt "pkgs"] [--android] [--preview-ports 3000-3009] [--no-swap]'
+USAGE='usage: setup-vps.sh your.domain.com | setup-vps.sh --tailscale [--funnel-trigger] [--hostname NAME]  [--dev-tools] [--containers] [--apt "pkgs"] [--android] [--preview-ports 3000-3009] [--no-swap] [--repo URL | --no-repo] [--branch NAME]'
 DOMAIN=''
 TAILSCALE=0
 FUNNEL=0
@@ -38,6 +43,9 @@ EXTRA_APT=''
 ANDROID=0
 PREVIEW_PORTS=3000-3009
 SWAP=1
+REPO=''
+NO_REPO=0
+BRANCH=''
 ARGS="$*"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -50,6 +58,9 @@ while [ $# -gt 0 ]; do
     --android) ANDROID=1 ;;
     --preview-ports) PREVIEW_PORTS=${2:?$USAGE}; shift ;;
     --no-swap) SWAP=0 ;;
+    --repo) REPO=${2:?$USAGE}; shift ;;
+    --no-repo) NO_REPO=1 ;;
+    --branch) BRANCH=${2:?$USAGE}; shift ;;
     -*) echo "$USAGE" >&2; exit 1 ;;
     *) DOMAIN=$1 ;;
   esac
@@ -393,19 +404,81 @@ MaxRetentionSec=30day
 EOF
 systemctl restart systemd-journald
 
-cat <<NEXT
+# ── the dashboard's code, from GitHub (--repo, or the origin of the clone this script runs from) ──
+if [ -z "$REPO" ] && [ "$NO_REPO" = 0 ] && [ ! -d "$APP_DIR/.git" ] && git -C "$HERE/.." rev-parse --git-dir >/dev/null 2>&1; then
+  REPO=$(git -C "$HERE/.." remote get-url origin 2>/dev/null || true)
+  [ -z "$BRANCH" ] && BRANCH=$(git -C "$HERE/.." rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+fi
+if [ "$BRANCH" = HEAD ]; then BRANCH=''; fi
+if [ -n "$REPO" ] && [ ! -d "$APP_DIR/.git" ]; then
+  echo "==> the dashboard's code: $REPO${BRANCH:+ ($BRANCH)}"
+  as_app() { sudo -u "$APP_USER" -H bash -c "cd ~ && $1"; }
+  install -d -m 700 -o "$APP_USER" -g "$APP_USER" "/home/$APP_USER/.ssh"
+  GH_HOST=''
+  case "$REPO" in
+    git@github.com:* | ssh://git@github.com/*) GH_HOST=github.com ;;
+  esac
+  if [ -n "$GH_HOST" ]; then
+    # a read-only deploy key, only for this repo: the dashboard user never sees your own keys
+    KEY=/home/$APP_USER/.ssh/github_deploy
+    [ -f "$KEY" ] || as_app "ssh-keygen -q -t ed25519 -N '' -C '$APP_USER@$(hostname)' -f '$KEY'"
+    as_app "grep -q '^github.com ' ~/.ssh/known_hosts 2>/dev/null || ssh-keyscan -t ed25519,rsa github.com >> ~/.ssh/known_hosts 2>/dev/null || true"
+    as_app "grep -q 'github_deploy' ~/.ssh/config 2>/dev/null || printf 'Host github.com\n  IdentityFile ~/.ssh/github_deploy\n  IdentitiesOnly yes\n' >> ~/.ssh/config"
+    as_app "chmod 600 ~/.ssh/config"
+  fi
+  can_read() { as_app "GIT_SSH_COMMAND='ssh -o BatchMode=yes' git ls-remote -q '$REPO' >/dev/null 2>&1"; }
+  if ! can_read; then
+    if [ -n "$GH_HOST" ] && [ -t 0 ]; then
+      REPO_PATH=$(printf '%s' "$REPO" | sed -E 's#^(git@github\.com:|ssh://git@github\.com/)##; s#\.git$##')
+      echo
+      echo "    Add this read-only deploy key on GitHub: https://github.com/$REPO_PATH/settings/keys/new"
+      echo "    (Title: anything, e.g. vps. Leave \"Allow write access\" off.)"
+      echo
+      cat "$KEY.pub"
+      echo
+      while ! can_read; do
+        read -r -p "    Press Enter once it's added (or type skip): " answer || answer=skip
+        [ "$answer" = skip ] && break
+        can_read || echo "    Not yet: GitHub doesn't accept the key for $REPO_PATH."
+      done
+    fi
+  fi
+  if can_read; then
+    bash "$HERE/update.sh" --init "$REPO" ${BRANCH:+--branch "$BRANCH"}
+  else
+    echo "    ! Can't read $REPO as $APP_USER yet. Once it can: bash $HERE/update.sh --init $REPO"
+    if [ -n "$GH_HOST" ]; then echo "      (its deploy key: cat /home/$APP_USER/.ssh/github_deploy.pub)"; fi
+  fi
+fi
 
-Done. Next (see docs/deploy.md):
-  1. From your machine:   deploy/sync.sh $APP_USER@<vps>
-     (or from GitHub, here: bash $HERE/update.sh --init <repo url>; then sudo bash $APP_DIR/deploy/update.sh to update)
-  2. On the VPS as root (or with sudo):
-       OFFICE_ENV_FILE=$ENV_FILE /home/$APP_USER/.bun/bin/bun $APP_DIR/apps/server/src/setup-auth.ts   # dashboard login
-       sudo -iu $AGENT_USER claude       # log the agents in with your Claude subscription once, then /exit
-       sudo -iu $AGENT_USER gh auth login   # optional: GitHub for the agents (a fine-grained token for their repos)
-  3. systemctl restart after-office  ->  $PUBLIC_URL
-  4. First sign-in: set up two-factor (scan the QR code with Google Authenticator) and keep the recovery codes.
-     Notifications (this app / ntfy / Telegram / webhook): bell icon -> Automation -> Notifications.
-     Lost phone and recovery codes:  sudo -iu $APP_USER sh -c 'cd $APP_DIR/apps/server && ~/.bun/bin/bun run auth:reset-2fa'
+# ── the dashboard login, once the code is there ──
+HAS_CODE=0
+[ -f "$APP_DIR/apps/server/src/setup-auth.ts" ] && HAS_CODE=1
+HAS_LOGIN=0
+grep -q '^OFFICE_PASSWORD_HASH=' "$ENV_FILE" && HAS_LOGIN=1
+if [ "$HAS_CODE" = 1 ] && [ "$HAS_LOGIN" = 0 ] && [ -t 0 ]; then
+  echo "==> the dashboard login (use a new password, not one from elsewhere)"
+  if OFFICE_ENV_FILE=$ENV_FILE "/home/$APP_USER/.bun/bin/bun" "$APP_DIR/apps/server/src/setup-auth.ts"; then
+    HAS_LOGIN=1
+    systemctl restart after-office
+  fi
+fi
+
+echo
+echo "Done. Next (see docs/deploy.md):"
+if [ "$HAS_CODE" = 0 ]; then
+  echo "  - The code:  deploy/sync.sh $APP_USER@<vps>  from your machine, or from GitHub: run this again with --repo <url>"
+fi
+if [ "$HAS_LOGIN" = 0 ]; then
+  echo "  - Dashboard login:  OFFICE_ENV_FILE=$ENV_FILE /home/$APP_USER/.bun/bin/bun $APP_DIR/apps/server/src/setup-auth.ts && systemctl restart after-office"
+fi
+cat <<NEXT
+  - Log the agents in with your Claude subscription once (then /exit):  sudo -iu $AGENT_USER claude
+    Optional, GitHub for the agents (a fine-grained token for their repos):  sudo -iu $AGENT_USER gh auth login
+  - Open $PUBLIC_URL. First sign-in: set up two-factor (scan the QR code with Google Authenticator), keep the recovery codes.
+    Notifications (this app / ntfy / Telegram / webhook): bell icon -> Automation -> Notifications.
+    Lost phone and recovery codes:  sudo -iu $APP_USER sh -c 'cd $APP_DIR/apps/server && ~/.bun/bin/bun run auth:reset-2fa'
+  - Updates:  bash $APP_DIR/deploy/update.sh  (from GitHub)  or  deploy/sync.sh  (from your machine)
   Back up $ENV_FILE with the database: the two-factor secret and notification tokens are encrypted with its SESSION_SECRET.
 NEXT
 if [ "$CONTAINERS" = 1 ]; then echo "  Containers: agents run  docker compose up -d  in a project (ports on 127.0.0.1 only). Check: sudo -iu $AGENT_USER env DOCKER_HOST=unix:///run/user/$(id -u "$AGENT_USER")/docker.sock docker info"; fi

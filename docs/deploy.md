@@ -22,6 +22,49 @@ What an agent (even a prompt-injected one) **cannot** do:
 
 What remains: all agents share the `office-agent` user, so one agent can read or type into another agent's session, including the manager's. Treat the agents as one trust zone. That is why the manager's riskier actions (hiring, quality-check commands, and optionally every task) wait for your approval.
 
+## Quick start: from GitHub, start to finish
+
+Two commands, as root on a fresh VPS, when your code is in a (private) GitHub repository. Each part is explained in
+the sections below.
+
+```bash
+# 1. a copy of the repo to run the setup from (any way you can clone it, e.g. your own key)
+git clone git@github.com:<you>/after-office.git ~/after-office
+
+# 2. everything else; --tailscale (private) or your domain (public)
+bash ~/after-office/deploy/setup-vps.sh --tailscale --dev-tools --containers
+#    or:  bash ~/after-office/deploy/setup-vps.sh office.example.com --dev-tools --containers
+```
+
+Run it in a terminal (not in the background): it stops twice to ask you something. What it does after the server
+setup:
+
+1. **The code.** Run from a clone, it takes the clone's `origin` and branch (or pass `--repo <url>` / `--branch <name>`;
+   `--no-repo` skips this, e.g. when you use `deploy/sync.sh`). For a private repo over SSH it makes a read-only
+   **deploy key** for the `office` user, prints it with the link to the repo's *Settings → Deploy keys*, and waits:
+   add it there (leave "Allow write access" off), then press Enter. Then it checks the code out into
+   `/opt/after-office`, builds and starts the dashboard (`update.sh --init`). The dashboard user never gets your own
+   SSH keys, only this one, which can read this one repository.
+2. **The dashboard login:** it asks for a username and a new password (written to `/etc/after-office.env`).
+3. With `--tailscale`, before all that: the Tailscale login link (open it, sign in; the script carries on).
+
+Left for you, printed at the end:
+
+```bash
+sudo -iu office-agent claude     # log the agents in with your Claude subscription once, then /exit
+```
+
+Then open the URL it printed. The first sign-in sets up two-factor (Google Authenticator); keep the recovery codes.
+
+- **Every update:** push from your machine, then on the VPS `bash /opt/after-office/deploy/update.sh`.
+- **The clone in `~/after-office`** is only for running `setup-vps.sh`. When an update says the server setup changed:
+  `git -C ~/after-office pull`, then run the setup again with the same options (safe to re-run; the code and the
+  login are left as they are).
+- **Typed "skip" at the deploy key, or ran it without a terminal?** Add the key later
+  (`cat /home/office/.ssh/github_deploy.pub`), then `bash ~/after-office/deploy/update.sh --init <repo url>` and create
+  the login as root: `OFFICE_ENV_FILE=/etc/after-office.env /home/office/.bun/bin/bun
+  /opt/after-office/apps/server/src/setup-auth.ts && systemctl restart after-office`.
+
 ## Requirements
 
 - **VPS:** Ubuntu 22.04 or 24.04. The dashboard itself is small (about 50–100 MB). Each `claude` session uses roughly
@@ -270,6 +313,9 @@ The build runs on Bun alone, so the server needs no Node.js for it. Agents keep 
 The VPS can follow your repository instead: `/opt/after-office` becomes a git checkout, and each update is one command
 on the server (`deploy/update.sh`: pull, install, build, restart the dashboard). Agents keep running; your data and
 `/etc/after-office.env` aren't in git and are never touched.
+
+`setup-vps.sh` does steps 1 and 2 for you when run from a clone or with `--repo <url>` (see "Quick start" above). By
+hand, e.g. for a server set up before that:
 
 1. **A private repository?** Give the `office` user read-only access with a deploy key (not a token of your account):
    ```bash
