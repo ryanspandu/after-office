@@ -1,0 +1,89 @@
+/* ── projects (ProjectsModal) ──────────────────────────────────────── */
+.projects { display: flex; flex-direction: column; gap: 12px; }
+.projects__add { display: flex; gap: 8px; }
+.projects__add input { flex: 1; min-width: 0; }
+.projects__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.projects__item + .projects__item { border-top: 1px solid var(--line); }
+.projects__line { display: flex; align-items: center; gap: 6px; }
+.projects__line .team-row { flex: 1; min-width: 0; }
+.projects__edit { display: flex; flex-direction: column; gap: 12px; padding: 4px 6px 14px 30px; }
+.projects__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.projects__colors { display: flex; gap: 6px; flex-wrap: wrap; padding-top: 4px; }
+.projects__color { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.projects__color.is-on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
+@media (max-width: 768px) {
+  .projects__row { grid-template-columns: 1fr; }
+  .projects__edit { padding-left: 6px; }
+}
+/* ── Tasks | Projects tabs and the projects list (ProjectsTab) ─────── */
+.task-tabs button { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; padding: 4px 11px; }
+.task-tabs button svg { font-size: 13px; }
+.ws-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; margin: -2px 0 8px; }
+.ws-list { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; flex: 1; }
+.ws { display: flex; flex-direction: column; gap: 4px; }
+.ws__head {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px;
+  border-radius: 10px; cursor: pointer; font-size: 13.5px; font-weight: 600;
+}
+.ws__head:hover { background: var(--card-2); }
+.ws__head:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
+.ws__icon { color: var(--hl); flex-shrink: 0; font-size: 15px; }
+.ws__name { min-width: 0; }
+.ws__head .ws__agents { margin-left: auto; }
+.ws__agents { display: inline-flex; gap: 3px; align-items: center; flex-shrink: 0; }
+.ws__empty { font-size: 12.5px; padding: 0 8px 4px 31px; }
+.ws__projects { list-style: none; margin: 0; padding: 0 0 0 14px; display: flex; flex-direction: column; border-left: 1px solid var(--line); margin-left: 15px; }
+.ws-row { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 9px; cursor: pointer; }
+.ws-row:hover { background: var(--card-2); }
+.ws-row:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
+.ws-row__icon { color: var(--muted); flex-shrink: 0; }
+.ws-row__body { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.ws-row__name { font-size: 13px; font-weight: 500; }
+.ws-meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 11.5px; font-weight: 400; }
+.ws-meta--block { padding: 0 8px 2px 31px; }
+.ws-meta__branch { display: inline-flex; align-items: center; gap: 3px; color: var(--text); }
+.ws-meta__dirty { color: var(--hl); flex-shrink: 0; }
+.ws-detail { display: flex; flex-direction: column; gap: 14px; }
+.ws-detail__path { display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 10px; border-radius: 9px; background: var(--card-2); }
+.ws-detail__path code { flex: 1; min-width: 0; font-size: 12px; }
+.ws-detail__agents { display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-detail .field__label { display: flex; align-items: center; gap: 8px; }
+.ws-commits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.ws-commits li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ws-commits code { font-size: 11.5px; color: var(--muted); flex-shrink: 0; }
+.ws-commits .truncate { flex: 1; min-width: 0; }
+.ws-commits__meta { flex-shrink: 0; font-size: 11.5px; }
+@media (max-width: 768px) { .ws-commits__meta { display: none; } }
+.ws-list { overflow-x: hidden; }
+.ws__projects li { min-width: 0; }
+.ws__tag { font-size: 10.5px; font-weight: 500; color: var(--muted); padding: 1px 6px; border-radius: 999px; background: var(--card-2); flex-shrink: 0; }
+.ws-meta__branch { min-width: 0; flex-shrink: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ws-meta__branch svg { flex-shrink: 0; }
+.task-tabs { flex: 1; max-width: 100%; min-width: 0; box-sizing: border-box; }
+/* three tabs share the width: each may shrink (label cut short) instead of spilling out of the rounded bar */
+.task-tabs button { flex: 1 1 0; min-width: 0; justify-content: center; padding-left: 8px; padding-right: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.task-tabs button svg { flex-shrink: 0; }
+.task-bar { display: flex; align-items: center; gap: 6px; margin: -2px 0 8px; font-size: 12px; }
+.task-bar button.small { white-space: nowrap; }
+.proj-opt { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.proj-opt > .truncate:first-of-type { flex-shrink: 0; max-width: 55%; }
+.proj-opt .muted { font-size: 11px; min-width: 0; }
+.rs__group-heading { padding: 8px 9px 4px; font-size: 11px; color: var(--muted); text-transform: none; }
+.ws__tag--linked { display: inline-flex; align-items: center; gap: 4px; color: var(--text); max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-row__name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ws-row__name .truncate { min-width: 0; }
+.ws-project .field { margin-top: 6px; }
+.ws-project__setup { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
+.ws-project__setup .field__hint { flex: 1; min-width: 200px; }
+/* touch screens: a long press shows the tooltip, so no text selection or iOS callout on those controls */
+@media (hover: none) {
+  [data-tip] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+}
+/* running app previews (ui/Previews.tsx), at the top of the Projects tab */
+.previews { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; padding: 8px; border: 1px solid color-mix(in srgb, var(--hl) 35%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--hl) 6%, var(--card)); }
+.previews__head { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.previews__head svg { color: var(--hl); }
+.preview-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 13px; min-width: 0; }
+.preview-row:hover { background: var(--card-2); }
+.preview-row__port { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; color: var(--hl); font-weight: 600; flex-shrink: 0; }
+.preview-row__go { margin-left: auto; color: var(--muted); flex-shrink: 0; }

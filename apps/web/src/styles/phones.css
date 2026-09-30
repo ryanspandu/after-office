@@ -1,0 +1,43 @@
+/* ── phones: office full screen + floating dock (ui/MobileDock.tsx) ─── */
+.app--mobile {
+  position: fixed; inset: 0; margin: 0; padding: 8px 8px calc(84px + env(safe-area-inset-bottom)); min-height: 0;
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: 'nav' 'stage';
+  overflow: hidden;
+}
+.dock {
+  position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 700;
+  display: flex; gap: 2px; padding: 6px; border-radius: 22px;
+  background: var(--card); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  max-width: calc(100vw - 24px); box-sizing: border-box;
+}
+.dock__btn {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  width: 62px; height: 52px; padding: 0; border: none; border-radius: 16px; background: transparent;
+  color: var(--text); font-size: 19px;
+}
+.dock__btn:active { background: var(--card-2); }
+.dock__label { font-size: 10.5px; font-weight: 500; color: var(--muted); }
+.dock__count {
+  position: absolute; top: 3px; left: calc(50% + 6px); min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 999px; background: var(--hl); color: #fff; font-size: 10px; font-weight: 700; line-height: 17px; text-align: center;
+  box-shadow: 0 0 0 2px var(--card);
+}
+.dock__btn--alert .dock__count { background: var(--danger); }
+
+/* side panels shown inside a dock modal: drop the card chrome (the modal has the title) */
+.dock-sheet > .card { box-shadow: none; padding: 0; background: transparent; max-height: none !important; min-height: 0; flex: none; }
+.dock-sheet > .card > .card__head h2, .dock-sheet > .card > .card__head > .muted.grow { display: none; }
+.dock-sheet > .card > .card__head { justify-content: flex-end; }
+.dock-sheet > .card .list { max-height: 60vh; margin: 0; }
+.dock-sheet .followups { flex-direction: column; overflow: visible; }
+.dock-sheet .followups > .fu { flex: none; }
+.dock-sheet .followups .empty { padding: 24px 0; }
+
+/* phones: a bigger close target */
+@media (max-width: 768px) {
+  .modal__actions > .icon-btn, .drawer__head > .icon-btn { width: 36px; height: 36px; font-size: 18px; }
+  /* big tap target without making the header taller */
+  .modal__actions { margin: -8px -8px -8px 0; }
+  .modal__head:has(> div > p) > .modal__actions { margin-top: -9px; }
+  .modal__head h3 { font-size: 15px; }
+}

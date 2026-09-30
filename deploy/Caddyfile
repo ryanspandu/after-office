@@ -1,0 +1,38 @@
+# /etc/caddy/Caddyfile. HTTPS certificates are automatic (Let's Encrypt); the DNS A record must point here.
+{
+	# the admin API on a root-only socket: local processes (agents!) can't rewrite this config over localhost:2019
+	admin unix//run/caddy/admin.sock
+}
+
+office.example.com {
+	# Claude Code reaches these over loopback (127.0.0.1:8787); they are never needed from outside
+	@internal path /hook* /statusline* /mcp*
+	respond @internal 404
+
+	# no request needs more (hooks never come through here); webhooks get less
+	request_body {
+		max_size 2MB
+	}
+	@trigger path /trigger/*
+	request_body @trigger {
+		max_size 64KB
+	}
+
+	# don't compress the event stream or the terminal socket
+	@compressible not path /api/events /api/agents/*/term
+	encode @compressible zstd gzip
+
+	# the app sets the CSP and the rest; these are for anything answered by Caddy itself
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:8787 {
+		# SSE and WebSocket traffic must go out immediately
+		flush_interval -1
+	}
+}

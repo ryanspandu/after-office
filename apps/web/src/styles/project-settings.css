@@ -1,0 +1,6 @@
+/* ── project settings (ui/ProjectSettings.tsx) ─────────────────────── */
+.project-settings__logo { display: flex; align-items: center; gap: 14px; }
+.project-settings__logo img { width: 56px; height: 56px; border-radius: 14px; object-fit: cover; background: var(--card-2); border: 1px solid var(--line); }
+.project-settings__logo-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.project-settings__reset { margin-right: auto; }
+.profile__who .small { flex-shrink: 0; }

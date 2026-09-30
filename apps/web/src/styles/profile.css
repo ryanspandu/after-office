@@ -1,0 +1,121 @@
+/* ── profile (ProfileModal) ────────────────────────────────────────── */
+.user-chip__profile, .nav-menu__profile { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0; border-radius: 999px; }
+.nav-menu__profile { flex: 1; }
+.user-chip__profile:focus-visible, .nav-menu__profile:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+.user-chip__profile:hover .user-chip__name { text-decoration: underline; }
+.profile { display: flex; flex-direction: column; gap: 18px; }
+.profile__who { display: flex; align-items: center; gap: 12px; }
+.profile__who .grow { display: grid; gap: 1px; min-width: 0; }
+.profile__who .muted { font-size: 12.5px; }
+.profile__avatar { width: 40px; height: 40px; font-size: 16px; background: var(--hl-2); color: #151515; display: grid; place-items: center; border-radius: 12px; }
+.profile__section { display: flex; flex-direction: column; gap: 8px; }
+.profile__head { display: flex; align-items: center; justify-content: space-between; }
+.profile__head h4 { margin: 0; font-size: 13.5px; }
+.profile__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.profile__list li + li { border-top: 1px solid var(--line); }
+.profile__device { display: flex; align-items: center; gap: 10px; padding: 9px 2px; }
+.profile__icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--card-2); flex-shrink: 0; }
+.profile__device.is-current .profile__icon { background: var(--hl-soft); color: var(--hl); }
+.profile__body { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.profile__title { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 500; }
+.profile__badge { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--hl-soft); color: var(--hl); }
+.profile__meta { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profile__others { align-self: flex-start; }
+.profile__log li { display: flex; align-items: center; gap: 8px; padding: 7px 2px; font-size: 12.5px; min-width: 0; }
+.profile__ok { color: #2fbf71; flex-shrink: 0; }
+.profile__fail { color: var(--danger); flex-shrink: 0; }
+.profile__log .is-failed .grow { color: var(--danger); }
+@media (max-width: 768px) {
+  .profile__log li { flex-wrap: wrap; }
+  .profile__log .profile__meta { width: 100%; padding-left: 22px; }
+}
+.row__unread {
+  display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; padding: 1px 7px; border-radius: 999px; border: none;
+  background: var(--hl); color: #fff; font-size: 11px; font-weight: 600; line-height: 1.5; cursor: pointer;
+}
+.row__unread svg { font-size: 11px; }
+.row__unread:hover { filter: brightness(1.05); }
+.extra-dirs { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.extra-dirs__item { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.extra-dirs__item .mono { flex: 1; min-width: 0; font-size: 12px; }
+
+.skills { grid-template-columns: 220px minmax(0, 1fr); height: 100%; } /* as tall as the body: the account list reaches the footer */
+.skills { grid-template-columns: 220px minmax(0, 1fr); }
+.skills__side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.acct-skills { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-height: 280px; }
+.acct-skills__title { font-size: 12px; font-weight: 600; color: var(--muted); }
+.acct-skills__search { padding: 6px 10px; border-radius: 9px; font-size: 12.5px; }
+/* the account list fills the rest of the column (as tall as the editor beside it) and scrolls inside */
+.acct-skills__list { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.acct-skills__note { font-size: 12px; }
+.acct-skills__src { font-size: 10.5px; color: var(--muted); flex-shrink: 0; margin-left: auto; padding-left: 6px; }
+.skills__item.active .acct-skills__src { color: inherit; opacity: 0.8; }
+.acct-skills__row { position: relative; }
+.acct-skills__row--info > .skills__item { padding-right: 30px; }
+.acct-skills__info { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; color: var(--muted); cursor: help; }
+.acct-skills__info svg { width: 14px; height: 14px; }
+.acct-skills__info:hover, .acct-skills__info:focus-visible { color: var(--text); background: var(--card-2); outline: none; }
+.acct-skills__row:has(> .active) .acct-skills__info { color: var(--accent-fg); background: none; }
+.acct-skill__head { display: flex; align-items: baseline; gap: 10px; }
+.acct-skill__desc { margin: 0; font-size: 13px; }
+.acct-skill__body { max-height: 420px; overflow: auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); font-size: 13px; }
+.acct-skill > button { align-self: flex-start; }
+@media (max-width: 640px) { .skills { grid-template-columns: 1fr; height: auto; } .acct-skills { flex: none; min-height: 0; } .acct-skills__list { flex: none; max-height: 220px; } }
+/* Profile: device name on one line, the "This device" badge never wraps */
+.profile__body { min-width: 0; }
+.profile__title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.profile__title > .truncate { min-width: 0; }
+.profile__badge { flex-shrink: 0; white-space: nowrap; }
+/* ── change password (ui/ChangePassword.tsx) ───────────────────────── */
+.change-pw__label { display: flex; align-items: center; justify-content: space-between; }
+.change-pw__tools { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+.change-pw .auth__pw input { font-family: var(--mono, ui-monospace, monospace); }
+
+/* the Profile's actions on phones: ⋮ and a small menu (ui/ProfileModal.tsx) */
+.pmenu { position: relative; flex-shrink: 0; }
+.pmenu__list {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 200px; display: flex; flex-direction: column; padding: 5px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 28px rgb(0 0 0 / 0.16);
+  animation: msg-in 0.14s ease-out both; transform-origin: top right;
+}
+.pmenu .pmenu__item { display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: none; color: var(--text); font-size: 14px; text-align: left; }
+.pmenu .pmenu__item:hover, .pmenu .pmenu__item:focus-visible { background: var(--card-2); outline: none; }
+.pmenu__item svg { color: var(--muted); flex-shrink: 0; }
+/* Profile → Security: password and two-factor */
+.profile__security { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.profile__sec-btn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; text-align: left; justify-content: flex-start; min-width: 0; }
+.profile__sec-btn > svg { flex-shrink: 0; width: 16px; height: 16px; color: var(--hl); }
+.profile__sec-btn > span { display: grid; gap: 1px; min-width: 0; }
+.profile__sec-btn b { font-size: 13px; font-weight: 600; }
+.profile__sec-btn .muted { font-size: 11.5px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tfa__manual .small { white-space: nowrap; }
+/* "Open in authenticator app": only where the app is on this device (phones, tablets) */
+.tfa__open { display: none; text-decoration: none; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--hl); color: #fff; }
+@media (pointer: coarse) { .tfa__open { display: inline-flex; } }
+@media (max-width: 480px) {
+  .auth__card--wide { padding: 20px; }
+  .tfa__steps { padding-left: 18px; }
+  .tfa__qr-row { flex-direction: column; align-items: stretch; }
+  .tfa-qr { align-self: center; width: 180px; height: 180px; }
+  .tfa__manual { align-items: stretch; }
+  .tfa__manual .small, .tfa__open { justify-content: center; }
+  .tfa__codes { grid-template-columns: 1fr 1fr; gap: 6px 10px; padding: 10px 8px; }
+  .tfa__codes code { font-size: 12.5px; }
+}
+/* Profile → a sign-in's details */
+.profile__log li .icon-btn { flex-shrink: 0; margin-left: -4px; }
+.signin-detail dl { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.signin-detail dl > div { display: grid; grid-template-columns: 150px 1fr; gap: 10px; font-size: 13px; }
+.signin-detail dt { color: var(--muted); }
+.signin-detail dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.signin-detail dd code { font-size: 11.5px; line-height: 1.5; }
+@media (max-width: 480px) { .signin-detail dl > div { grid-template-columns: 1fr; gap: 2px; } }
+/* the owner's picture and Edit profile (ui/EditProfile.tsx) */
+.avatar--img { object-fit: cover; padding: 0; background: var(--card-2); }
+/* a picture keeps the same rounded square as the initial */
+.avatar--img.profile__avatar, .avatar--img.edit-profile__avatar { background: var(--card-2); }
+.edit-profile { display: flex; flex-direction: column; gap: 14px; }
+.edit-profile__picture { display: flex; align-items: center; gap: 14px; }
+.edit-profile__avatar { width: 72px; height: 72px; font-size: 28px; flex-shrink: 0; display: grid; place-items: center; border-radius: 18px; background: var(--hl-2); color: #151515; }
+.edit-profile__picture-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.edit-profile__picture-actions .field__hint { flex-basis: 100%; margin: 0; }

@@ -1,0 +1,37 @@
+/* ── small screens: modals ──────────────────────────────────────────── */
+/* action buttons keep their label on one line; rows wrap as a whole instead */
+.modal__foot button, .picker__foot button, .picker__path button, .drawer__foot button, .revise__actions button, .move-folder__actions button { white-space: nowrap; flex-shrink: 0; }
+.picker__foot .mono { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal__foot { flex-wrap: wrap; }
+@media (max-width: 640px) {
+  /* stacked fields keep the same spacing as the rest of the form */
+  .field-row { flex-direction: column; gap: 12px; }
+  .field-row > * { width: 100%; min-width: 0; }
+  .modal__body { gap: 12px; }
+}
+/* date + time picker: time columns go under the calendar when there's no room beside it */
+@media (max-width: 420px) {
+  .react-datepicker.dp:not(.dp--time) { flex-direction: column; }
+  .react-datepicker.dp:not(.dp--time) .tp { width: auto; border-left: 0; border-top: 1px solid var(--line); }
+  .react-datepicker.dp:not(.dp--time) .tp__cols { height: 150px; }
+}
+/* popovers never wider than the screen; on phones the date-range presets sit above the calendar */
+.popover { max-width: calc(100vw - 24px); box-sizing: border-box; }
+.usage-pop { width: min(360px, calc(100vw - 24px)); }
+@media (max-width: 480px) {
+  .range-pop { flex-direction: column; }
+  .range-pop__presets { flex-direction: row; flex-wrap: wrap; padding: 0 0 8px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .range-pop .rdp-root { --rdp-day-width: 38px; --rdp-day-height: 38px; --rdp-day_button-width: 36px; --rdp-day_button-height: 36px; }
+}
+/* agents modal: everything on the same left/right edges */
+.agents-modal .agents-card .source-seg { margin-left: 0; width: 100%; box-sizing: border-box; }
+.agents-modal .agents-card .source-seg button { flex: 1; justify-content: center; }
+.agents-modal .agents-card .card__head .toggle { margin-left: 4px; }
+.agents-modal .agents-card .list { margin: 0; }
+/* narrower screens: the metrics get their own row under the brand/clock and wrap instead of scrolling */
+@media (max-width: 1100px) {
+  .navbar { flex-wrap: wrap; row-gap: 10px; }
+  .brand { order: 1; }
+  .nav-right { order: 2; margin-left: auto; }
+  .nav-metrics { order: 3; flex: 1 1 100%; flex-wrap: wrap; overflow: visible; row-gap: 10px; column-gap: 18px; padding: 0; }
+}

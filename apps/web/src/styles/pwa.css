@@ -1,0 +1,18 @@
+/* ── installed app (PWA, display-mode: standalone) ─────────────────── */
+@media (display-mode: standalone) {
+  /* no accidental pull-to-refresh, and scrolling the 3D stage never drags the whole app */
+  html, body { overscroll-behavior: none; }
+  /* stay clear of the notch / rounded corners (the viewport covers them: viewport-fit=cover) */
+  .app { padding-top: max(12px, env(safe-area-inset-top)); padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  .app--mobile { padding-top: max(8px, env(safe-area-inset-top)); padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+}
+/* phones: toasts sit above the dock */
+.app--mobile .sync-toast { bottom: calc(96px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); }
+.sync-toast--update { gap: 10px; }
+.sync-toast--update svg { color: var(--hl); flex-shrink: 0; }
+.nav-menu__hint { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.nav-menu__hint svg { vertical-align: -2px; }
+/* the office fades in once its first frames settled (scene/Office.tsx) */
+.office-canvas { opacity: 0; transition: opacity 0.35s ease-out; }
+.office-canvas.is-shown { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .office-canvas { transition: none; } }

@@ -1,0 +1,36 @@
+/* ── name tags above agents (positioned per frame by scene/labels.tsx) ── */
+.labels { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+.tag {
+  position: absolute; left: 0; top: 0; will-change: transform;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; user-select: none;
+}
+.tag__bubble { display: grid; place-items: center; transition: opacity 0.3s; }
+.tag__bubble > span {
+  display: none; place-items: center; width: 19px; height: 19px; border-radius: 50%;
+  background: var(--card); color: var(--text); font-size: 11px; box-shadow: var(--shadow);
+}
+.tag[data-pose='type'] [data-icon='type'],
+.tag[data-pose='wait'] [data-icon='wait'],
+.tag[data-pose='meeting'] [data-icon='meeting'],
+.tag[data-pose='sofa'] [data-icon='sofa'],
+.tag[data-pose='relax'] [data-icon='relax'],
+.tag[data-pose='eat'] [data-icon='eat'],
+.tag[data-pose='pet'] [data-icon='pet'],
+.tag[data-pose='billiards'] [data-icon='billiards'] { display: grid; }
+.tag [data-icon='wait'] { background: var(--hl); color: #fff; }
+.tag__name {
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  font-size: 11px; font-weight: 600;
+  padding: 2px 8px 2px 6px; border-radius: 999px;
+  background: var(--card); color: var(--text); box-shadow: var(--shadow);
+  border: 1.5px solid transparent;
+}
+.tag__dot { width: 7px; height: 7px; border-radius: 50%; }
+.tag--waiting .tag__name { border-color: var(--hl); }
+.tag--selected .tag__name { background: var(--accent); color: var(--accent-fg); }
+/* a selected agent: its tag grows and sits on top; everyone else's fades back */
+.tag { transition: opacity 0.25s ease; }
+.tag--dimmed { opacity: 0.35; }
+.tag__name { transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
+.tag--selected .tag__name { transform: scale(1.12); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25), 0 0 0 2px var(--hl); }
+.cat-hearts { color: #e0558f; font-size: 14px; transition: opacity 0.4s; }

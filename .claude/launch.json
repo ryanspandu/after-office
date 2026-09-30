@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "after-office",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "export PATH=\"$HOME/.bun/bin:$PATH\" && bun run dev"],
+      "port": 5173
+    }
+  ]
+}

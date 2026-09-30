@@ -1,0 +1,11 @@
+/* ── tooltips (ui/Tooltip.tsx, react-tooltip) ───────────────────────── */
+.ao-tip.ao-tip {
+  z-index: 2000; max-width: 260px; padding: 0; border-radius: 8px; --rt-arrow-size: 7px;
+  --rt-color-dark: #1b1b1a; --rt-color-white: #f5f5f3; --rt-transition-show-delay: 0.12s; --rt-transition-closing-delay: 0.1s;
+  background: var(--rt-color-dark); color: var(--rt-color-white); font-size: 12px; font-weight: 500; line-height: 1.4;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+/* long tips (a skill's description…) scroll inside; long words wrap instead of spilling out */
+.ao-tip .react-tooltip-content-wrapper { padding: 5px 9px; max-height: min(320px, 50vh); overflow-y: auto; overflow-wrap: anywhere; overscroll-behavior: contain; scrollbar-width: thin; }
+.ao-tip__title { display: block; margin-bottom: 6px; font-weight: 700; overflow-wrap: anywhere; }
+:root[data-theme='night'] .ao-tip.ao-tip { --rt-color-dark: #f0f0ee; --rt-color-white: #111; }

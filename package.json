@@ -1,0 +1,16 @@
+{
+  "name": "after-office",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '@after-office/web' --filter '@after-office/server' dev",
+    "dev:lan": "DEV_LAN=1 bun run --filter '@after-office/web' --filter '@after-office/server' dev",
+    "typecheck": "bun run --filter '*' typecheck",
+    "build": "bun run --filter '@after-office/web' build",
+    "start": "NODE_ENV=production bun run --filter '@after-office/server' start",
+    "test": "bun run --filter '@after-office/server' test"
+  }
+}

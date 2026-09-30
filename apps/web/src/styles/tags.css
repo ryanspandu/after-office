@@ -1,0 +1,98 @@
+/* ── tags (ui/tags.tsx, ui/TagsModal.tsx) ─────────────────────────── */
+.tag-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.tag-chip {
+  display: inline-flex; align-items: center; max-width: 110px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
+}
+.tag-opt { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+/* picked tags in a picker or filter: in their own colour */
+.rs__multi-value.tag-mv { color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); border-color: color-mix(in srgb, var(--c) 30%, transparent); font-weight: 600; }
+.rs__multi-value.tag-mv .rs__multi-value__remove { color: inherit; }
+.tag-filter { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.tag-filter .rs { min-width: 150px; max-width: 280px; }
+.reports-modal__tags .rs { width: 170px; }
+.report__tags { margin: 0 0 2px; width: 260px; max-width: 100%; }
+.report__tags .rs--multi .rs__control { min-height: 30px !important; padding-top: 1px; padding-bottom: 1px; font-size: 12.5px; }
+.task-table__title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.task-table__title > .truncate { flex: 1 1 auto; min-width: 40px; }
+/* the title gives way (…) before the tags do: they stay whole */
+.task-table__title .tag-chips { flex-wrap: nowrap; flex-shrink: 0; max-width: 60%; overflow: hidden; }
+.card-task__top .tag-chips { flex: 1; overflow: hidden; flex-wrap: nowrap; }
+.report-row__meta .tag-chips { flex-wrap: nowrap; overflow: hidden; }
+.project-settings__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+.tags-modal__new { display: flex; gap: 8px; }
+.tags-modal__new input { flex: 1; }
+.tags-modal__list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; }
+.tags-modal__row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); }
+.tags-modal__row:last-child { border-bottom: 0; }
+.tags-modal__color { position: relative; flex-shrink: 0; }
+.tags-modal .tags-modal__swatch { width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: 50%; border: 2px solid var(--card); box-shadow: 0 0 0 1px var(--line); }
+.tags-modal .tags-modal__swatch.is-on { box-shadow: 0 0 0 2px var(--text); }
+.tags-modal__palette {
+  position: fixed; left: 0; top: 0; z-index: 1500; width: max-content; display: grid; grid-template-columns: repeat(5, 22px); gap: 6px; padding: 8px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 28px rgb(0 0 0 / 0.16);
+}
+.tags-modal__name { flex: 1; min-width: 0; padding: 6px 10px; font-size: 13.5px; font-weight: 600; background: transparent; border-color: transparent; }
+.tags-modal__name:hover, .tags-modal__name:focus { border-color: var(--line); background: var(--card-2); }
+.tags-modal__name.is-bad { border-color: var(--danger); }
+.tags-modal__uses { font-size: 12px; white-space: nowrap; }
+@media (max-width: 640px) {
+  .tags-modal__uses { display: none; }
+  .reports-modal__tags .rs { width: 140px; }
+}
+/* the Tags tab in the left sidebar */
+.tags-tab { display: flex; flex-direction: column; gap: 6px; min-height: 0; flex: 1; }
+.tags-tab .tags-modal__new { padding: 0 2px; }
+.tags-tab .tags-modal__new { gap: 6px; align-items: center; }
+.tags-tab .tags-modal__new input { height: 30px; box-sizing: border-box; padding: 4px 12px; font-size: 13px; }
+.tags-tab .tags-modal__new .icon-btn { width: 30px; height: 30px; flex-shrink: 0; }
+.tags-tab .tags-modal__list { flex: 1; min-height: 0; overflow-y: auto; }
+.tags-tab .tags-modal__uses { font-size: 11.5px; }
+.tags-tab__error { margin: 0; font-size: 12.5px; }
+.tags-tab .tags-modal__swatch, .tags-modal__palette .tags-modal__swatch { width: 22px; height: 22px; min-width: 0; padding: 0; border-radius: 50%; border: 2px solid var(--card); box-shadow: 0 0 0 1px var(--line); }
+.tags-tab .tags-modal__swatch.is-on, .tags-modal__palette .tags-modal__swatch.is-on { box-shadow: 0 0 0 2px var(--text); }
+/* the custom colour swatch (a rainbow) and its picker (react-colorful) */
+.tags-modal__palette .tags-modal__custom { background: conic-gradient(#ef4444, #f4b817, #2fbf71, #14b8a6, #3b82f6, #8b5cf6, #ec4899, #ef4444); cursor: pointer; }
+.tags-modal__mixer { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.tags-modal__mixer .react-colorful { width: 100%; height: 150px; }
+.tags-modal__mixer .react-colorful__saturation { border-radius: 8px 8px 0 0; }
+.tags-modal__mixer .react-colorful__last-control { border-radius: 0 0 8px 8px; }
+.tags-modal__mixer .react-colorful__pointer { width: 18px; height: 18px; }
+.tags-modal__mixer .react-colorful__hue { height: 14px; }
+.tags-modal__hex { display: flex; align-items: center; gap: 4px; padding: 0 8px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--card-2); font-size: 12.5px; color: var(--muted); }
+.tags-modal__hex input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 0; font: inherit; color: var(--text); text-transform: uppercase; outline: none; }
+.tags-modal__hex-dot { width: 14px; height: 14px; border-radius: 50%; margin-right: 4px; box-shadow: 0 0 0 1px var(--line); flex-shrink: 0; }
+.toolbar__actions .check { white-space: nowrap; }
+.tasks-modal .toolbar__break { flex-basis: 100%; height: 0; }
+.tasks-modal .toolbar__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+@media (max-width: 768px) {
+  .tasks-modal .toolbar__break { display: none; }
+  /* tags on a row of their own, then Projects · Archive · Show done across the whole width */
+  .tasks-modal .toolbar__filter--tags { grid-column: 1 / -1; }
+  .tasks-modal .toolbar__actions { grid-column: 1 / -1; margin-left: 0; justify-self: stretch; justify-content: flex-end; flex-wrap: wrap; }
+  .tasks-modal .toolbar__actions .check { margin-left: auto; }
+}
+/* the Tags tab in the left sidebar: rows */
+.tags-tab .tags-modal__row { padding: 5px 2px; gap: 8px; }
+.tags-tab .tags-modal__name { padding: 4px 8px; font-size: 13px; }
+.tags-tab .tags-modal__swatch { width: 18px; height: 18px; }
+/* the Tags tab's add button: orange, faded until there's a name */
+.tags-tab .tags-modal__new .icon-btn { background: var(--hl); border-color: var(--hl); color: #fff; }
+.tags-tab .tags-modal__new .icon-btn:hover:not(:disabled) { background: var(--hl); border-color: var(--hl); filter: brightness(0.95); }
+.tags-tab .tags-modal__new .icon-btn:disabled { background: var(--hl); border-color: var(--hl); color: #fff; opacity: 0.4; }
+/* a card's priority dot stays on the right, also when there's no project or tag before it */
+.card-task__top .prio { margin-left: auto; flex-shrink: 0; }
+/* phones: a task row's tags go on their own line under the title instead of being cut off beside it */
+@media (max-width: 768px) {
+  .task-table__title { flex-wrap: wrap; row-gap: 4px; }
+  .task-table__title > .truncate { flex: 1 1 0; min-width: 0; }
+  .task-table__title .tag-chips { flex: 1 1 100%; flex-wrap: wrap; overflow: visible; }
+}
+/* a tag picker that reads like text until hovered or opened (a report's tags) */
+.rs--inline .rs__control { min-height: 28px !important; padding: 0 4px 0 2px; border-color: transparent; background: transparent; border-radius: 8px; }
+.rs--inline .rs__control:hover, .rs--inline .rs__control--focused { border-color: var(--line); background: var(--card-2); }
+.rs--inline .rs__placeholder { color: var(--muted); font-size: 12.5px; }
+.rs--inline .rs__indicators { display: none; }
+.rs--inline .rs__control:hover .rs__indicators, .rs--inline .rs__control--focused .rs__indicators { display: flex; }

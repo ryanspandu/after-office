@@ -1,0 +1,48 @@
+/* office rules (ui/RulesPicker.tsx): a chip per set, and the bar in the CLAUDE.md tab */
+.rules-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.rules-chip { font-size: 12.5px; padding: 5px 11px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); color: var(--muted); }
+.rules-chip.is-on { color: var(--text); border-color: color-mix(in srgb, var(--hl) 55%, var(--line)); background: color-mix(in srgb, var(--hl) 10%, var(--card)); }
+.rules-chip.is-on svg { color: var(--hl); }
+.rules-chip:disabled { opacity: 1; cursor: default; }
+.office-rules { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.office-rules .field__label { margin: 0; }
+.office-rules__note { flex-basis: 100%; }
+/* office rules as a multi-select (ui/RulesPicker.tsx) */
+.rules-select { min-width: 0; }
+.office-rules .rules-select { flex: 1 1 320px; max-width: 520px; }
+.rs__multi-value.rules-mv--fixed { padding-right: 8px; }
+.rules-mv--fixed .rs__multi-value__remove { display: none; }
+.rules-opt { display: flex; align-items: flex-start; gap: 8px; }
+.rules-opt__check { width: 14px; flex-shrink: 0; color: var(--hl); font-weight: 700; }
+.rules-opt__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; white-space: normal; }
+.rules-opt__text .muted { font-size: 12px; line-height: 1.35; }
+/* the rules menu: a little room between options; chosen ones in orange */
+.rules-menu .rs__menu-list { display: flex; flex-direction: column; gap: 4px; padding: 4px; }
+.rules-menu .rs__option { border-radius: 10px; }
+.rules-menu .rs__option.rs__option--selected { background: var(--hl); color: #fff; }
+.rules-menu .rs__option.rs__option--selected .muted { color: rgb(255 255 255 / 0.85); }
+.rules-menu .rs__option.rs__option--selected .rules-opt__check { color: #fff; }
+/* one orange for every chosen option, whatever react-select has "focused" (it moves on open and with the keys);
+   a hover only while the pointer is really on it, and none on the always-on one (it can't be clicked) */
+.rules-menu .rs__option.rs__option--focused:not(.rs__option--selected) { background: transparent; }
+.rules-menu .rs__option:not(.rs__option--selected):hover { background: var(--card-2); }
+.rules-menu .rs__option.rs__option--selected:not(.rs__option--is-disabled):hover { filter: brightness(0.95); }
+.rules-menu .rs__option--is-disabled { cursor: default; }
+.rules-mv__fixed { display: inline-flex; align-items: center; gap: 5px; }
+.rules-mv__fixed svg, .rules-opt__check svg { width: 12px; height: 12px; flex-shrink: 0; }
+.rules-opt__check { display: inline-grid; place-items: center; height: 18px; }
+/* multi-selects (office rules, tags) look like the other inputs, not pills: their chips can wrap onto more lines */
+.rs--multi .rs__control { border-radius: 12px; padding: 5px 6px 5px 8px; }
+.rs--multi .rs__value-container { gap: 5px; row-gap: 4px; padding: 0; }
+.rs--multi .rs__multi-value { border-radius: 8px; }
+.rs--multi .rs__indicators { align-self: center; }
+/* in the Reports filter row it sits among pills: stays one */
+.reports-modal__bar .rs--multi .rs__control { border-radius: 999px; }
+/* the typing box of a multi-select takes no extra height of its own between wrapped chips */
+.rs--multi .rs__input-container { margin: 0; padding: 0; }
+.rs--multi .rs__multi-value { margin: 0; }
+/* wrapped chip rows sit tight at the top: react-select's flex rows would otherwise stretch to share any spare height */
+.rs--multi .rs__value-container { align-content: flex-start; row-gap: 4px; }
+.rs--multi .rs__multi-value { line-height: 1.35; padding-top: 2px; padding-bottom: 2px; }
+/* office rules can't be typed into: its (hidden) focus input takes no room, so it never opens a row of its own */
+.rules-select .rs__value-container > input { position: absolute; width: 1px; height: 1px; opacity: 0; }

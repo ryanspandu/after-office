@@ -1,0 +1,55 @@
+# /etc/systemd/system/after-office.service
+# The dashboard (Hono + the built web app), as user office. Agents run in after-office-agents.service as office-agent.
+[Unit]
+Description=After Office (dashboard)
+After=network-online.target after-office-agents.service
+Wants=network-online.target after-office-agents.service
+
+[Service]
+Type=simple
+User=office
+Group=office
+# to reach the agents' tmux socket and read their transcripts
+SupplementaryGroups=office-agent
+WorkingDirectory=/opt/after-office/apps/server
+# secrets (login, SESSION_SECRET, HOOK_TOKEN, notification tokens): root-owned, read by systemd, never on disk
+# where an agent could reach them
+EnvironmentFile=/etc/after-office.env
+Environment=NODE_ENV=production
+Environment=OFFICE_TRUST_PROXY=true
+Environment=LANG=C.UTF-8
+Environment=OFFICE_TMUX_SOCKET=/run/after-office/tmux.sock
+Environment=OFFICE_AGENT_HOME=/home/office-agent
+Environment=OFFICE_ROOT=/home/office-agent/agents:/home/office-agent/projects
+Environment=OFFICE_DEFAULT_DIR=/home/office-agent/agents
+Environment=OFFICE_AGENTS_DIR=/home/office-agent/agents
+Environment=PATH=/home/office/.bun/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/office/.bun/bin/bun src/index.ts
+Restart=always
+RestartSec=3
+
+# Hardening: read-only system and app code; writes only to its data and the agents' folders (config files there)
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/after-office/apps/server/data /home/office-agent/agents /home/office-agent/projects
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+MemoryMax=1500M
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+/* tabs that scroll sideways instead of squeezing (ui/ScrollTabs.tsx) */
+.scroll-tabs { display: flex; align-items: stretch; gap: 4px; flex: 1; min-width: 0; }
+.scroll-tabs__row { flex: 1; min-width: 0; display: flex; overflow-x: auto; scrollbar-width: none; scroll-behavior: smooth; }
+.scroll-tabs__row::-webkit-scrollbar { display: none; }
+.scroll-tabs__row.task-tabs button { flex: 0 0 auto; overflow: visible; text-overflow: clip; padding-left: 11px; padding-right: 11px; }
+/* small upright rounded buttons at the ends (mouse only: a touch screen swipes) */
+.scroll-tabs__arrow { display: none; flex: 0 0 auto; width: 18px; padding: 0; border-radius: 8px; align-items: center; justify-content: center; color: var(--muted); background: var(--card-2); border: 1px solid var(--line); }
+.scroll-tabs__arrow svg { width: 13px; height: 13px; }
+.scroll-tabs__arrow:hover { color: var(--text); }
+@media (hover: hover) and (pointer: fine) { .scroll-tabs__arrow { display: inline-flex; } }

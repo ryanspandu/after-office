@@ -1,0 +1,7 @@
+/* initial avatars: bold letter on the agent's strong colour */
+.avatar, .report-row__who {
+  /* colours: avatarStyle() in state/store.ts (each agent colour's strong version) */
+  font-weight: 700;
+}
+/* your own avatar is light with a dark letter: keep it as it is */
+.fu-hire { display: flex; flex-direction: column; gap: 12px; }

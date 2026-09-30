@@ -1,0 +1,109 @@
+/* ── reports (ui/Reports.tsx) ───────────────────────────────────────── */
+.side .card.card--reports:not(.card--grow) { max-height: 244px; min-height: 120px; flex-shrink: 0; }
+.side--left .card--grow { min-height: 220px; }
+.report-row { list-style: none; }
+.report-row + .report-row { border-top: 1px solid var(--line); }
+.report-row__main {
+  all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: flex-start; gap: 9px;
+  padding: 7px 6px; border-radius: 10px; cursor: pointer;
+}
+.report-row__main:hover { background: var(--card-2); }
+.report-row__main:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
+.report__icon { flex-shrink: 0; margin-top: 2px; font-size: 14px; color: var(--muted); }
+.report__icon--bad { color: var(--danger); }
+.report-row__body { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.report-row__title { font-size: 13px; font-weight: 500; }
+.report-row--unread .report-row__title { font-weight: 600; }
+.report-row__text { font-size: 12.5px; color: var(--muted); }
+.report-row__meta { font-size: 11.5px; color: var(--muted); }
+.report-row__dot { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--hl); flex-shrink: 0; }
+.reports-modal { gap: 10px; }
+.reports-modal__bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.reports-modal__list { max-height: min(60vh, 520px); margin: 0; }
+.report__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.status-pill--bad { --c: var(--danger); }
+.report__text {
+  padding: 12px 14px; border-radius: 12px; background: var(--card-2); border: 1px solid var(--line);
+  font-size: 13.5px; line-height: 1.55; max-height: min(55vh, 520px); overflow-y: auto; overflow-wrap: anywhere;
+}
+.report__text p { margin: 4px 0; }
+.report__text ul, .report__text ol { margin: 4px 0; padding-left: 20px; }
+.report__text code { font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: var(--card); border: 1px solid var(--line); }
+.report__text--inline { max-height: 260px; }
+.report__text--bad { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+.report__text--old { margin-top: 6px; opacity: 0.85; }
+
+/* unread replies on the agent row's chat button */
+.icon-btn--badge { position: relative; }
+.icon-btn__count {
+  position: absolute; top: -5px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 999px; background: var(--hl); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+  box-shadow: 0 0 0 2px var(--card); pointer-events: none;
+}
+/* Reports "View all": search, dates, pages */
+.search-box { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 4px 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card-2); }
+.search-box > svg { color: var(--muted); flex-shrink: 0; }
+.search-box input { all: unset; flex: 1; min-width: 0; font-size: 13px; padding: 7px 0; }
+.search-box:focus-within { border-color: var(--hl); }
+.reports-modal__bar .range-btn { flex-shrink: 0; }
+.pager { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding-top: 4px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.pager__page { font-variant-numeric: tabular-nums; min-width: 44px; text-align: center; }
+.pager .rs { width: 76px; }
+/* Reports: the agent's initial beside its name (text-sized) */
+.report-row__meta { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.report-row__who {
+  display: inline-grid; place-items: center; flex-shrink: 0;
+  width: 15px; height: 15px; border-radius: 4px;
+  background: var(--muted); color: #fff; font-size: 9px; font-weight: 700; line-height: 1;
+}
+/* Reports: the project a report is about */
+.report-row__project { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 45%; margin-left: 2px; padding: 0 6px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); font-size: 10.5px; line-height: 16px; color: var(--text); }
+.report-row__project .chip__dot { width: 6px; height: 6px; flex-shrink: 0; }
+.reports-modal__project, .reports-modal__agent { width: 150px; }
+/* the search gets its own full-width row; the filters share the one under it */
+.reports-modal__bar--filters .search-box { flex: 1 1 100%; }
+.reports-modal__bar--filters .reports-modal__agent, .reports-modal__bar--filters .reports-modal__project { flex: 1 1 150px; }
+.project-reports { display: flex; flex-direction: column; gap: 6px; }
+.project-reports__summary { padding: 6px 8px 2px; border-radius: 12px; background: var(--hl-soft); }
+.project-reports__summary .list { margin: 0; }
+/* Reports "View all": search, project, dates and reset share one height */
+.reports-modal__bar .search-box { height: 32px; box-sizing: border-box; }
+.reports-modal__bar .rs__control { min-height: 32px !important; font-size: 13px; }
+.reports-modal__bar .range-btn { height: 32px; box-sizing: border-box; padding: 0 12px; font-size: 13px; }
+.reports-modal__reset { width: 32px; height: 32px; flex-shrink: 0; }
+.metric__unit { font-size: 0.7em; font-weight: 500; color: var(--muted); }
+/* Reports "View all": the project / tags / dates / reset group (flat on desktop) */
+.reports-modal__filters { display: contents; }
+@media (max-width: 768px) {
+  /* the kind tabs scroll sideways; Mark all read is just its icon beside them */
+  .reports-modal__bar--tabs { flex-wrap: nowrap; }
+  .reports-modal__bar--tabs > .grow { display: none; }
+  .reports-modal__filter-tabs { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .reports-modal__filter-tabs::-webkit-scrollbar { display: none; }
+  .reports-modal__filter-tabs button { flex-shrink: 0; white-space: nowrap; }
+  .reports-modal__mark { width: 36px; height: 36px; padding: 0; flex-shrink: 0; border-radius: 50%; }
+  .reports-modal__mark-label { display: none; }
+  /* search on its own row; the rest folds away behind the button in it */
+  .reports-modal__bar--filters .search-box { flex: 1 1 100%; }
+  .reports-modal__bar--filters .toolbar__fold { display: inline-grid; place-items: center; }
+  .reports-modal__bar--filters.is-folded .reports-modal__filters { display: none; }
+  .reports-modal__filters { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+  .reports-modal__filters .reports-modal__project, .reports-modal__filters .reports-modal__agent, .reports-modal__filters .reports-modal__tags { flex: 1 1 100%; width: auto; }
+  .reports-modal__filters .reports-modal__tags .rs { flex: 1; width: auto; max-width: none; }
+  .reports-modal__filters .range-btn { flex: 1; justify-content: flex-start; }
+}
+/* Reports filters: one 32px row; the tags filter reads like its neighbours ("All tags" in the text colour) */
+.reports-modal__bar .rs--multi .rs__control { min-height: 32px !important; padding-top: 1px; padding-bottom: 1px; }
+.reports-modal__bar .search-box input { font-size: 13px; }
+.reports-modal__tags .rs__placeholder { color: var(--text); }
+@media (max-width: 768px) { .reports-modal__mark { width: 32px; height: 32px; } }
+/* the pager on phones: one row (smaller page buttons, tighter gaps, "Per page" dropped) */
+@media (max-width: 768px) {
+  .pager { flex-wrap: nowrap; gap: 4px; font-size: 12px; }
+  .pager__count { white-space: nowrap; }
+  .pager > .muted:not(.pager__count) { display: none; }
+  .pager .rs { width: 64px; }
+  .pager .rs__control { min-height: 28px !important; }
+  .pager .icon-btn { width: 26px; height: 26px; min-width: 0; padding: 0; flex-shrink: 0; }
+  .pager__page { min-width: 34px; white-space: nowrap; }
+}

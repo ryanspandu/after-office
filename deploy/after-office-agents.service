@@ -1,0 +1,59 @@
+# /etc/systemd/system/after-office-agents.service
+# The agents' tmux server, run as its own Unix user (office-agent). Every Claude Code session lives in it. The
+# dashboard (user office) drives it through the socket in /run/after-office; the agents can't read the dashboard's
+# code, secrets or database, and restarting or updating the dashboard never touches them.
+[Unit]
+Description=After Office agents (tmux server for the Claude Code sessions)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=office-agent
+Group=office-agent
+# files agents create are readable by the dashboard's group (office is in office-agent)
+UMask=0007
+RuntimeDirectory=after-office
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+Environment=HOME=/home/office-agent
+Environment=LANG=C.UTF-8
+Environment=TERM=xterm-256color
+# mise shims first: a project's .mise.toml picks its Node/Python/… version (setup-vps.sh --dev-tools)
+Environment=PATH=/home/office-agent/.local/share/mise/shims:/home/office-agent/.local/bin:/home/office-agent/.bun/bin:/home/office-agent/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+# a placeholder session keeps the server up while no agent runs
+ExecStart=/usr/bin/tmux -S /run/after-office/tmux.sock -f /etc/after-office/tmux.conf new-session -d -s _office -n idle "exec sleep infinity"
+# let the dashboard's user connect (tmux 3.3+ checks the client's user; older versions only the socket mode)
+ExecStartPost=/bin/sh -c 'tmux -S /run/after-office/tmux.sock server-access -a office 2>/dev/null; chmod 0660 /run/after-office/tmux.sock'
+ExecStop=/usr/bin/tmux -S /run/after-office/tmux.sock kill-server
+Restart=on-failure
+RestartSec=3
+
+# Hardening. Agents keep their own home, see nothing of /home/office, /opt/after-office or the secrets file,
+# and can't gain privileges (sudo, setuid).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=tmpfs
+BindPaths=/home/office-agent
+ReadWritePaths=/home/office-agent
+InaccessiblePaths=-/opt/after-office -/etc/after-office.env -/var/lib/caddy
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+TasksMax=4096
+# agents may use most of the machine, but never all of it (the dashboard and SSH must stay up)
+MemoryMax=85%
+
+[Install]
+WantedBy=multi-user.target

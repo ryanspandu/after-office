@@ -1,0 +1,53 @@
+/* ── auth (ui/AuthGate.tsx) ─────────────────────────────────────────── */
+.auth-splash { position: fixed; inset: 0; display: grid; place-items: center; font-size: 22px; color: var(--muted); background: var(--surface); }
+.auth {
+  position: fixed; inset: 0; overflow: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px 16px;
+  background: var(--surface);
+}
+.auth__card {
+  width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px;
+  padding: 28px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.auth__brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.auth__brand b { display: block; font-size: 17px; font-weight: 800; letter-spacing: -0.015em; }
+.auth__brand .muted { display: block; font-size: 13px; }
+.auth__card input:not([type='checkbox']) { padding: 10px 13px; border-radius: 12px; font-size: 14px; }
+.auth__pw { position: relative; display: flex; }
+.auth__pw input { flex: 1; padding-right: 44px !important; }
+.auth__pw .icon-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
+.auth__submit { padding: 10px 16px; font-size: 14px; border-radius: 12px; margin-top: 2px; }
+.auth__error { margin: 0; padding: 9px 12px; border-radius: 10px; font-size: 13px; color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.auth__hint { margin: 0; font-size: 12px; text-align: center; }
+.auth__hint code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--card); border: 1px solid var(--line); }
+
+.user-chip { display: flex; align-items: center; gap: 6px; padding: 3px 3px 3px 5px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); }
+.user-chip .avatar { background: var(--hl-2); color: #151515; }
+.user-chip__name { font-size: 13px; font-weight: 500; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1440px) { .user-chip__name { display: none; } }
+/* two-factor sign-in (ui/TwoFactor.tsx) */
+.code-input { font-family: var(--mono, ui-monospace, monospace); font-size: 22px !important; letter-spacing: 0.35em; text-align: center; padding: 10px 12px !important; }
+.auth__card--wide { width: min(520px, calc(100vw - 32px)); max-width: 520px; }
+.auth__links { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
+.auth__links .link { display: inline-flex; align-items: center; gap: 5px; }
+.tfa { display: flex; flex-direction: column; gap: 12px; }
+.tfa__why { margin: 0; font-size: 13px; line-height: 1.5; }
+.tfa__steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; }
+.tfa__steps li::marker { color: var(--hl); font-weight: 700; }
+.tfa__qr-row { display: flex; gap: 14px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.tfa-qr { width: 164px; height: 164px; flex-shrink: 0; padding: 6px; border-radius: 12px; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); }
+.tfa-qr svg { width: 100%; height: 100%; display: block; }
+.tfa__manual { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; flex: 1; font-size: 12px; }
+.tfa__secret { font-size: 12.5px; padding: 6px 8px; border-radius: 8px; background: var(--card-2); border: 1px solid var(--line); word-break: break-all; }
+.tfa__code { display: flex; gap: 8px; margin-top: 8px; }
+.tfa__code .code-input { flex: 1; min-width: 0; }
+.tfa__lead { margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.5; }
+.tfa__lead svg { color: var(--working); flex-shrink: 0; margin-top: 2px; }
+.tfa__codes { list-style: none; margin: 0; padding: 10px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); }
+.tfa__codes code { font-size: 13.5px; letter-spacing: 0.02em; }
+.tfa__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.tfa__status { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.tfa__status svg { color: var(--working); }
+.tfa__choices { display: flex; gap: 8px; flex-wrap: wrap; }
+.tfa__choices button { display: inline-flex; align-items: center; gap: 6px; }
+.tfa-modal .field__hint code { font-size: 11.5px; }

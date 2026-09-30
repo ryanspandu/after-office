@@ -1,0 +1,193 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook",
+            "headers": {
+              "Authorization": "Bearer $AO_HOOK_TOKEN",
+              "X-AO-Agent": "$AO_AGENT_ID"
+            },
+            "allowedEnvVars": [
+              "AO_HOOK_TOKEN",
+              "AO_AGENT_ID"
+            ],
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook",
+            "headers": {
+              "Authorization": "Bearer $AO_HOOK_TOKEN",
+              "X-AO-Agent": "$AO_AGENT_ID"
+            },
+            "allowedEnvVars": [
+              "AO_HOOK_TOKEN",
+              "AO_AGENT_ID"
+            ],
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook",
+            "headers": {
+              "Authorization": "Bearer $AO_HOOK_TOKEN",
+              "X-AO-Agent": "$AO_AGENT_ID"
+            },
+            "allowedEnvVars": [
+              "AO_HOOK_TOKEN",
+              "AO_AGENT_ID"
+            ],
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook",
+            "headers": {
+              "Authorization": "Bearer $AO_HOOK_TOKEN",
+              "X-AO-Agent": "$AO_AGENT_ID"
+            },
+            "allowedEnvVars": [
+              "AO_HOOK_TOKEN",
+              "AO_AGENT_ID"
+            ],
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook",
+            "headers": {
+              "Authorization": "Bearer $AO_HOOK_TOKEN",
+              "X-AO-Agent": "$AO_AGENT_ID"
+            },
+            "allowedEnvVars": [
+              "AO_HOOK_TOKEN",
+              "AO_AGENT_ID"
+            ],
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook",
+            "headers": {
+              "Authorization": "Bearer $AO_HOOK_TOKEN",
+              "X-AO-Agent": "$AO_AGENT_ID"
+            },
+            "allowedEnvVars": [
+              "AO_HOOK_TOKEN",
+              "AO_AGENT_ID"
+            ],
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook",
+            "headers": {
+              "Authorization": "Bearer $AO_HOOK_TOKEN",
+              "X-AO-Agent": "$AO_AGENT_ID"
+            },
+            "allowedEnvVars": [
+              "AO_HOOK_TOKEN",
+              "AO_AGENT_ID"
+            ],
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook",
+            "headers": {
+              "Authorization": "Bearer $AO_HOOK_TOKEN",
+              "X-AO-Agent": "$AO_AGENT_ID"
+            },
+            "allowedEnvVars": [
+              "AO_HOOK_TOKEN",
+              "AO_AGENT_ID"
+            ],
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook",
+            "headers": {
+              "Authorization": "Bearer $AO_HOOK_TOKEN",
+              "X-AO-Agent": "$AO_AGENT_ID"
+            },
+            "allowedEnvVars": [
+              "AO_HOOK_TOKEN",
+              "AO_AGENT_ID"
+            ],
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "curl -s -m 2 -H \"authorization: Bearer $AO_HOOK_TOKEN\" -H \"x-ao-agent: $AO_AGENT_ID\" -H 'content-type: application/json' --data-binary @- \"http://127.0.0.1:8787/statusline\" || echo 'After Office'",
+    "refreshInterval": 15
+  },
+  "enabledMcpjsonServers": [
+    "after-office"
+  ],
+  "permissions": {
+    "allow": [
+      "mcp__after-office"
+    ]
+  }
+}

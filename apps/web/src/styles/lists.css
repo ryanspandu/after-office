@@ -1,0 +1,59 @@
+/* ── lists (cron / tasks / agents) ──────────────────────────────────── */
+.side .card:first-child:not(.card--grow) { max-height: 48%; }
+/* cron and reports show three rows and scroll; tasks and agents get the rest */
+.side--left .card:first-child:not(.card--grow) { max-height: 294px; flex-shrink: 0; }
+.side--left .card--grow { min-height: 220px; }
+.list { list-style: none; margin: 0 -6px; padding: 0 2px 0 0; overflow-y: auto; overflow-x: hidden; min-height: 0; }
+.row { display: flex; gap: 9px; align-items: flex-start; padding: 7px 6px; border-radius: 10px; }
+.row + .row { border-top: 1px solid var(--line); }
+.row--off { opacity: 0.55; }
+.row--selected { background: var(--accent-soft); border-color: transparent !important; }
+.row--selected + .row { border-color: transparent; }
+.row__body { flex: 1; min-width: 0; }
+.row__title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.row__meta { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 12px; color: var(--muted); }
+.row__meta code { font-size: 11px; background: var(--card-2); border: 1px solid var(--line); padding: 0 5px; border-radius: 5px; color: var(--text); margin-right: 2px; }
+.row__mono { font-family: ui-monospace, 'SF Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.row__actions { display: flex; align-items: center; gap: 5px; margin-top: 6px; min-width: 0; flex-wrap: wrap; }
+.agent .row__actions .seg button { padding: 3px 7px; }
+.row__actions .rs { flex: 1; min-width: 0; }
+.row input[type='checkbox'] { accent-color: var(--hl); margin-top: 2px; width: 15px; height: 15px; padding: 0; }
+
+.cron__time {
+  font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--hl-soft); color: var(--hl); border-radius: 8px; padding: 3px 0;
+  /* fixed width so "10:00 +2" and "02:00" line up the rows */
+  width: 66px; flex-shrink: 0; text-align: center; box-sizing: border-box;
+}
+.flash { color: var(--working); font-weight: 500; }
+
+.prio { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.prio--high { background: var(--danger); }
+.prio--medium { background: var(--hl-2); }
+.prio--low { background: var(--muted); }
+.due { font-weight: 500; }
+.due--overdue { color: var(--danger); }
+.due--soon { color: var(--waiting); }
+.task--done .row__title { text-decoration: line-through; color: var(--muted); }
+
+.form { display: flex; flex-direction: column; gap: 8px; padding: 10px; margin-bottom: 8px; background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; }
+.form input, .form textarea { background: var(--card); }
+.form__row { display: flex; gap: 6px; }
+.form__row > * { flex: 1; min-width: 0; }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
+.stat {
+  display: flex; align-items: center; justify-content: center; gap: 5px; padding: 5px 0;
+  border-radius: 10px; font-size: 13px; background: var(--c-bg); color: var(--c);
+}
+.stat b { font-size: 13px; }
+.stat--working, .status--working { --c: var(--working); --c-bg: var(--working-bg); }
+.stat--waiting, .status--waiting { --c: var(--waiting); --c-bg: var(--waiting-bg); }
+.stat--idle, .status--idle { --c: var(--idle); --c-bg: var(--idle-bg); }
+.stat--meeting, .status--meeting { --c: var(--meeting); --c-bg: var(--meeting-bg); }
+.status { margin-left: auto; font-size: 11px; font-weight: 500; padding: 1px 8px; border-radius: 999px; background: var(--c-bg); color: var(--c); }
+.agent { cursor: pointer; }
+.avatar {
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
+  color: #fff; font-size: 12px; font-weight: 600;
+}

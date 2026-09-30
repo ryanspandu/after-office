@@ -1,0 +1,31 @@
+/* ── chat on phones: full height, settings behind an info button (ui/agent/ChatTab.tsx) ── */
+.chat--mobile { position: relative; gap: 8px; }
+.chat__float { position: absolute; top: 6px; right: 10px; z-index: 3; display: flex; gap: 6px; align-items: center; }
+.chat__float .icon-btn, .chat__float button.small { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); background: var(--card); }
+.chat__info { width: 36px; height: 36px; font-size: 16px; }
+.chat__info.is-on { background: var(--text); color: var(--card); }
+.chat__bar--sheet {
+  position: absolute; top: 48px; left: 6px; right: 6px; z-index: 4; flex-direction: column; align-items: stretch; gap: 10px;
+  padding: 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18); animation: pop-in 0.16s ease-out;
+}
+.chat__bar--sheet .rs { width: 100%; }
+.chat__bar--sheet .chat__stat { min-width: 0; }
+.chat__bar--sheet .chat__ctx .meter { flex: 1; width: auto; }
+@media (max-width: 768px) {
+  .drawer__head { padding: 12px 14px 8px; gap: 10px; }
+  .drawer__body--flush { padding: 6px 12px 12px; }
+  .drawer__tabs { margin: 0 14px; max-width: calc(100% - 28px); }
+  /* the drawer takes (almost) the whole phone screen: more room for the chat */
+  .drawer { top: 8px; right: 8px; bottom: 8px; width: calc(100vw - 16px); border-radius: 18px; }
+}
+/* phones: fixed layers follow the visible area (above the keyboard); see state/visualViewport.ts */
+@media (max-width: 768px) {
+  .drawer-backdrop, .modal-backdrop { top: var(--vvt, 0); bottom: auto; height: var(--vvh, 100dvh); }
+}
+/* phones: long messages use the whole width; the first message isn't covered by the floating buttons */
+@media (max-width: 768px) {
+  .msg { max-width: 100%; }
+  .tool { width: 100%; }
+  .chat--mobile .chat__log { padding-top: 52px; }
+}

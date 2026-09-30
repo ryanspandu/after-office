@@ -1,0 +1,5 @@
+/* search in the side panels (ui/SearchBox.tsx) */
+.search-box--sm input { padding: 5px 0; font-size: 12.5px; }
+.search-box--sm .icon-btn { width: 22px; height: 22px; }
+.side-search { margin: 0 0 8px; }
+.activity-modal__search { flex: 1 1 200px; }

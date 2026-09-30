@@ -1,0 +1,129 @@
+/* ── all-tasks modal ────────────────────────────────────────────────── */
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.toolbar__agent { width: 180px; }
+.toolbar .primary { margin-left: auto; }
+.task-table { display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 14px; }
+.task-table__head, .task-table__row {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) 150px 104px 140px 26px;
+  align-items: center; gap: 10px; padding: 8px 12px;
+}
+.task-table__head { position: sticky; top: 0; z-index: 1; background: var(--card-2); font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
+.task-table__row + .task-table__row { border-top: 1px solid var(--line); }
+.task-table__row input[type='checkbox'] { accent-color: var(--hl); width: 15px; height: 15px; }
+.task-table__due { display: flex; flex-direction: column; font-size: 12px; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) {
+  .task-table__head { display: none; }
+  .task-table__row { grid-template-columns: 22px minmax(0, 1fr) 26px; }
+  .task-table__row > .task-table__due, .task-table__row > .rs { grid-column: 2; }
+}
+
+/* ── tasks modal: list + board (ui/TasksModal.tsx) ──────────────────── */
+.tasks-modal { min-height: 60vh; }
+.toolbar__field { display: flex; align-items: center; gap: 6px; }
+.toolbar__field .rs, .toolbar__filter { width: 150px; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.check input { accent-color: var(--hl); }
+.seg button svg { margin-right: 2px; }
+
+.task-list { display: flex; flex-direction: column; max-height: 64vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 14px; }
+.task-list .task-table__head, .task-list .task-table__row {
+  grid-template-columns: 22px minmax(0, 1fr) 120px 130px 120px 96px 130px 26px;
+}
+.task-group__head {
+  position: sticky; top: 33px; z-index: 1;
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: var(--card); font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--line);
+}
+.task-group + .task-group { border-top: 1px solid var(--line); }
+.task-group__empty { padding: 10px 44px; font-size: 13px; color: var(--muted); }
+.task-list .task-table__row { border-top: none; }
+.task-list .task-table__row + .task-table__row { border-top: 1px solid var(--line); }
+/* narrow list (phones, tablets): title on top, the controls in two columns under it. A container query, so it
+   follows the list's own width rather than the screen (children: checkbox, title, status, project, deadline,
+   priority, agent, delete) */
+.task-list { container-type: inline-size; }
+@container (max-width: 900px) {
+  .task-list .task-table__head { display: none; }
+  .task-list .task-table__row { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) 26px; row-gap: 6px; }
+  .task-list .task-table__row > :nth-child(1) { grid-column: 1; grid-row: 1; }
+  .task-list .task-table__row > :nth-child(2) { grid-column: 2 / 4; grid-row: 1; }
+  .task-list .task-table__row > :nth-child(3) { grid-column: 2; grid-row: 2; }
+  .task-list .task-table__row > :nth-child(4) { grid-column: 3; grid-row: 2; }
+  .task-list .task-table__row > :nth-child(5) { grid-column: 2; grid-row: 3; }
+  .task-list .task-table__row > :nth-child(6) { grid-column: 3; grid-row: 3; }
+  .task-list .task-table__row > :nth-child(7) { grid-column: 2 / 4; grid-row: 4; }
+  .task-list .task-table__row > :nth-child(8) { grid-column: 4; grid-row: 1; }
+  .task-group__head { top: 0; }
+}
+
+.project-tag {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 120px;
+  padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 600;
+  color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; align-items: flex-start; min-height: 60vh; }
+.board__col {
+  flex: 0 0 250px; display: flex; flex-direction: column; gap: 8px; max-height: 64vh;
+  padding: 10px; border-radius: 14px; background: var(--card-2); border: 1px solid var(--line);
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.board__col--over { border-color: var(--hl); background: var(--hl-soft); }
+.board__head { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; padding: 0 2px; }
+.board__head .muted { margin-left: auto; }
+.board__cards { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 24px; }
+.board__add { justify-content: flex-start; border: 1px dashed var(--line); background: transparent; color: var(--muted); font-size: 13px; }
+
+.card-task {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); touch-action: none;
+}
+.card-task--overlay { box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18); transform: rotate(2deg); cursor: grabbing; }
+.card-task--done .card-task__title { text-decoration: line-through; color: var(--muted); }
+.card-task__main {
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%;
+  padding: 10px; border: none; background: transparent; border-radius: 12px; text-align: left; cursor: grab;
+}
+.card-task__main:hover:not(:disabled) { border-color: transparent; }
+.card-task__top { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 16px; }
+.card-task__title { font-size: 13.5px; font-weight: 500; line-height: 1.35; }
+.card-task__meta { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; }
+.card-task__due { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.card-task__due.due--overdue { color: var(--danger); }
+.card-task__due.due--soon { color: var(--waiting); }
+.card-task__edit { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 10px; }
+.card-task__edit .ghost { align-self: flex-start; }
+.avatar--xs { width: 20px; height: 20px; border-radius: 6px; font-size: 11px; }
+/* task list groups fold (TasksModal list view): the head is a button, the body animates its height */
+button.task-group__head { width: 100%; box-sizing: border-box; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; margin: 0; color: inherit; font: inherit; font-size: 13px; font-weight: 600; text-align: left; justify-content: flex-start; cursor: pointer; }
+button.task-group__head:hover:not(:disabled) { background: var(--card-2); border-color: var(--line); }
+button.task-group__head:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
+.task-group__chev { font-size: 14px; color: var(--muted); transition: transform 0.2s ease; flex-shrink: 0; }
+.task-group__chev.is-shut { transform: rotate(-90deg); }
+.task-group__body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.22s ease; }
+.task-group__body > div { overflow: hidden; min-height: 0; }
+.task-group.is-collapsed .task-group__body { grid-template-rows: 0fr; }
+@media (prefers-reduced-motion: reduce) { .task-group__body, .task-group__chev { transition: none; } }
+/* Tasks toolbar: Projects / Archive stay inline on desktop; on phones the toolbar becomes a tidy grid */
+.toolbar__actions { display: contents; }
+@media (max-width: 768px) {
+  .tasks-modal .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; }
+  .tasks-modal .toolbar > .seg { grid-column: 1; justify-self: start; order: 0; }
+  .tasks-modal .toolbar > .primary { grid-column: 2; justify-self: end; order: 1; margin: 0; }
+  .tasks-modal .toolbar__search { grid-column: 1 / -1; order: 2; max-width: none; }
+  .tasks-modal .toolbar__field { grid-column: 1 / -1; order: 3; }
+  .tasks-modal .toolbar__field .rs { flex: 1; width: auto; }
+  .tasks-modal .toolbar__filter { order: 4; width: auto; min-width: 0; }
+  .tasks-modal .toolbar > label.check { grid-column: 1; order: 5; }
+  .tasks-modal .toolbar__actions { display: flex; grid-column: 2; order: 6; justify-self: end; align-items: center; gap: 6px; }
+}
+/* the Tasks toolbar on phones: grouping, filters and actions fold away (the button in the search box) */
+.toolbar__fold { display: none; position: relative; }
+.toolbar__fold-count { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px; background: var(--hl); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; }
+@media (max-width: 768px) {
+  .tasks-modal .toolbar__fold { display: inline-grid; place-items: center; }
+  .tasks-modal .toolbar--folded .toolbar__field,
+  .tasks-modal .toolbar--folded .toolbar__filter,
+  .tasks-modal .toolbar--folded .toolbar__actions { display: none; }
+}

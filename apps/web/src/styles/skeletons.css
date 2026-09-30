@@ -1,0 +1,8 @@
+/* ── skeletons: shapes shown until their data is read ─────────────── */
+.skeleton { display: inline-block; background: linear-gradient(90deg, var(--card-2) 25%, color-mix(in srgb, var(--line) 70%, var(--card-2)) 50%, var(--card-2) 75%); background-size: 200% 100%; animation: skeleton-shine 1.2s ease-in-out infinite; border-radius: 6px; }
+.skeleton--line { height: 12px; }
+.skeleton--sm { height: 9px; }
+span.brand__logo.skeleton { width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0; }
+.brand__skeleton { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+@keyframes skeleton-shine { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

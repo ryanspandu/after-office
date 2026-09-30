@@ -1,0 +1,80 @@
+/* ── modal (ui/Modal.tsx) ───────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 900;
+  /* one column exactly as wide as the backdrop (which excludes any page scrollbar): even margins left and right */
+  display: grid; grid-template-columns: 100%; place-items: center; padding: 16px; box-sizing: border-box;
+  background: rgba(10, 10, 10, 0.35); backdrop-filter: blur(3px);
+  animation: fade-in 0.15s ease-out;
+}
+.modal {
+  max-width: 100%; max-height: calc(100dvh - 32px); overflow: hidden; display: flex; flex-direction: column;
+  background: var(--card); color: var(--text);
+  border: 1px solid var(--line); border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+  animation: pop-in 0.18s ease-out;
+}
+.modal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px 0; }
+/* with a description under the title, line the close button up with the title line */
+.modal__head:has(> div > p) { align-items: flex-start; }
+.modal__head:has(> div > p) > .modal__actions { margin-top: -4px; }
+.modal__head > .icon-btn { flex-shrink: 0; }
+.modal__head h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.modal__head p { margin: 4px 0 0; }
+.modal__body { display: flex; flex-direction: column; gap: 14px; padding: 20px 20px 16px; }
+.modal__head { flex-shrink: 0; }
+.modal__scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+/* modal scrollbars stay clear of the rounded corners (the thin style itself is global, see below) */
+.modal ::-webkit-scrollbar-track { margin: 10px; }
+.modal__foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.field__label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.field__hint { font-size: 12px; color: var(--muted); }
+.switch-row { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.switch-row .toggle { margin-top: 2px; }
+.switch-row > span:last-child { display: grid; gap: 2px; }
+.switch-row__label { font-size: 13px; font-weight: 500; }
+.field input, .field textarea { padding: 7px 11px; border-radius: 10px; }
+.field-row { display: flex; gap: 12px; }
+.mono { font-family: ui-monospace, 'SF Mono', monospace; font-size: 13px; }
+input.invalid { border-color: var(--danger); }
+
+/* folder picker */
+.picker__path { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); }
+.picker__path input { flex: 1; border: none; background: transparent; padding: 6px 0; outline: none; }
+.picker__path input:focus { outline: none; }
+.picker:focus-within { border-color: var(--hl); }
+.picker { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.picker__crumbs {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  padding: 6px 8px; background: var(--card-2); border-bottom: 1px solid var(--line); font-size: 13px;
+}
+.crumb-wrap { display: inline-flex; align-items: center; gap: 2px; }
+.crumb { border: none; background: transparent; padding: 3px 6px; border-radius: 6px; font-size: 13px; }
+.crumb:hover:not(:disabled) { background: var(--card); }
+.picker__list { list-style: none; margin: 0; padding: 4px; height: 200px; overflow-y: auto; }
+.picker__list button {
+  width: 100%; justify-content: flex-start; gap: 8px;
+  border: none; background: transparent; border-radius: 8px; padding: 6px 8px; font-size: 14px; font-weight: 400;
+}
+.picker__list button:hover:not(:disabled) { background: var(--card-2); }
+.picker__list button svg { color: var(--hl-2); }
+.picker__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; border-top: 1px solid var(--line); background: var(--card-2);
+}
+.picker__foot .mono { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* every modal's footer (buttons) stays at the bottom of the card while the content above it scrolls */
+.modal__scroll .modal__foot {
+  position: sticky; bottom: 0; z-index: 2;
+  margin: 0 -20px -16px; padding: 12px 20px 16px;
+  background: var(--card); border-top: 1px solid var(--line);
+}
+/* the scrollbar runs only beside the content, not down past the sticky footer (height measured in ui/Modal.tsx) */
+.modal .modal__scroll::-webkit-scrollbar-track { margin-bottom: calc(var(--foot-h, 0px) + 6px); }
+.figure-picker { align-self: flex-start; }
+.figure-row { display: flex; align-items: center; gap: 8px; }

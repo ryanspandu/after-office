@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "after-office": {
+      "type": "http",
+      "url": "http://127.0.0.1:8787/mcp",
+      "headers": {
+        "Authorization": "Bearer ${AO_HOOK_TOKEN}",
+        "X-AO-Agent": "${AO_AGENT_ID}"
+      },
+      "timeout": 120000
+    }
+  }
+}

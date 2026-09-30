@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Offline</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <!-- Shown by the service worker when the server can't be reached. Self-contained: no scripts (CSP), inline CSS. -->
+    <style>
+      :root { color-scheme: light dark; --bg: #efefed; --card: #fff; --text: #151515; --muted: #6b6b68; --line: #d6d6d3; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #0e0e0e; --card: #151515; --text: #ededeb; --muted: #9a9a96; --line: #2a2a28; } }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+        background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      main { width: min(380px, 100%); padding: 28px 24px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); text-align: center; }
+      img { width: 56px; height: 56px; }
+      h1 { margin: 14px 0 6px; font-size: 18px; font-weight: 600; }
+      p { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+      a { display: inline-block; padding: 10px 20px; border-radius: 999px; background: var(--text); color: var(--card); text-decoration: none; font-weight: 500; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icon-192.png" alt="" />
+      <h1>Can't reach your office</h1>
+      <p>The server isn't answering. Check your internet connection, or whether the VPS is up. Your agents keep working on the server either way.</p>
+      <a href="/">Try again</a>
+    </main>
+  </body>
+</html>

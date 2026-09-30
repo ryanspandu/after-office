@@ -1,0 +1,51 @@
+/* The dashboard's styles, one file per part of the UI in src/styles/. The order below is the cascade order (a later
+   rule wins a tie): a new rule goes in its component's file; a new component at the end. A few files stay apart and
+   in place because their rules must keep coming after others: the phone and small-screen overrides (responsive,
+   small-screens, phones, phones-nav-menu, phones-chat), reports-card (its tabs are also .task-tabs) and
+   rules-picker (multi-selects everywhere). */
+@import './styles/base.css';
+@import './styles/select.css';
+@import './styles/navbar.css';
+@import './styles/lists.css';
+@import './styles/follow-ups.css';
+@import './styles/name-tags.css';
+@import './styles/responsive.css';
+@import './styles/modal.css';
+@import './styles/tasks-modal.css';
+@import './styles/agent-profile.css';
+@import './styles/tasks.css';
+@import './styles/auth.css';
+@import './styles/pickers.css';
+@import './styles/live-mode.css';
+@import './styles/chat.css';
+@import './styles/tooltips.css';
+@import './styles/reports.css';
+@import './styles/markdown.css';
+@import './styles/usage-popover.css';
+@import './styles/small-screens.css';
+@import './styles/phones.css';
+@import './styles/phones-nav-menu.css';
+@import './styles/motion.css';
+@import './styles/scrollbars.css';
+@import './styles/render-switch.css';
+@import './styles/manager.css';
+@import './styles/automation.css';
+@import './styles/projects.css';
+@import './styles/cron.css';
+@import './styles/phones-chat.css';
+@import './styles/pwa.css';
+@import './styles/profile.css';
+@import './styles/files.css';
+@import './styles/reports-card.css';
+@import './styles/controls.css';
+@import './styles/avatars.css';
+@import './styles/connectors.css';
+@import './styles/agents-card.css';
+@import './styles/project-settings.css';
+@import './styles/skeletons.css';
+@import './styles/tags.css';
+@import './styles/git-section.css';
+@import './styles/rules-picker.css';
+@import './styles/activity.css';
+@import './styles/scroll-tabs.css';
+@import './styles/search-box.css';

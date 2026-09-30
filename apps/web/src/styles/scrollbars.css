@@ -1,0 +1,16 @@
+/* ── scrollbars: one thin style everywhere ─────────────────────────────
+   Chrome/Safari use ::-webkit-scrollbar. Don't set scrollbar-width on elements: in Chrome it overrides these and
+   brings back the thicker native bar. Firefox (no ::-webkit-scrollbar) gets the thin native one. */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 35%, transparent); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 60%, transparent); }
+::-webkit-scrollbar-corner { background: transparent; }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 35%, transparent) transparent; }
+}
+/* follow-up cards: the message never gets squeezed mid-line; it ends with "…" instead.
+   One line in the bottom strip (little height), two in the roomier View all grid and the phone sheet. */
+.fu__msg, button.fu__msg { flex: none; min-height: 0; }
+.followups .fu__msg { -webkit-line-clamp: 1; line-clamp: 1; }
+.followups-grid .fu__msg, .dock-sheet .followups .fu__msg { -webkit-line-clamp: 2; line-clamp: 2; }

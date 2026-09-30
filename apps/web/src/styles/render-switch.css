@@ -1,0 +1,11 @@
+/* ── 3D stage: "Advanced render" switch (ui/RenderSwitch.tsx) ────────── */
+.render-switch {
+  position: absolute; top: 10px; right: 10px; z-index: 200000; /* above the name tags (scene/labels.tsx) */
+  display: inline-flex; align-items: center; gap: 7px; padding: 5px 8px 5px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px);
+  border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 12px; color: var(--muted); cursor: pointer; user-select: none;
+}
+.render-switch svg { font-size: 13px; }
+.render-switch--on { color: var(--text); }
+.render-switch--on svg { color: var(--hl); }
+@media (max-width: 768px) { .render-switch__label { display: none; } }

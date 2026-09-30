@@ -1,0 +1,25 @@
+/* ── react-select (ui/Select.tsx) ──────────────────────────────────── */
+.rs { font-size: 13px; }
+.rs__control {
+  min-height: 30px !important; padding: 0 6px 0 11px; cursor: pointer;
+  background: var(--card-2); border: 1px solid var(--line); border-radius: 999px;
+  transition: border-color 0.15s;
+}
+.rs__control:hover, .rs__control--focused { border-color: var(--text); }
+.rs--sm .rs__control { min-height: 24px !important; padding: 0 3px 0 9px; font-size: 12px; }
+.rs--sm .rs__dropdown-indicator { padding: 2px; }
+.rs__value-container { padding: 0; }
+.rs__single-value { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs__indicator-separator { display: none; }
+.rs__dropdown-indicator { color: var(--muted); padding: 4px; }
+.rs__control--is-disabled { opacity: 0.5; }
+.rs__menu-portal { z-index: 1150 !important; }
+.rs__menu {
+  margin-top: 6px; padding: 4px; min-width: 140px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 13px; color: var(--text);
+}
+.rs__option { padding: 6px 9px; border-radius: 9px; cursor: pointer; }
+.rs__option--focused { background: var(--card-2); }
+.rs__option--selected { background: var(--accent); color: var(--accent-fg); }

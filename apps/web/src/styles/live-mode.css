@@ -1,0 +1,21 @@
+/* ── live mode (AgentsPanel) ────────────────────────────────────────── */
+.source-seg { margin-left: auto; }
+.source-seg button { display: inline-flex; align-items: center; gap: 5px; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.live-dot--on { background: #2fbf71; box-shadow: 0 0 0 3px rgba(47, 191, 113, 0.18); }
+.stat--offline, .status--offline { --c: var(--muted); --c-bg: var(--card-2); }
+.confirm { display: inline-flex; align-items: center; gap: 5px; }
+.row__error { margin-top: 4px; font-size: 12px; color: var(--danger); }
+
+/* live questions (AskUserQuestion) */
+.fu__options { display: flex; flex-wrap: wrap; gap: 6px; }
+.qform { display: flex; flex-direction: column; gap: 14px; }
+.qform__q { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.qform__q legend { font-size: 14px; font-weight: 500; margin-bottom: 8px; padding: 0; }
+.qform__header { display: inline-block; margin-right: 8px; padding: 1px 7px; border-radius: 6px; font-size: 11px; font-weight: 600; background: var(--hl-soft); color: var(--hl); }
+.qform__options { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.qform__opt { flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 12px; text-align: left; }
+.qform__opt span { font-size: 12px; font-weight: 400; color: var(--muted); }
+.qform__opt.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.qform__q input { padding: 8px 12px; border-radius: 10px; }
+.md-code { margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: #151515; color: #f2f2ef; font-size: 12px; overflow-x: auto; white-space: pre-wrap; }
