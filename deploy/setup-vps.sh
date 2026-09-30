@@ -358,6 +358,19 @@ systemctl restart after-office-agents
 # /etc/caddy/Caddyfile for $DOMAIN: the dashboard, and previews on https://<domain>:<port> → the dashboard's preview
 # proxy (signed-in only; strips the session cookie)
 write_caddyfile() {
+  # the package's unit: no /run/caddy for the admin socket (Caddy won't start), and --environ, which prints the whole
+  # environment (the Cloudflare token too) into the journal. Both fixed here.
+  install -d /etc/systemd/system/caddy.service.d
+  cat > /etc/systemd/system/caddy.service.d/after-office.conf <<'UNIT'
+[Service]
+RuntimeDirectory=caddy
+RuntimeDirectoryMode=0700
+ExecStart=
+ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile
+ExecReload=
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile --force
+UNIT
+  systemctl daemon-reload
   sed "s/office.example.com/$DOMAIN/" "$HERE/Caddyfile" > /etc/caddy/Caddyfile
   if [ "$DNS_PROVIDER" = cloudflare ]; then
     # certificates through a DNS record at Cloudflare instead of a request from Let's Encrypt to this server
