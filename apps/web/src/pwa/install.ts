@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useAppUpdate } from './register'
 
 // "Install app": Chromium (Android, desktop) offers a prompt event we keep until the user asks; iOS Safari has no
 // prompt, so we explain Share → Add to Home Screen instead. Nothing shows once the app runs installed.
@@ -39,13 +40,21 @@ export async function installApp() {
 export const canOfferInstall = (s: { prompt: unknown; installed: boolean }) => !s.installed && (!!s.prompt || isIosSafari)
 
 /**
- * Reload, for the installed app (it has no browser reload button): checks for a new version first (the service worker
- * takes a fresh build on the next load), then loads the page again.
+ * Reload, for the installed app (it has no browser reload button). A new version already waiting is taken (the page
+ * reloads once it has taken over, pwa/register.ts); otherwise it looks for one first, then loads the page again.
  */
 export async function reloadApp() {
+  const update = useAppUpdate.getState()
+  if (update.ready) return update.apply()
   try {
     const reg = await navigator.serviceWorker?.getRegistration()
     await Promise.race([reg?.update(), new Promise((r) => setTimeout(r, 1500))])
+    // found one just now: take it (controllerchange reloads)
+    if (reg?.waiting && navigator.serviceWorker.controller) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+      setTimeout(() => location.reload(), 3000)
+      return
+    }
   } catch {
     // offline or no worker: reload anyway
   }

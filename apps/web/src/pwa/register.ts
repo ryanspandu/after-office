@@ -6,7 +6,10 @@ import { create } from 'zustand'
 
 export const useAppUpdate = create<{ ready: boolean; apply: () => void }>(() => ({ ready: false, apply: () => {} }))
 
-const UPDATE_CHECK_MS = 30 * 60_000
+/** while the app is shown: look for a new version this often */
+const UPDATE_EVERY_MS = 5 * 60_000
+/** coming back to the app: at most this often */
+const UPDATE_ON_RETURN_MS = 60_000
 
 export function registerServiceWorker() {
   if (!import.meta.env.PROD || !('serviceWorker' in navigator) || !window.isSecureContext) return
@@ -43,12 +46,17 @@ export function registerServiceWorker() {
       window.location.reload()
     })
 
-    // look for a new version when the app comes back to the foreground (at most every 30 min)
+    // look for a new version: every few minutes while the app is shown, and when it comes back to the foreground. The
+    // installed app has no browser around it to reload, so it has to notice by itself (then the reload button lights
+    // up, ui/AppReload.tsx, and the toast offers it)
     let lastCheck = Date.now()
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible' || Date.now() - lastCheck < UPDATE_CHECK_MS) return
+    const check = (minGap: number) => {
+      if (document.visibilityState !== 'visible' || useAppUpdate.getState().ready || Date.now() - lastCheck < minGap) return
       lastCheck = Date.now()
       void reg.update().catch(() => {})
-    })
+    }
+    setInterval(() => check(UPDATE_EVERY_MS - 1000), UPDATE_EVERY_MS)
+    document.addEventListener('visibilitychange', () => check(UPDATE_ON_RETURN_MS))
+    window.addEventListener('focus', () => check(UPDATE_ON_RETURN_MS))
   })
 }

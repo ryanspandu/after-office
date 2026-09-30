@@ -1,6 +1,6 @@
-/* ── 3D stage: "Advanced render" switch (ui/RenderSwitch.tsx) ────────── */
-.render-switch {
-  position: absolute; top: 10px; right: 10px; z-index: 200000; /* above the name tags (scene/labels.tsx) */
+/* ── 3D stage: floating tools top right: the installed app's reload (ui/AppReload.tsx), "Advanced render" (ui/RenderSwitch.tsx) ── */
+.stage-tools { position: absolute; top: 10px; right: 10px; z-index: 200000; /* above the name tags (scene/labels.tsx) */ display: flex; align-items: center; gap: 6px; }
+.render-switch, .app-reload {
   display: inline-flex; align-items: center; gap: 7px; padding: 5px 8px 5px 10px; border-radius: 999px;
   background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px);
   border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 12px; color: var(--muted); cursor: pointer; user-select: none;
@@ -9,3 +9,11 @@
 .render-switch--on { color: var(--text); }
 .render-switch--on svg { color: var(--hl); }
 @media (max-width: 768px) { .render-switch__label { display: none; } }
+/* the installed app's reload: an icon; lit up with "Update" when a new version is ready */
+.app-reload { padding: 0; width: 30px; height: 30px; justify-content: center; font-weight: 500; }
+.app-reload svg { font-size: 14px; }
+.app-reload:hover { color: var(--text); }
+.app-reload--update { width: auto; padding: 0 11px 0 9px; gap: 6px; color: #fff; background: var(--hl); border-color: var(--hl); animation: app-reload-pulse 2.4s ease-in-out infinite; }
+.app-reload--update:hover { color: #fff; }
+@keyframes app-reload-pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--hl) 25%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .app-reload--update { animation: none; } }

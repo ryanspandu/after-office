@@ -22,6 +22,7 @@ import { LeftSidebar } from './ui/LeftSidebar'
 import { ManagerPanel, useManager, useManagerPanel } from './ui/ManagerPanel'
 import { Navbar } from './ui/Navbar'
 import { RenderSwitch } from './ui/RenderSwitch'
+import { AppReload } from './ui/AppReload'
 import { MobileDock } from './ui/MobileDock'
 
 export function App() {
@@ -52,7 +53,10 @@ export function App() {
       <main className="stage">
         <Office />
         <LabelLayer />
-        <RenderSwitch />
+        <div className="stage-tools">
+          <AppReload />
+          <RenderSwitch />
+        </div>
       </main>
       {mobile ? (
         <MobileDock />
