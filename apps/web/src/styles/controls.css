@@ -19,8 +19,8 @@ input.check { accent-color: var(--hl); width: 16px; height: 16px; margin: 0; pad
 /* an icon button that stays pressed (e.g. the done-tasks view) */
 .icon-btn--toggle[aria-pressed='true'] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 /* a folder whose agent was removed (Projects tab) */
-.ws--orphan > .ws__head, .ws--orphan > .ws__projects, .ws--orphan > .ws-meta, .ws--orphan > .ws__empty { opacity: 0.5; }
-.ws--orphan > .ws__head:hover, .ws--orphan > .ws__head:focus-visible { opacity: 0.8; }
+.ws--orphan > .ws__top, .ws--orphan > .ws__projects, .ws--orphan > .ws-meta, .ws--orphan > .ws__empty { opacity: 0.5; }
+.ws--orphan > .ws__top:hover, .ws--orphan > .ws__top:focus-within { opacity: 0.8; }
 .ws__tag--orphan { margin-left: auto; }
 /* a link button inside a sentence: sits on the text line (no padding, same font) */
 button.link.link--inline { display: inline; padding: 0; font: inherit; color: var(--hl); text-decoration: underline; text-underline-offset: 2px; vertical-align: baseline; }

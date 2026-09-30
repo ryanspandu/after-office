@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode, useEffect } from 'react'
+import { useMemo, type ReactNode, useEffect } from 'react'
 import { LuBot, LuCalendarClock, LuCrown, LuFileText, LuInbox, LuListTodo } from 'react-icons/lu'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
@@ -11,11 +11,14 @@ import { Modal } from './Modal'
 import { ReportsPanel } from './Reports'
 import { tip } from './Tooltip'
 import { useLaunch } from '../pwa/launch'
+import { openUrl, setUrl, useParam } from '../state/url'
 
 // Phones: the office gets the whole screen. Every side panel (attention queue, cron, tasks, reports, agents) opens
-// as a modal from this floating dock; each button carries a count badge.
+// as a bottom sheet from this floating dock; each button carries a count badge. The open sheet is in the address bar
+// (?sheet=tasks), like every other modal (state/url.ts): the phone's Back (button or swipe) closes it.
 
 type Sheet = 'attention' | 'cron' | 'tasks' | 'reports' | 'agents'
+const SHEETS: Sheet[] = ['attention', 'cron', 'tasks', 'reports', 'agents']
 
 function DockButton({ icon, label, count, alert, onClick }: { icon: ReactNode; label: string; count: number; alert?: boolean; onClick: () => void }) {
   return (
@@ -28,8 +31,11 @@ function DockButton({ icon, label, count, alert, onClick }: { icon: ReactNode; l
 }
 
 export function MobileDock() {
-  const [sheet, setSheet] = useState<Sheet | null>(null)
-  const close = () => setSheet(null)
+  const param = useParam('sheet')
+  const sheet = SHEETS.includes(param as Sheet) ? (param as Sheet) : null
+  // opening adds a history entry (Back closes it); switching between sheets doesn't stack them
+  const setSheet = (s: Sheet) => (sheet ? setUrl({ sheet: s }) : openUrl({ sheet: s }))
+  const close = () => setUrl({ sheet: null })
   // app shortcuts (/?open=tasks|attention) on a phone open the dock's sheet
   const launch = useLaunch((s) => s.open)
   useEffect(() => {

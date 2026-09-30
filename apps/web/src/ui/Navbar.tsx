@@ -247,17 +247,24 @@ function Meter({ icon, label, value, pct }: { icon: ReactNode; label: string; va
 /** Claude subscription usage (5-hour and 7-day windows) as reported by Claude Code's statusline. Live mode only. */
 
 /** Phones: the burger button and its dropdown (timezone, theme, fullscreen, account). */
+/**
+ * Phones: the menu button floats on the 3D stage, bottom right (the reload button is bottom left), and the menu opens
+ * upwards from it. The button is rendered into the stage (a portal), the menu into the page.
+ */
 function NavMenu({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const presence = usePresence(open, 140)
-  const [pos, setPos] = useState({ top: 0, right: 12 })
+  const [pos, setPos] = useState<{ bottom: number; right: number }>({ bottom: 0, right: 12 })
   const button = useRef<HTMLButtonElement>(null)
   const pop = useRef<HTMLDivElement>(null)
+  // the stage mounts after the navbar: look for it once the page is there
+  const [stage, setStage] = useState<HTMLElement | null>(null)
+  useEffect(() => setStage(document.querySelector<HTMLElement>('.stage')), [])
 
   useLayoutEffect(() => {
     if (!open || !button.current) return
     const r = button.current.getBoundingClientRect()
-    setPos({ top: r.bottom + 8, right: Math.max(12, window.innerWidth - r.right) })
+    setPos({ bottom: window.innerHeight - r.top + 8, right: Math.max(12, window.innerWidth - r.right) })
   }, [open])
 
   useEffect(() => {
@@ -279,14 +286,18 @@ function NavMenu({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <button ref={button} className="icon-btn nav-burger" aria-label="Menu" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <LuMenu />
-      </button>
+      {stage &&
+        createPortal(
+          <button ref={button} className="nav-burger" aria-label="Menu" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            <LuMenu />
+          </button>,
+          stage,
+        )}
       {presence.mounted &&
         createPortal(
           <div
             ref={pop}
-            className={`popover nav-menu${presence.closing ? ' popover--closing' : ''}`}
+            className={`popover nav-menu nav-menu--up${presence.closing ? ' popover--closing' : ''}`}
             style={pos}
             role="dialog"
             aria-label="Menu"

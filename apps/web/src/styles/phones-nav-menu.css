@@ -14,7 +14,6 @@
   .nav-right { order: 2; margin-left: auto; flex-wrap: nowrap; gap: 8px; }
   .clock b { font-size: 16px; }
   .clock__sec { font-size: 12px; }
-  .nav-burger { width: 34px; height: 34px; font-size: 18px; }
   .app--full.app--mobile .dock, .app--full.app--mobile .nav-metrics { display: none; }
 }
 /* agent drawer tabs: scroll sideways when they don't fit (phones) */
@@ -32,3 +31,16 @@
   .metric__value { font-size: 12.5px; }
   .nav-metrics .range-btn { width: 100%; justify-content: space-between; padding: 5px 10px; font-size: 12px; gap: 6px; align-self: center; }
 }
+/* the menu button floats on the 3D stage, bottom right (ui/Navbar.tsx NavMenu); the reload button is bottom left */
+.nav-burger {
+  all: unset; box-sizing: border-box; position: absolute; right: 12px; bottom: 12px; z-index: 200000; /* above the name tags */
+  display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; cursor: pointer; font-size: 19px; color: var(--text);
+  background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.nav-burger[aria-expanded='true'] { background: var(--text); color: var(--card); }
+.nav-burger:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+/* …and the menu opens upwards from it (two classes: motion.css, loaded later, sets the usual downward one) */
+.popover.nav-menu--up { transform-origin: bottom right; animation-name: popover-up-in; }
+.popover.nav-menu--up.popover--closing { animation-name: popover-up-out; }
+@keyframes popover-up-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } }
+@keyframes popover-up-out { to { opacity: 0; transform: translateY(4px) scale(0.97); } }

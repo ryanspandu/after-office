@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { matchesSearch } from './SearchBox'
-import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff } from 'react-icons/lu'
+import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight } from 'react-icons/lu'
 import { DeleteProject } from './DeleteProject'
 import { ProjectReports } from './Reports'
 import { confirm } from './Confirm'
@@ -52,6 +52,25 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
       return true
     }
   })
+  // agent folders with projects start folded; the ones opened are remembered in this browser (a search opens them all)
+  const [unfolded, setUnfolded] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem('ao-open-folders') ?? '[]') as string[])
+    } catch {
+      return new Set()
+    }
+  })
+  const toggleFold = (path: string) =>
+    setUnfolded((cur) => {
+      const next = new Set(cur)
+      if (!next.delete(path)) next.add(path)
+      try {
+        localStorage.setItem('ao-open-folders', JSON.stringify([...next]))
+      } catch {
+        /* this visit only */
+      }
+      return next
+    })
   const toggleOrphans = () =>
     setShowOrphans((v) => {
       try {
@@ -110,8 +129,24 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
         {!shown.length && <div className="empty">No projects match.</div>}
         {shown.map((w) => {
           const people = w.agentIds.map((id) => agents.find((a) => a.id === id)).filter(Boolean) as OfficeAgent[]
+          const foldable = !w.isProject && w.projects.length > 0
+          const open = !foldable || !!q.trim() || unfolded.has(w.path)
           return (
             <section key={w.path} className={`ws${w.orphan ? ' ws--orphan' : ''}`}>
+              <div className="ws__top">
+              {foldable ? (
+                <button
+                  className="ws__fold"
+                  aria-expanded={open}
+                  aria-label={open ? `Fold ${w.name}` : `Show the projects in ${w.name}`}
+                  data-tip={open ? 'Fold' : `${w.projects.length} project${w.projects.length === 1 ? '' : 's'}`}
+                  onClick={() => toggleFold(w.path)}
+                >
+                  <LuChevronRight />
+                </button>
+              ) : (
+                <span className="ws__fold ws__fold--none" />
+              )}
               <button
                 className="ws__head"
                 onClick={() => setOpen({ folder: w, agentIds: w.agentIds, orphan: w.orphan })}
@@ -120,11 +155,13 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
                 {w.git ? <LuFolderGit2 className="ws__icon" /> : <LuFolder className="ws__icon" />}
                 <span className="ws__name truncate">{w.shared ? 'Projects folder' : w.name}</span>
                 {w.isProject && <LinkedTag projectId={w.projectId} />}
+                {foldable && !open && <span className="ws__count muted">{w.projects.length}</span>}
                 {w.orphan ? <span className="ws__tag ws__tag--orphan">no agent</span> : <Avatars agents={people} />}
               </button>
+              </div>
               {w.isProject ? (
                 <GitLine folder={w} now={now} block />
-              ) : w.projects.length ? (
+              ) : !open ? null : w.projects.length ? (
                 <ul className="ws__projects">
                   {w.projects.map((p) => (
                     <li key={p.path}>

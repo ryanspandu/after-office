@@ -53,10 +53,8 @@ export function App() {
       <main className="stage">
         <Office />
         <LabelLayer />
-        <div className="stage-tools">
-          <AppReload />
-          <RenderSwitch />
-        </div>
+        <RenderSwitch />
+        <AppReload />
       </main>
       {mobile ? (
         <MobileDock />

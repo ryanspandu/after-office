@@ -21,6 +21,15 @@
 .ws-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; margin: -2px 0 8px; }
 .ws-list { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; flex: 1; }
 .ws { display: flex; flex-direction: column; gap: 4px; }
+.ws__top { display: flex; align-items: center; gap: 2px; }
+/* fold an agent folder's projects (ui/ProjectsTab.tsx); folded by default */
+.ws__fold { all: unset; box-sizing: border-box; display: grid; place-items: center; flex-shrink: 0; width: 22px; height: 28px; border-radius: 7px; color: var(--muted); cursor: pointer; }
+.ws__fold:hover { background: var(--card-2); color: var(--text); }
+.ws__fold:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
+.ws__fold svg { transition: transform 0.15s ease; }
+.ws__fold[aria-expanded='true'] svg { transform: rotate(90deg); }
+.ws__fold--none { cursor: default; }
+.ws__count { font-size: 12px; font-weight: 500; padding: 0 6px; border-radius: 999px; background: var(--card-2); }
 .ws__head {
   all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px;
   border-radius: 10px; cursor: pointer; font-size: 13.5px; font-weight: 600;
@@ -31,8 +40,8 @@
 .ws__name { min-width: 0; }
 .ws__head .ws__agents { margin-left: auto; }
 .ws__agents { display: inline-flex; gap: 3px; align-items: center; flex-shrink: 0; }
-.ws__empty { font-size: 12.5px; padding: 0 8px 4px 31px; }
-.ws__projects { list-style: none; margin: 0; padding: 0 0 0 14px; display: flex; flex-direction: column; border-left: 1px solid var(--line); margin-left: 15px; }
+.ws__empty { font-size: 12.5px; padding: 0 8px 4px 55px; }
+.ws__projects { list-style: none; margin: 0; padding: 0 0 0 14px; display: flex; flex-direction: column; border-left: 1px solid var(--line); margin-left: 39px; }
 .ws-row { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: 9px; cursor: pointer; }
 .ws-row:hover { background: var(--card-2); }
 .ws-row:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
@@ -40,7 +49,7 @@
 .ws-row__body { display: grid; gap: 1px; min-width: 0; flex: 1; }
 .ws-row__name { font-size: 13px; font-weight: 500; }
 .ws-meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 11.5px; font-weight: 400; }
-.ws-meta--block { padding: 0 8px 2px 31px; }
+.ws-meta--block { padding: 0 8px 2px 55px; }
 .ws-meta__branch { display: inline-flex; align-items: center; gap: 3px; color: var(--text); }
 .ws-meta__dirty { color: var(--hl); flex-shrink: 0; }
 .ws-detail { display: flex; flex-direction: column; gap: 14px; }

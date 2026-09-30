@@ -8,6 +8,7 @@ import { create } from 'zustand'
 //   ?folder=<path>  ?newproject=1  ?newtask=1&nt_agent=&nt_project=&nt_status=  ?daily=<id>|new  ?addagent=1|manager
 //   ?agent=<id>&tab=<tab>  ?manager=1&mtab=chat|team  ?automation=1  ?profile=1  ?settings=1 (project settings)  ?password=1  ?twofa=1  ?activity=1
 //   reports view also: &tag=<id,id>
+//   phones: ?sheet=attention|cron|tasks|reports|agents (the dock's bottom sheets, ui/MobileDock.tsx)
 
 type Params = Record<string, string>
 
