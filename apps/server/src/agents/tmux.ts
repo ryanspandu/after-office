@@ -2,7 +2,7 @@
 // and free text is delivered through a paste buffer instead of `send-keys`.
 
 import { homedir } from 'node:os'
-import { agentEnv, agentMayHave, TMUX_SOCKET_ARGS } from './env'
+import { agentEnv, agentMayHave, ISOLATED, TMUX_SOCKET_ARGS } from './env'
 
 const TMUX = process.env.TMUX_BIN ?? 'tmux'
 
@@ -46,8 +46,13 @@ export const tmux = {
 
   async newSession(opts: { name: string; cwd: string; env: Record<string, string>; command: string[] }) {
     const env = Object.entries(opts.env).flatMap(([k, v]) => ['-e', `${k}=${v}`])
+    // tmux starts a new session with the PATH of the client that makes it (not the server's, and -e can't change it):
+    // here the dashboard's. On the hardened server that's another user, whose PATH lacks the agents' ~/.local/bin, so
+    // `claude` isn't found. The agents' server's own PATH (its service's) is put back in front of the command.
+    const path = ISOLATED ? (await this.globalEnv()).PATH : undefined
+    const command = path ? ['env', `PATH=${path}`, ...opts.command] : opts.command
     // wide pane so the TUI doesn't wrap; the browser terminal resizes it later
-    await must(['new-session', '-d', '-s', opts.name, '-x', '200', '-y', '50', '-c', opts.cwd, ...env, ...opts.command])
+    await must(['new-session', '-d', '-s', opts.name, '-x', '200', '-y', '50', '-c', opts.cwd, ...env, ...command])
     await this.tidy(opts.name)
     await this.harden()
   },
@@ -82,6 +87,20 @@ export const tmux = {
     if (r.code !== 0) return null
     const line = r.out.trim()
     return line.startsWith(`${key}=`) ? line.slice(key.length + 1) : null
+  },
+
+  /** The server's global environment (the allowed variables only). */
+  async globalEnv(): Promise<Record<string, string>> {
+    const r = await run(['show-environment', '-g'])
+    if (r.code !== 0) return {}
+    const env: Record<string, string> = {}
+    for (const line of r.out.split('\n')) {
+      const i = line.indexOf('=')
+      if (i < 1 || line.startsWith('-')) continue
+      const name = line.slice(0, i)
+      if (agentMayHave(name)) env[name] = line.slice(i + 1)
+    }
+    return env
   },
 
   /** Drop anything but the allowed variables from the server's global environment (inherited by new sessions). */
