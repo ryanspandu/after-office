@@ -469,7 +469,11 @@ fi
 echo "==> firewall"
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow OpenSSH
+# the port(s) sshd really listens on (a changed Port in sshd_config, not just 22), so enabling the firewall can't lock
+# you out. Falls back to 22 when sshd can't tell.
+SSH_PORTS=$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2}' | sort -u)
+[ -n "$SSH_PORTS" ] || SSH_PORTS=22
+for p in $SSH_PORTS; do ufw allow "$p/tcp" comment 'SSH'; done
 if [ "$TAILSCALE" = 1 ]; then
   # no public web ports; everything from your devices comes in over the tailnet interface
   ufw delete allow 80/tcp >/dev/null 2>&1 || true

@@ -111,7 +111,7 @@ Everything below marked "as root" then runs with `sudo` in front (`sudo systemct
   - The Caddy site, which carries the security headers and body limits, and keeps its admin API on a unix socket.
 - **Swap:** a 4 GB swap file when the machine has none (`--no-swap` skips it), so a build spike doesn't take the
   dashboard or SSH down.
-- **Firewall:** ufw allows only 22, 80 and 443.
+- **Firewall:** ufw allows only SSH (the port sshd listens on: 22, or the `Port` you set in `sshd_config`), 80 and 443; with Tailscale, SSH and the tailnet only.
 - **SSH:** keys only (see above).
 - **Logs:** journald is capped at 200 MB / 30 days.
 - **sudo:** `office` may run only `sudo systemctl restart after-office`.
@@ -142,7 +142,9 @@ Options and tips:
   - Funnel must be allowed for the machine in the tailnet policy. `tailscale funnel` prints how if it isn't.
 - **SSH over Tailscale only.** Once it works, remove SSH from the internet too:
   ```bash
-  ufw delete allow OpenSSH && ufw allow in on tailscale0 to any port 22
+  ufw delete allow <your ssh port>/tcp   # the rule setup-vps.sh added (22, or the Port in sshd_config)
+  ufw delete allow OpenSSH              # from an older setup, if it is there
+  # (the tailnet is already allowed: ufw allow in on tailscale0)
   ```
   After that, `sync.sh` uses the tailnet name: `deploy/sync.sh office@after-office`.
 - **Your own domain, still private** (e.g. `https://office.example.com`, DNS at Cloudflare):
