@@ -1,6 +1,8 @@
-import { existsSync, openSync, readSync, closeSync, statSync } from 'node:fs'
+import { accessSync, constants, existsSync, openSync, readSync, closeSync, statSync } from 'node:fs'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
 import { join } from 'node:path'
+import { ISOLATED } from './env'
+import { runAsAgent } from './asagent'
 import type { ChatItem, LiveMode } from '@after-office/shared'
 import { agentsRepo, offsetsRepo, usageRepo, type AgentRow } from '../db'
 import { publish, runtimeOf, updateRuntime } from './registry'
@@ -53,6 +55,29 @@ export function ownerMessage(texts: string[], pictures: string[] = []) {
 export const unwrapPaste = (t: string) =>
   t.replace(/<pasted_content\b[^>]*>\n?/g, '').replace(/\n?<\/pasted_content\b[^>]*>/g, '').trim()
 
+// On the hardened server the dashboard reads the agents' transcripts through an ACL (setup-vps.sh). Claude Code
+// sometimes writes one with mode 0600, and a file's group bits cap its ACL (the "mask"), so the dashboard can't read
+// it: that agent's chat stays empty and its tokens aren't counted. The agents' user opens the folder up again
+// (g+rX lifts the mask); the next poll reads it.
+const unlocking = new Map<string, number>()
+function unlock(path: string) {
+  if (!ISOLATED || Date.now() - (unlocking.get(path) ?? 0) < 30_000) return
+  unlocking.set(path, Date.now())
+  void runAsAgent(['chmod', '-R', 'g+rX', CLAUDE_PROJECTS_DIR], { cwd: CLAUDE_PROJECTS_DIR, timeoutMs: 15_000 }).catch(() => {})
+}
+
+/** Can the dashboard read this transcript? (If not because of its mode: asks the agents' user to fix it.) */
+function readable(path: string) {
+  if (!existsSync(path)) return false
+  try {
+    accessSync(path, constants.R_OK)
+    return true
+  } catch {
+    unlock(path)
+    return false
+  }
+}
+
 function readFrom(path: string, offset: number): { text: string; size: number } {
   const size = statSync(path).size
   if (size <= offset) return { text: '', size }
@@ -74,9 +99,14 @@ const seen = new Map<string, Set<string>>()
 export function pollTranscripts() {
   for (const row of agentsRepo.all()) {
     const path = transcriptPath(row)
-    if (!existsSync(path)) continue
+    if (!readable(path)) continue
     const offset = offsetsRepo.get(path)
-    const { text } = readFrom(path, offset)
+    let text: string
+    try {
+      text = readFrom(path, offset).text
+    } catch {
+      continue // one unreadable transcript doesn't stop the others
+    }
     if (!text) continue
     // keep a trailing partial line for next time
     const end = text.lastIndexOf('\n')
@@ -137,7 +167,7 @@ function textOf(content: unknown): string {
 /** Last `limit` conversation items of an agent, simplified for rendering. Reads only the tail of the file. */
 export function readChat(row: AgentRow, limit = 200): ChatItem[] {
   const path = transcriptPath(row)
-  if (!existsSync(path)) return []
+  if (!readable(path)) return []
   const size = statSync(path).size
   const { text } = readFrom(path, Math.max(0, size - 4_000_000))
   const items: ChatItem[] = []
