@@ -373,11 +373,16 @@ cat <<NEXT
 
 Done. Next (see docs/deploy.md):
   1. From your machine:   deploy/sync.sh $APP_USER@<vps>
+     (or from GitHub, here: bash $HERE/update.sh --init <repo url>; then sudo bash $APP_DIR/deploy/update.sh to update)
   2. On the VPS as root:
        OFFICE_ENV_FILE=$ENV_FILE /home/$APP_USER/.bun/bin/bun $APP_DIR/apps/server/src/setup-auth.ts   # dashboard login
        sudo -iu $AGENT_USER claude       # log the agents in with your Claude subscription once, then /exit
        sudo -iu $AGENT_USER gh auth login   # optional: GitHub for the agents (a fine-grained token for their repos)
   3. systemctl restart after-office  ->  $PUBLIC_URL
+  4. First sign-in: set up two-factor (scan the QR code with Google Authenticator) and keep the recovery codes.
+     Notifications (this app / ntfy / Telegram / webhook): bell icon -> Automation -> Notifications.
+     Lost phone and recovery codes:  sudo -iu $APP_USER sh -c 'cd $APP_DIR/apps/server && ~/.bun/bin/bun run auth:reset-2fa'
+  Back up $ENV_FILE with the database: the two-factor secret and notification tokens are encrypted with its SESSION_SECRET.
 NEXT
 if [ "$CONTAINERS" = 1 ]; then echo "  Containers: agents run  docker compose up -d  in a project (ports on 127.0.0.1 only). Check: sudo -iu $AGENT_USER env DOCKER_HOST=unix:///run/user/$(id -u "$AGENT_USER")/docker.sock docker info"; fi
 if [ "$TAILSCALE" = 1 ]; then

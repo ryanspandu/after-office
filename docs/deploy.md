@@ -255,6 +255,39 @@ deploy/sync.sh office@VPS
 This rsyncs the code (readable by `office` only), then runs `bun install`, `bun run build` and restarts the dashboard.
 The build runs on Bun alone, so the server needs no Node.js for it. Agents keep running. `.env*` files and `apps/server/data` on the VPS are never overwritten. Run the same command for every update.
 
+### Or: deploy from GitHub
+
+The VPS can follow your repository instead: `/opt/after-office` becomes a git checkout, and each update is one command
+on the server (`deploy/update.sh`: pull, install, build, restart the dashboard). Agents keep running; your data and
+`/etc/after-office.env` aren't in git and are never touched.
+
+1. **A private repository?** Give the `office` user read-only access with a deploy key (not a token of your account):
+   ```bash
+   sudo -u office -H mkdir -p -m 700 /home/office/.ssh
+   sudo -u office -H ssh-keygen -t ed25519 -N '' -C office@vps -f /home/office/.ssh/github_deploy
+   sudo -u office -H sh -c 'ssh-keyscan github.com >> ~/.ssh/known_hosts && printf "Host github.com\n  IdentityFile ~/.ssh/github_deploy\n  IdentitiesOnly yes\n" >> ~/.ssh/config'
+   cat /home/office/.ssh/github_deploy.pub
+   ```
+   On GitHub: the repository → Settings → Deploy keys → Add deploy key, paste it, and leave "Allow write access" off.
+   Then use the SSH address below (`git@github.com:<you>/after-office.git`). A public repository needs none of this.
+2. **The first time** (as root, after `setup-vps.sh`), from the copy of `deploy/` you ran the setup from:
+   ```bash
+   bash /root/after-office-deploy/update.sh --init git@github.com:<you>/after-office.git
+   ```
+   It checks the repository out into `/opt/after-office` (as `office`), builds and starts the dashboard. `--branch <name>`
+   follows another branch than `main`. The copy in `/root` isn't needed after this: `rm -rf /root/after-office-deploy`.
+3. **Every update:**
+   ```bash
+   sudo bash /opt/after-office/deploy/update.sh
+   ```
+   - Nothing new: it says so and stops. `--force` builds and restarts anyway.
+   - It only fast-forwards: if files were edited on the server, it stops and tells you (nothing is merged or thrown away).
+   - When the update changed the server setup (files in `deploy/`: services, Caddy, tmux), it lists them. Then run
+     `setup-vps.sh` once more, with the options you used the first time (safe to re-run).
+
+Use one way or the other: `deploy/sync.sh` from your machine, or `update.sh` from GitHub. Mixing them overwrites each
+other's copy.
+
 ## 3. Login (once)
 
 As root on the VPS:
@@ -294,6 +327,7 @@ Open `https://office.example.com` and sign in. The first sign-in asks you to set
 | Look at an agent directly | `sudo -u office-agent tmux -S /run/after-office/tmux.sock attach -t ao-<name>` (no prefix key; close the terminal to leave) |
 | Stop every agent | `systemctl restart after-office-agents` (they come back with `--resume`). The dashboard's "Restart all agents" button (in an offline agent's chat) shows this command on the VPS, since the agents' tmux server belongs to their own service there |
 | Lost phone and recovery codes (turns two-factor off; the next sign-in sets it up again) | `cd /opt/after-office/apps/server && ~/.bun/bin/bun run auth:reset-2fa` (as `office`) |
+| Update from GitHub (if you deploy that way) | `sudo bash /opt/after-office/deploy/update.sh` |
 | Backup now | `cd /opt/after-office/apps/server && ~/.bun/bin/bun run backup` (as `office`; automatic daily, see below) |
 
 - **Reboots:** after a reboot the dashboard restarts every agent with `--resume`, which continues its last conversation.
@@ -403,7 +437,7 @@ All persistent data is one SQLite file: `apps/server/data/after-office.db`. The 
 - **Daily backup.** The server writes a consistent, gzipped copy once a day to `data/backups/` and keeps the newest 14.
   - Settings: `OFFICE_BACKUP_DIR`, `OFFICE_BACKUP_KEEP`, and `OFFICE_BACKUP=false` to turn it off.
   - The backup files are readable by `office` only.
-  - These backups live on the same disk. Copy them off the VPS now and then, for example `rsync -az office@VPS:/opt/after-office/apps/server/data/backups/ ./office-backups/`. They hold your prompts and reports, so keep them encrypted (e.g. with `age`). Keep a copy of `/etc/after-office.env` somewhere safe too.
+  - These backups live on the same disk. Copy them off the VPS now and then, for example `rsync -az office@VPS:/opt/after-office/apps/server/data/backups/ ./office-backups/`. They hold your prompts and reports, so keep them encrypted (e.g. with `age`). Keep a copy of `/etc/after-office.env` somewhere safe too: the two-factor secret, notification tokens and the push key are stored encrypted with its `SESSION_SECRET`, so a database restored without that file (or with a new secret) needs two-factor set up again (`auth:reset-2fa`) and the notification channels entered again.
 - **Restore:**
   ```bash
   # as root
