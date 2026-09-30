@@ -206,7 +206,7 @@ if [ -n "$KEYS" ]; then
   chown "$APP_USER:$APP_USER" "$APP_KEYS"
   chmod 600 "$APP_KEYS"
 else
-  echo "    ! No SSH key for root${SUDO_USER:+ or $SUDO_USER}: add one for $APP_USER yourself before using deploy/sync.sh"
+  echo "    ! No SSH key for root${SUDO_HOME:+ or $SUDO_USER}: add one for $APP_USER yourself before using deploy/sync.sh"
 fi
 
 if [ "$DEV_TOOLS" = 1 ]; then
@@ -219,7 +219,9 @@ if [ "$DEV_TOOLS" = 1 ]; then
 fi
 if [ "$DEV_TOOLS" = 1 ]; then
   # a name on the agents' commits until you set a real one (docs/deploy.md: git and GitHub for the agents)
-  sudo -iu "$AGENT_USER" bash -c 'git config --global user.name >/dev/null || git config --global user.name "After Office agent"
+  # (not sudo -i: it joins a multi-line command into one line)
+  sudo -u "$AGENT_USER" -H bash -lc 'cd ~
+    git config --global user.name >/dev/null || git config --global user.name "After Office agent"
     git config --global user.email >/dev/null || git config --global user.email "agents@after-office.local"
     git config --global init.defaultBranch main'
 fi
@@ -233,8 +235,9 @@ EOF
 fi
 if [ "$ANDROID" = 1 ]; then
   # the Android SDK command-line tools, platform tools and one platform + build tools, in the agent's home
-  sudo -iu "$AGENT_USER" bash -c '
+  sudo -u "$AGENT_USER" -H bash -lc '
     set -e
+    cd ~
     export ANDROID_HOME=~/android-sdk
     if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
       mkdir -p "$ANDROID_HOME/cmdline-tools" && cd "$ANDROID_HOME/cmdline-tools"
