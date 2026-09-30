@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { dateTime } from './when'
 import { useShallow } from 'zustand/react/shallow'
 import {
   DndContext,
@@ -339,7 +340,7 @@ function TaskRow({ task: t, onOpen }: { task: OfficeTask; onOpen: () => void }) 
 
 function Deadline({ ms, due }: { ms: number; due: { level: string; text: string } | null }) {
   const timezone = useClock((s) => s.timezone)
-  const text = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
+  const text = dateTime(ms, timezone)
   return (
     <div className="task-table__due">
       <span>{text}</span>
@@ -423,7 +424,7 @@ function Card({ task: t, overlay, onOpen }: { task: OfficeTask; overlay?: boolea
   const done = t.status === 'done'
   const due = dueInfo(t.deadline, now)
   const timezone = useClock((s) => s.timezone)
-  const date = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, day: 'numeric', month: 'short' }).format(t.deadline)
+  const date = dateTime(t.deadline, timezone)
 
   return (
     <article className={`card-task${done ? ' card-task--done' : ''}${overlay ? ' card-task--overlay' : ''}`}>

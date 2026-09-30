@@ -51,7 +51,10 @@ export async function restartAgentServer() {
 
 export async function reconcile() {
   const alive = new Set(await tmux.listSessions())
+  const { starting } = await import('./manager')
   for (const row of agentsRepo.all()) {
+    // being created: its session is on its way (starting it here too would make that fail)
+    if (starting.has(row.id)) continue
     const rt = runtimeOf(row.id)
     if (alive.has(row.tmux_session)) {
       if (!tidied.has(row.tmux_session)) {

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { dateTime } from './when'
 import { useShallow } from 'zustand/react/shallow'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import { create } from 'zustand'
@@ -145,12 +146,15 @@ export function toServer(item: Item, d: Decision): FollowUpDecision {
   return { type: 'deny', note: d.type === 'reject' ? d.note : undefined }
 }
 
+/**
+ * When something happened, from how long ago (ms): "just now" and "15m ago" within the hour, then its date and time
+ * ("30 Sep, 14:05"; the year only when it isn't this one: "28 Dec 2025, 09:10").
+ */
 export function ago(ms: number) {
   const m = Math.max(0, Math.round(ms / 60_000))
   if (m < 1) return 'just now'
   if (m < 60) return `${m}m ago`
-  if (m < 48 * 60) return `${Math.round(m / 60)}h ago`
-  return `${Math.round(m / 1440)}d ago`
+  return dateTime(Date.now() - ms)
 }
 
 /** How many items wait on the user (for the mobile dock badge). Written by FollowUps. */

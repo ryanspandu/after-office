@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { DEFAULT_MANAGER, DEFAULT_MODEL, EFFORTS, isEffort, defaultRulePacks, type RulePackId, type AgentEffort, type AgentFigure, type AgentKind, type AgentProfile, type LiveMode } from '@after-office/shared'
 import { agentsRepo, queueRepo, type AgentRow, extraDirsOf } from '../db'
@@ -481,6 +481,8 @@ export async function createAgent(input: CreateAgentInput) {
   if (agentsRepo.all().some((a) => a.tmux_session === session) || (await tmux.hasSession(session)))
     throw new AgentError(`A tmux session called ${session} already exists`, 409)
 
+  // a folder made for this agent goes again if starting it fails (so the same name can be hired again)
+  const madeFolder = !existsSync(cwd)
   mkdirSync(cwd, { recursive: true })
   writeAgentSettings(cwd)
   if (kind === 'manager') writeManagerFiles(cwd, name)
@@ -506,17 +508,27 @@ export async function createAgent(input: CreateAgentInput) {
     // new agents use no connectors until the owner turns some on
     connectors: JSON.stringify(Array.isArray(input.connectors) ? input.connectors.filter((c) => typeof c === 'string') : []),
   }
-  agentsRepo.insert(row)
-  // its connector rules are in place before the session starts (it reads them once, at start)
+  // its connector rules are in place before the session starts (it reads them once, at start). Before it's in the
+  // database: listing the connectors can take a while, and an agent in the database without a session would be
+  // started by the reconciler meanwhile (then this start fails on the "duplicate" session and the agent is lost)
   await denyConnectors(row)
+  starting.add(row.id)
+  agentsRepo.insert(row)
   try {
     await spawn(row, false)
   } catch (e) {
     agentsRepo.remove(row.id)
+    await tmux.killSession(row.tmux_session).catch(() => {})
+    if (madeFolder) rmSync(cwd, { recursive: true, force: true })
     throw new AgentError(e instanceof Error ? e.message : 'Could not start the session', 500)
+  } finally {
+    starting.delete(row.id)
   }
   return row
 }
+
+/** Agents being created right now: the reconciler leaves them alone (their session is on its way). */
+export const starting = new Set<string>()
 
 export async function deleteAgent(id: string) {
   const row = agentsRepo.get(id)

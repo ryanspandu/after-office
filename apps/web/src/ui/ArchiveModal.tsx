@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { dateTime } from './when'
 import { LuArchiveRestore, LuChevronDown, LuSearch, LuTrash2 } from 'react-icons/lu'
 import type { ArchivedTask } from '@after-office/shared'
 import { useClock } from '../state/clock'
@@ -79,7 +80,7 @@ function ArchivedRow({ task: t, onGone, onError }: { task: ArchivedTask; onGone:
   const project = useDashboard((s) => s.projects.find((p) => p.id === t.projectId))
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const date = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, day: 'numeric', month: 'short', year: 'numeric' }).format(t.updatedAt)
+  const date = dateTime(t.updatedAt, timezone)
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true)
