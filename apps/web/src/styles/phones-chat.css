@@ -12,12 +12,28 @@
 .chat__bar--sheet .rs { width: 100%; }
 .chat__bar--sheet .chat__stat { min-width: 0; }
 .chat__bar--sheet .chat__ctx .meter { flex: 1; width: auto; }
+/* the chat drawers' grab handle: phones only (below) */
+.drawer__grab { display: none; }
 @media (max-width: 768px) {
   .drawer__head { padding: 12px 14px 8px; gap: 10px; }
   .drawer__body--flush { padding: 6px 12px 12px; }
   .drawer__tabs { margin: 0 14px; max-width: calc(100% - 28px); }
-  /* the drawer takes (almost) the whole phone screen: more room for the chat */
-  .drawer { top: 8px; right: 8px; bottom: 8px; width: calc(100vw - 16px); border-radius: 18px; }
+  /* the chat drawer is a bottom sheet, like every modal on a phone (styles/sheet.css): nearly the whole screen, rounded
+     on top, slides up, and its handle or header drags down to close it (state/useSheetDrag.ts) */
+  .drawer, .drawer.drawer--wide, .drawer.drawer--full {
+    top: max(20px, env(safe-area-inset-top)); left: 0; right: 0; bottom: 0; width: auto;
+    border-radius: 22px 22px 0 0; border-bottom: none; padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.22);
+    animation: sheet-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .drawer.is-dragging { animation: none; transition: none; }
+  .drawer.is-settling { transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .drawer-backdrop--closing .drawer { animation: sheet-out 0.22s ease-in forwards; }
+  .drawer__grab { display: flex; justify-content: center; flex-shrink: 0; padding: 8px 0 0; cursor: grab; touch-action: none; }
+  .drawer__grab::before { content: ''; width: 38px; height: 5px; border-radius: 999px; background: var(--line); }
+  .drawer__head { touch-action: none; padding-top: 6px; }
+  /* full width is the only width on a phone */
+  .drawer .maximize-btn { display: none; }
 }
 /* phones: fixed layers follow the visible area (above the keyboard); see state/visualViewport.ts */
 @media (max-width: 768px) {

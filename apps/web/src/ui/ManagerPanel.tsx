@@ -9,6 +9,7 @@ import { useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { ChatTab } from './agent/ChatTab'
 import { openUrl, setUrl, useParam } from '../state/url'
 import { MaximizeButton, useMaximize } from './Maximize'
+import { useSheetDrag } from '../state/useSheetDrag'
 import { ago } from './FollowUps'
 import { STATUS_BY_ID } from './taskMeta'
 
@@ -43,6 +44,8 @@ function Panel({ manager, onClose: close }: { manager: OfficeAgent; onClose: () 
     setClosing(true)
     setTimeout(close, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220)
   }, [close])
+  // phones: a bottom sheet, closed by dragging its handle or header down
+  const { dragProps } = useSheetDrag(onClose, max.ref)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !(e.target as HTMLElement)?.closest?.('.chat, .modal') && onClose()
@@ -57,7 +60,8 @@ function Panel({ manager, onClose: close }: { manager: OfficeAgent; onClose: () 
   return (
     <div className={`drawer-backdrop${closing ? ' drawer-backdrop--closing' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <aside ref={max.ref} className={`drawer drawer--wide${max.full ? ' drawer--full' : ''}`} role="dialog" aria-modal="true" aria-label="Manager">
-        <header className="drawer__head">
+        <div className="drawer__grab" aria-hidden="true" {...dragProps} />
+        <header className="drawer__head" {...dragProps}>
           <span className="avatar avatar--lg manager-avatar" style={avatarStyle(manager.look.shirt)}>
             <LuCrown />
           </span>

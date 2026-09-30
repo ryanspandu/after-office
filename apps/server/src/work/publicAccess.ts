@@ -52,7 +52,13 @@ export async function ask(action: string, timeoutMs = 90_000): Promise<HelperSta
   const line = `${action} ${id}`
   if (!existsSync(join(dir(), 'in'))) throw new AgentError('Public access can be switched only on a server set up with --tailscale --domain … --dns cloudflare', 409)
   // one short write: the .path unit starts the helper when it's closed
-  writeFileSync(REQUEST(), `${line}\n`, { mode: 0o600 })
+  try {
+    writeFileSync(REQUEST(), `${line}\n`, { mode: 0o600 })
+  } catch (e) {
+    // read-only: the dashboard started before the folder existed (systemd only lets it write there if it did)
+    const why = e instanceof Error ? e.message : String(e)
+    throw new AgentError(`The dashboard can't leave the request (${why.split(',')[0]}). On the VPS: sudo systemctl restart after-office, then try again.`, 500)
+  }
   const until = Date.now() + timeoutMs
   while (Date.now() < until) {
     await Bun.sleep(500)

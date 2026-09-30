@@ -6,6 +6,11 @@ import type { ActivityEntry, AgentKind, CronJob, LiveMode, OfficeTask, Project, 
 // Persistent state lives in one SQLite file (OFFICE_DATA_DIR, default apps/server/data).
 // Runtime state (status, current tool, pending approvals) stays in memory and is rebuilt from hooks.
 
+// `bun test` run from anywhere but apps/server skips its bunfig.toml, and so test-setup.ts: the tests would then write
+// into the real office (its database, agents that the running dashboard starts for real). Refuse instead.
+if (process.env.NODE_ENV === 'test' && (!process.env.OFFICE_DATA_DIR || !process.env.OFFICE_TMUX_NAME?.startsWith('after-office-test-')))
+  throw new Error('Tests must run with apps/server/src/test-setup.ts (a throwaway database): run `bun test` inside apps/server')
+
 export const DATA_DIR = resolve(process.env.OFFICE_DATA_DIR ?? resolve(import.meta.dir, '../data'))
 mkdirSync(DATA_DIR, { recursive: true })
 // prompts, reports, sessions: for this user's eyes only

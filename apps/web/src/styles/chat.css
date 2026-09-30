@@ -139,8 +139,12 @@
   display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
   font-size: 13px;
+  /* centered with left 50% + translate: without a width it would be capped at half the screen (text squeezed) */
+  width: max-content; max-width: min(560px, calc(100vw - 32px)); box-sizing: border-box;
 }
-.sync-toast > svg { color: var(--danger); }
+.sync-toast > svg { color: var(--danger); flex-shrink: 0; }
+.sync-toast > span { flex: 1; min-width: 0; line-height: 1.4; }
+.sync-toast > button { flex-shrink: 0; }
 /* chat drawers at full width (desktop; ui/Maximize.tsx) */
 .drawer.drawer--full { width: calc(100vw - 24px); }
 .drawer__head > .maximize-btn { flex-shrink: 0; }

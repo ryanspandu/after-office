@@ -37,3 +37,17 @@ export async function installApp() {
 
 /** Show an "Install" entry: a real prompt (Chromium), or the iOS how-to (Safari, not yet installed). */
 export const canOfferInstall = (s: { prompt: unknown; installed: boolean }) => !s.installed && (!!s.prompt || isIosSafari)
+
+/**
+ * Reload, for the installed app (it has no browser reload button): checks for a new version first (the service worker
+ * takes a fresh build on the next load), then loads the page again.
+ */
+export async function reloadApp() {
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration()
+    await Promise.race([reg?.update(), new Promise((r) => setTimeout(r, 1500))])
+  } catch {
+    // offline or no worker: reload anyway
+  }
+  location.reload()
+}

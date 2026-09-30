@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { usePresence } from '../state/usePresence'
-import { MOBILE } from '../state/useMediaQuery'
+import { useSheetDrag } from '../state/useSheetDrag'
 import { LuX } from 'react-icons/lu'
 
 interface Props {
@@ -74,41 +74,8 @@ export function Modal({ open, title, description, onClose, children, width = 460
     return () => ro.disconnect()
   })
 
-  // phones: a bottom sheet (styles/sheet.css). Dragging the handle or the header down follows the finger; let go past
-  // a third of its height (or with a quick flick) and it closes, otherwise it springs back.
-  const card = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ y: number; t: number; id: number } | null>(null)
-  const onDragStart = (e: React.PointerEvent) => {
-    if (!window.matchMedia(MOBILE).matches || e.button !== 0) return
-    // the header's own buttons stay buttons
-    if ((e.target as HTMLElement).closest('button, a, input, select, textarea')) return
-    drag.current = { y: e.clientY, t: performance.now(), id: e.pointerId }
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    card.current?.classList.add('is-dragging')
-  }
-  const onDragMove = (e: React.PointerEvent) => {
-    const d = drag.current
-    if (!d || d.id !== e.pointerId || !card.current) return
-    const dy = Math.max(0, e.clientY - d.y)
-    card.current.style.transform = dy ? `translateY(${dy}px)` : ''
-  }
-  const onDragEnd = (e: React.PointerEvent) => {
-    const d = drag.current
-    const el = card.current
-    if (!d || d.id !== e.pointerId || !el) return
-    drag.current = null
-    el.classList.remove('is-dragging')
-    const dy = Math.max(0, e.clientY - d.y)
-    const speed = dy / Math.max(1, performance.now() - d.t)
-    if (dy > el.offsetHeight / 3 || (dy > 40 && speed > 0.6)) {
-      onClose()
-      return
-    }
-    el.classList.add('is-settling')
-    el.style.transform = ''
-    setTimeout(() => el.classList.remove('is-settling'), 220)
-  }
-  const dragProps = { onPointerDown: onDragStart, onPointerMove: onDragMove, onPointerUp: onDragEnd, onPointerCancel: onDragEnd }
+  // phones: a bottom sheet (styles/sheet.css), closed by dragging its handle or header down
+  const { ref: card, dragProps } = useSheetDrag<HTMLDivElement>(onClose)
 
   // stays mounted briefly after closing so it can animate out
   const { mounted, closing } = usePresence(open, 180)

@@ -3,7 +3,7 @@ import { OwnerAvatar } from './EditProfile'
 import { useShallow } from 'zustand/react/shallow'
 import { createPortal } from 'react-dom'
 import { usePresence } from '../state/usePresence'
-import { LuMonitorDown, LuShare, LuSmartphone, LuBell, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuSun, LuSunMoon } from 'react-icons/lu'
+import { LuMonitorDown, LuShare, LuSmartphone, LuBell, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuRotateCw, LuSun, LuSunMoon } from 'react-icons/lu'
 import { useAuth } from '../state/auth'
 import { TIMEZONES, useClock, useNow, zonedParts, type ThemeMode } from '../state/clock'
 import { formatTokens, rangeBounds, useDashboard } from '../state/dashboard'
@@ -18,7 +18,7 @@ import { PublicAccessBadge } from './PublicAccess'
 import { AutomationButton, useAutomationModal } from './AutomationModal'
 import { useLive } from '../state/live'
 import { useManager, useManagerPanel } from './ManagerPanel'
-import { canOfferInstall, installApp, useInstall } from '../pwa/install'
+import { canOfferInstall, installApp, reloadApp, useInstall } from '../pwa/install'
 import { useProfileModal } from './ProfileModal'
 import { Brand } from './Brand'
 
@@ -51,6 +51,8 @@ export function Navbar() {
   const memPct = measured ? (metrics.memUsedGb / metrics.memTotalGb) * 100 : 0
   // phones: timezone, theme, fullscreen and the account move into a menu next to the clock
   const mobile = useMediaQuery(MOBILE)
+  // the installed app has no browser reload button: it gets its own
+  const installed = useInstall((s) => s.installed)
   const live = useOffice((s) => s.source === 'live')
   const paused = useLive((s) => s.automation.quotaPaused)
   const tzSelect = (
@@ -135,6 +137,11 @@ export function Navbar() {
               </button>
             )}
             <InstallMenuItem />
+            {installed && (
+              <button className="nav-menu__item" onClick={() => void reloadApp()}>
+                <LuRotateCw /> Reload app
+              </button>
+            )}
             <button className="nav-menu__item" onClick={toggleFullscreen}>
               {fullscreen ? <LuMinimize2 /> : <LuMaximize2 />} {fullscreen ? 'Show panels' : 'Fullscreen office'}
             </button>
@@ -153,6 +160,11 @@ export function Navbar() {
         ) : (
           <>
             <InstallButton />
+            {installed && (
+              <button className="icon-btn" {...tip('Reload the app')} aria-label="Reload the app" onClick={() => void reloadApp()}>
+                <LuRotateCw />
+              </button>
+            )}
             <AutomationButton />
             <ManagerButton />
             <div className="seg">

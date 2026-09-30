@@ -16,6 +16,7 @@ import { Select } from './Select'
 import { create } from 'zustand'
 import { Markdown } from './FollowUps'
 import { MaximizeButton, useMaximize } from './Maximize'
+import { useSheetDrag } from '../state/useSheetDrag'
 import { FigurePicker } from './FigurePicker'
 import { ConnectorsTab } from './agent/ConnectorsTab'
 import { AgentActivityTab } from './Activity'
@@ -149,10 +150,13 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
   const profileTab = tab === 'overview' || tab === 'claude' || tab === 'skills'
 
   const max = useMaximize('ao-max-agent')
+  // phones: a bottom sheet, closed by dragging its handle or header down
+  const { dragProps } = useSheetDrag(onClose, max.ref)
   return (
     <div className={`drawer-backdrop${closing ? ' drawer-backdrop--closing' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <aside ref={max.ref} className={`drawer${live ? ' drawer--wide' : ''}${live && max.full ? ' drawer--full' : ''}`} role="dialog" aria-modal="true" aria-label={`${agent.name}`}>
-        <header className="drawer__head">
+        <div className="drawer__grab" aria-hidden="true" {...dragProps} />
+        <header className="drawer__head" {...dragProps}>
           <span className="avatar avatar--lg" style={avatarStyle(agent.look.shirt)}>
             {agent.name[0]}
           </span>

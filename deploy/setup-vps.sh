@@ -529,6 +529,8 @@ if [ "$TAILSCALE" = 1 ] && [ -n "$DOMAIN" ] && [ "$DNS_PROVIDER" = cloudflare ];
   systemctl daemon-reload
   /usr/local/sbin/after-office-access off-now
   systemctl enable --now after-office-access.path after-office-access.timer >/dev/null
+  # the dashboard is let write its requests only when the folder exists as it starts (ReadWritePaths): start it again
+  if [ -f "$APP_DIR/package.json" ]; then systemctl restart after-office; fi
 else
   systemctl disable --now after-office-access.path after-office-access.timer >/dev/null 2>&1 || true
   rm -f /etc/after-office/access.conf "$ACCESS_DIR/out/status.json"
