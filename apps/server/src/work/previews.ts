@@ -3,12 +3,17 @@ import { readSessionFromCookie, SESSION_COOKIE_NAMES } from '../auth'
 
 // Previews: the apps agents run while they work (a dev server on a preview port, 3000–3009 by default), opened from
 // the dashboard. On your own machine the link is simply http://localhost:<port>. On a server they come through a
-// small proxy here (OFFICE_PREVIEW_PROXY=true), on 127.0.0.1:<port + 10000>, which Caddy or Tailscale publishes as
-// https://<office host>:<port>:
+// small proxy here (OFFICE_PREVIEW_PROXY=true), on 127.0.0.1:<port + PROXY_OFFSET>, which Tailscale publishes as
+// https://<office host>:<port>, or Caddy as https://<office host>:<port + PUBLIC_OFFSET> (see below):
 // - only for someone signed in to the dashboard (the session cookie reaches the other port of the same host);
 // - and that cookie is taken off the request before it reaches the app: an agent's app never sees your session.
 
-export const PROXY_OFFSET = 10_000
+/** The proxy for app port p listens on 127.0.0.1:(p + this). */
+export const PROXY_OFFSET = Number(process.env.OFFICE_PREVIEW_PROXY_OFFSET) || 10_000
+/** A preview opens at https://<host>:(p + this). 0 with Tailscale serve, which takes no port on the server. Caddy does
+ * take the port it serves on (every address, 127.0.0.1 too): on the app's own port, the app couldn't start and the
+ * port would look busy. So behind Caddy previews are at p + 10000 and the proxy moves to p + 20000 (setup-vps.sh). */
+export const PUBLIC_OFFSET = Number(process.env.OFFICE_PREVIEW_PUBLIC_OFFSET) || 0
 
 /** "3000-3009,5173" → ports (at most 50). Default 3000–3009. */
 export function previewPorts(spec = process.env.OFFICE_PREVIEW_PORTS ?? '3000-3009'): number[] {
@@ -63,7 +68,8 @@ export async function listPreviews(c: Context): Promise<Preview[]> {
   // on a server: the public host, same scheme (the proxy's port is published there); locally: this browser's host
   const proto = process.env.OFFICE_PUBLIC_URL ? base.protocol : 'http:'
   const host = process.env.OFFICE_PUBLIC_URL ? base.hostname : (c.req.header('x-forwarded-host') ?? c.req.header('host') ?? 'localhost').split(':')[0]
-  return Promise.all(open.map(async (port) => ({ port, url: `${proto}//${host}:${port}/`, title: await pageTitle(port) })))
+  const shown = (port: number) => (process.env.OFFICE_PUBLIC_URL ? port + PUBLIC_OFFSET : port)
+  return Promise.all(open.map(async (port) => ({ port, url: `${proto}//${host}:${shown(port)}/`, title: await pageTitle(port) })))
 }
 
 /** A Cookie header without the dashboard's session cookie. */
@@ -78,7 +84,7 @@ export function withoutSessionCookie(cookie: string | null) {
 
 type WsData = { upstream: WebSocket | null; url: string; protocols: string[]; queue: (string | ArrayBuffer)[] }
 
-/** The proxy for one preview port: 127.0.0.1:<port + 10000> → the app on 127.0.0.1:<port>. */
+/** The proxy for one preview port: 127.0.0.1:<port + PROXY_OFFSET> → the app on 127.0.0.1:<port>. */
 export function startProxy(port: number) {
   const target = `127.0.0.1:${port}`
   return Bun.serve<WsData>({

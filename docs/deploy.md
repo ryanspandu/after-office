@@ -156,6 +156,8 @@ Options and tips:
     It's kept in `/etc/caddy/cloudflare.env` (root only) and handed to Caddy alone.
   - It sets the **A record** `office.example.com → the server's Tailscale IP (100.x.y.z)`, *DNS only*. Anyone can look
     the name up, but that address only answers inside your tailnet.
+  - In the tailnet policy, allow your devices to reach the server on `tcp:443` and `tcp:13000-13009` (previews,
+    see Previews below), e.g. a `"hosts": {"after-office": "100.x.y.z"}` entry and a grant with `"dst": ["after-office"]`.
   - **Caddy** serves the dashboard and the preview ports on that name. Its certificate comes from Let's Encrypt through
     a **DNS challenge** (a TXT record Caddy sets through the token), so no port is ever opened to the internet: 80/443
     stay closed, as with plain Tailscale. The packaged Caddy has no DNS modules, so the script installs Caddy's own
@@ -309,7 +311,10 @@ Let them push to branches and deploy through your CI after you merge.
 Agents run the app they're working on (a dev server) on a preview port, 3000–3009 by default (`--preview-ports`
 changes the range). **Projects → Running now** in the dashboard lists what's running, with a link to each.
 
-- **On the server** the link is `https://<office host>:<port>`. It goes through the dashboard's preview proxy, which
+- **On the server** the link is `https://<office host>:<port>` with Tailscale's own name, and
+  `https://<your domain>:<port + 10000>` (e.g. `:13000` for an app on 3000) with a domain: Caddy holds the port it
+  serves on, on every address, so it can't use the app's own. (With `--tailscale --domain`, allow those ports to your
+  devices in the tailnet policy: `"ip": ["tcp:443", "tcp:13000-13009"]`.) It goes through the dashboard's preview proxy, which
   admits only someone signed in to the dashboard. It takes your session cookie off every request before it reaches
   the app, so an agent's app never sees it. Hot reload (WebSockets) works through it.
 - **On a Mac** the link is simply `http://localhost:<port>`.

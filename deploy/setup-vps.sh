@@ -336,6 +336,18 @@ set_env OFFICE_PUBLIC_URL "$PUBLIC_URL"
 # apps agents run on these ports open from the dashboard, through its preview proxy (127.0.0.1:<port + 10000>)
 set_env OFFICE_PREVIEW_PORTS "$PREVIEW_PORTS"
 set_env OFFICE_PREVIEW_PROXY true
+# behind Caddy (a domain): Caddy holds the port it publishes on every address, so previews can't be published on the
+# app's own port: https://<domain>:<port + 10000>, proxy on 127.0.0.1:<port + 20000>. Tailscale serve takes no port on
+# the server: https://<name>:<port>, proxy on <port + 10000> (the defaults).
+if [ -n "$DOMAIN" ]; then
+  PUB_OFFSET=10000; PROXY_OFFSET=20000
+  set_env OFFICE_PREVIEW_PUBLIC_OFFSET "$PUB_OFFSET"
+  set_env OFFICE_PREVIEW_PROXY_OFFSET "$PROXY_OFFSET"
+else
+  PUB_OFFSET=0; PROXY_OFFSET=10000
+  set_env OFFICE_PREVIEW_PUBLIC_OFFSET ""
+  set_env OFFICE_PREVIEW_PROXY_OFFSET ""
+fi
 # the ports as a list, for Tailscale / Caddy / the firewall below
 PORT_LIST=$(echo "$PREVIEW_PORTS" | tr ',' '\n' | while read -r r; do
   a=${r%-*}; b=${r#*-}; [ -z "$b" ] && b=$a
@@ -354,6 +366,8 @@ visudo -cf /etc/sudoers.d/after-office >/dev/null
 systemctl daemon-reload
 systemctl enable after-office-agents after-office
 systemctl restart after-office-agents
+# the dashboard reads /etc/after-office.env at start (the URL, preview ports): restart it when it's there
+if [ -f "$APP_DIR/package.json" ]; then systemctl restart after-office; fi
 
 # /etc/caddy/Caddyfile for $DOMAIN: the dashboard, and previews on https://<domain>:<port> → the dashboard's preview
 # proxy (signed-in only; strips the session cookie)
@@ -377,7 +391,7 @@ UNIT
     sed -i 's#^\tadmin unix//run/caddy/admin.sock$#&\n\tacme_dns cloudflare {env.CF_API_TOKEN}#' /etc/caddy/Caddyfile
   fi
   for p in $PORT_LIST; do
-    printf '\n%s:%s {\n\treverse_proxy 127.0.0.1:%s {\n\t\tflush_interval -1\n\t}\n}\n' "$DOMAIN" "$p" "$((p + 10000))" >> /etc/caddy/Caddyfile
+    printf '\n%s:%s {\n\treverse_proxy 127.0.0.1:%s {\n\t\tflush_interval -1\n\t}\n}\n' "$DOMAIN" "$((p + PUB_OFFSET))" "$((p + PROXY_OFFSET))" >> /etc/caddy/Caddyfile
   done
 }
 
@@ -496,7 +510,7 @@ if [ "$TAILSCALE" = 1 ]; then
 else
   ufw allow 80/tcp
   ufw allow 443/tcp
-  for p in $PORT_LIST; do ufw allow "$p/tcp" comment 'After Office preview'; done
+  for p in $PORT_LIST; do ufw delete allow "$p/tcp" >/dev/null 2>&1 || true; ufw allow "$((p + PUB_OFFSET))/tcp" comment 'After Office preview'; done
 fi
 ufw --force enable
 
