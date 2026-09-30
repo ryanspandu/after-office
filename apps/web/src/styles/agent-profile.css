@@ -46,6 +46,10 @@ input:disabled { opacity: 0.6; }
 .skills__item.active { background: var(--accent); color: var(--accent-fg); }
 .skills__add { justify-content: flex-start; border: 1px dashed var(--line); color: var(--muted); font-family: inherit; }
 .skills__edit { display: flex; flex-direction: column; gap: 12px; }
+/* fields keep their own height (.field grows by default): only Instructions takes the room that's left, in its textarea */
+.skills__edit > .field { flex: 0 0 auto; }
+.skills__edit > .field:has(> textarea) { flex: 1 1 auto; }
+.skills__edit > .field > textarea { flex: 1; }
 .skills__toggle { flex: 0 0 auto; align-self: center; margin-top: 12px; }
 .skills__edit .ghost { align-self: flex-start; }
 @media (max-width: 640px) { .skills { grid-template-columns: 1fr; } }
