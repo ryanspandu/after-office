@@ -33,7 +33,7 @@
 }
 /* the menu button floats on the 3D stage, bottom right (ui/Navbar.tsx NavMenu); the reload button is bottom left */
 .nav-burger {
-  all: unset; box-sizing: border-box; position: absolute; right: 12px; bottom: 12px; z-index: 200000; /* above the name tags */
+  all: unset; box-sizing: border-box; position: absolute; right: 12px; bottom: 12px; z-index: 5; /* above the name tags, within the stage */
   display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; cursor: pointer; font-size: 19px; color: var(--text);
   background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); box-shadow: var(--shadow);
 }

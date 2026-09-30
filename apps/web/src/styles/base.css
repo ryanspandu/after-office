@@ -107,6 +107,8 @@ svg { flex-shrink: 0; }
 
 .stage {
   position: relative;
+  /* its layers (name tags, the floating buttons) stack among themselves: none of them can cover a toast or a modal */
+  isolation: isolate;
   min-height: 0;
   border-radius: 20px;
   overflow: hidden;

@@ -135,7 +135,9 @@
 
 .task-detail__msg { font-size: 12px; color: var(--muted); max-width: 240px; }
 .sync-toast {
-  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 90;
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+  /* on top of everything: modals (900), drawers (800), the dock, menus and pickers */
+  z-index: 3000;
   display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
   font-size: 13px;
