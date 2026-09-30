@@ -34,7 +34,8 @@ What remains: all agents share the `office-agent` user, so one agent can read or
   | Several coding agents, browsers for tests, a database | 4–8 vCPU / 16 GB RAM / 80 GB SSD |
 
 - **DNS:** a domain whose A record points to the VPS (e.g. `office.example.com`). Not needed with Tailscale (below).
-- **SSH:** root access with a key. The setup turns off SSH password logins, but only if a key is installed for root.
+- **SSH:** with a key, as root or as your own user with sudo (e.g. `ubuntu`, on providers that don't hand out root).
+  The setup turns off SSH password logins, but only if one of those has a key (so it can't lock you out).
 
 ## 1. Server setup (once)
 
@@ -43,14 +44,23 @@ scp -r deploy root@VPS:/root/after-office-deploy
 ssh root@VPS 'bash /root/after-office-deploy/setup-vps.sh office.example.com'
 ```
 
-The script is safe to re-run. It does the following:
+Logged in as a user with sudo instead of root (the same options work):
+
+```bash
+scp -r deploy ubuntu@VPS:after-office-deploy
+ssh -t ubuntu@VPS 'sudo bash ~/after-office-deploy/setup-vps.sh office.example.com'
+```
+
+Everything below marked "as root" then runs with `sudo` in front (`sudo systemctl restart after-office`,
+`sudo -iu office-agent claude`, …). The script is safe to re-run. It does the following:
 
 - **Packages:** tmux, git, acl, ufw, unattended-upgrades (automatic security updates) and Caddy.
 - **Users:**
   - `office` (dashboard): `/opt/after-office` (mode 750) and its data (700).
   - `office-agent` (agents): `/home/office-agent/agents` for agent folders and `/home/office-agent/projects` for repos.
   - ACLs let the dashboard write agent settings there and read the agents' transcripts.
-  - Your root SSH key is copied to `office` (for `sync.sh`), not to `office-agent`.
+  - Your SSH key (that of the user who ran it with sudo, and root's) is added to `office` (for `sync.sh`), not to
+    `office-agent`. A provider's root key that only says "log in as ubuntu" (a forced command) is left out.
 - **Tools:** Bun for both users, Claude Code for `office-agent`.
 - **Secrets:** `/etc/after-office.env` (root, 0600) with a fresh `SESSION_SECRET` and `HOOK_TOKEN`.
 - **Services:**
@@ -274,6 +284,7 @@ on the server (`deploy/update.sh`: pull, install, build, restart the dashboard).
    ```bash
    bash /root/after-office-deploy/update.sh --init git@github.com:<you>/after-office.git
    ```
+   (Set up with sudo from your own user? `sudo bash ~/after-office-deploy/update.sh --init …`.)
    It checks the repository out into `/opt/after-office` (as `office`), builds and starts the dashboard. `--branch <name>`
    follows another branch than `main`. The copy in `/root` isn't needed after this: `rm -rf /root/after-office-deploy`.
 3. **Every update:**

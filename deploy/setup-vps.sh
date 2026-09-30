@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# One-time setup of a fresh Ubuntu 22.04/24.04 VPS. Run as root from a copy of this deploy/ folder:
+# One-time setup of a fresh Ubuntu 22.04/24.04 VPS. Run as root (logged in as root, or with sudo from your own user)
+# from a copy of this deploy/ folder:
 #   scp -r deploy root@VPS:/root/after-office-deploy
 #
 #   Public, on your domain (Caddy + Let's Encrypt):
@@ -37,6 +38,7 @@ EXTRA_APT=''
 ANDROID=0
 PREVIEW_PORTS=3000-3009
 SWAP=1
+ARGS="$*"
 while [ $# -gt 0 ]; do
   case "$1" in
     --tailscale) TAILSCALE=1 ;;
@@ -55,6 +57,17 @@ while [ $# -gt 0 ]; do
 done
 if [ "$TAILSCALE" = 0 ] && [ -z "$DOMAIN" ]; then echo "$USAGE" >&2; exit 1; fi
 if [ "$FUNNEL" = 1 ] && [ "$TAILSCALE" = 0 ]; then echo '--funnel-trigger needs --tailscale' >&2; exit 1; fi
+# root, logged in as root or through sudo from your own user (e.g. "ubuntu" on providers that don't hand out root)
+if [ "$(id -u)" != 0 ]; then echo "Run this as root: sudo bash $0 $ARGS" >&2; exit 1; fi
+SUDO_HOME=''
+if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then SUDO_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6); fi
+# the admins' SSH keys (one per line): the sudo user's, then root's. A key pinned to a forced command is skipped: some
+# providers put root's key behind  command="echo Please login as ubuntu"  and copying that would lock the login out.
+admin_keys() {
+  for f in ${SUDO_HOME:+"$SUDO_HOME/.ssh/authorized_keys"} /root/.ssh/authorized_keys; do
+    if [ -f "$f" ]; then grep -vE '^[[:space:]]*(#|$)' "$f" | grep -v 'command=' || true; fi
+  done | awk '!seen[$0]++'
+}
 APP_USER=office
 AGENT_USER=office-agent
 APP_DIR=/opt/after-office
@@ -182,10 +195,18 @@ setfacl -m "u:$APP_USER:x" "$AGENT_HOME" "$AGENT_HOME/.claude"
 setfacl -R -m "u:$APP_USER:rX" "$AGENT_HOME/.claude/projects"
 setfacl -R -d -m "u:$APP_USER:rX" "$AGENT_HOME/.claude/projects"
 
-# let the same SSH key log in as the dashboard user (for deploy/sync.sh)
-if [ -f /root/.ssh/authorized_keys ] && [ ! -f "/home/$APP_USER/.ssh/authorized_keys" ]; then
+# let your SSH key log in as the dashboard user too (for deploy/sync.sh): the key of whoever ran this with sudo, and
+# root's. Added once each (a re-run adds only new ones); the dashboard user's own keys stay.
+KEYS=$(admin_keys)
+if [ -n "$KEYS" ]; then
+  APP_KEYS=/home/$APP_USER/.ssh/authorized_keys
   install -d -m 700 -o "$APP_USER" -g "$APP_USER" "/home/$APP_USER/.ssh"
-  install -m 600 -o "$APP_USER" -g "$APP_USER" /root/.ssh/authorized_keys "/home/$APP_USER/.ssh/authorized_keys"
+  touch "$APP_KEYS"
+  printf '%s\n' "$KEYS" | while IFS= read -r key; do grep -qxF "$key" "$APP_KEYS" || printf '%s\n' "$key" >> "$APP_KEYS"; done
+  chown "$APP_USER:$APP_USER" "$APP_KEYS"
+  chmod 600 "$APP_KEYS"
+else
+  echo "    ! No SSH key for root${SUDO_USER:+ or $SUDO_USER}: add one for $APP_USER yourself before using deploy/sync.sh"
 fi
 
 if [ "$DEV_TOOLS" = 1 ]; then
@@ -350,8 +371,8 @@ else
 fi
 ufw --force enable
 
-echo "==> SSH: keys only (only if a key is installed, so this can't lock you out)"
-if [ -s /root/.ssh/authorized_keys ]; then
+echo "==> SSH: keys only (only if you have a key, so this can't lock you out)"
+if [ -n "$(admin_keys)" ]; then
   cat > /etc/ssh/sshd_config.d/10-after-office.conf <<'EOF'
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -374,7 +395,7 @@ cat <<NEXT
 Done. Next (see docs/deploy.md):
   1. From your machine:   deploy/sync.sh $APP_USER@<vps>
      (or from GitHub, here: bash $HERE/update.sh --init <repo url>; then sudo bash $APP_DIR/deploy/update.sh to update)
-  2. On the VPS as root:
+  2. On the VPS as root (or with sudo):
        OFFICE_ENV_FILE=$ENV_FILE /home/$APP_USER/.bun/bin/bun $APP_DIR/apps/server/src/setup-auth.ts   # dashboard login
        sudo -iu $AGENT_USER claude       # log the agents in with your Claude subscription once, then /exit
        sudo -iu $AGENT_USER gh auth login   # optional: GitHub for the agents (a fine-grained token for their repos)
