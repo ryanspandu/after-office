@@ -1,0 +1,35 @@
+/* ── phones: every modal is a bottom sheet (ui/Modal.tsx) ──────────────────────────────────────────────────────────
+   Anchored to the bottom edge, full width, rounded top, slides up; a grab handle on top, and the handle or the header
+   can be dragged down to close it (ui/Modal.tsx). Desktop keeps the centered card. */
+.modal__grab { display: none; }
+@media (max-width: 768px) {
+  .modal-backdrop { place-items: end center; padding: 0; padding-top: max(24px, env(safe-area-inset-top)); }
+  .modal {
+    width: 100% !important; max-width: 100%;
+    max-height: calc(var(--vvh, 100dvh) - max(24px, env(safe-area-inset-top)));
+    border-radius: 22px 22px 0 0; border-bottom: none;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.22);
+    animation: sheet-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    touch-action: pan-y;
+  }
+  .modal.modal--full { height: calc(var(--vvh, 100dvh) - max(24px, env(safe-area-inset-top))); }
+  .modal__grab {
+    display: flex; justify-content: center; flex-shrink: 0; padding: 8px 0 2px; cursor: grab; touch-action: none;
+  }
+  .modal__grab::before { content: ''; width: 38px; height: 5px; border-radius: 999px; background: var(--line); }
+  .modal__head { padding: 6px 18px 0; touch-action: none; }
+  .modal__head h3 { font-size: 16px; font-weight: 600; }
+  .modal__body { padding: 16px 18px 16px; }
+  /* the last bit clears the home indicator */
+  .modal__scroll { padding-bottom: env(safe-area-inset-bottom); }
+  .modal__scroll .modal__foot { margin: 0 -18px -16px; padding: 12px 18px max(16px, env(safe-area-inset-bottom)); }
+  /* buttons at the bottom share the width, like an app's */
+  .modal__foot { flex-wrap: wrap; }
+  .modal__foot > button { flex: 1; justify-content: center; min-height: 44px; }
+  .modal.is-dragging { animation: none; transition: none; }
+  .modal.is-settling { transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .modal-backdrop--closing .modal { animation: sheet-out 0.18s ease-in forwards; }
+}
+@keyframes sheet-in { from { transform: translateY(100%); } }
+@keyframes sheet-out { to { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) { .modal, .modal-backdrop--closing .modal { animation: none; } }

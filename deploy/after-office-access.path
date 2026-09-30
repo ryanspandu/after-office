@@ -1,0 +1,9 @@
+[Unit]
+Description=After Office public access: the dashboard's requests
+
+[Path]
+PathChanged=/var/lib/after-office-access/in/request
+Unit=after-office-access.service
+
+[Install]
+WantedBy=multi-user.target

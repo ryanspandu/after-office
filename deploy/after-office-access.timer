@@ -1,0 +1,11 @@
+[Unit]
+Description=After Office public access: off once its time is up
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=after-office-access.service
+
+[Install]
+WantedBy=timers.target

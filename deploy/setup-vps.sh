@@ -514,6 +514,26 @@ else
 fi
 ufw --force enable
 
+# public access on/off from the dashboard (Automation): only with a domain on the tailnet (the A record moves between
+# the Tailscale and the public IP through the Cloudflare token). A root helper does it on the dashboard's request, which
+# is all the dashboard can do; a timer turns it off once its time is up. Re-running the setup leaves it off.
+ACCESS_DIR=/var/lib/after-office-access
+if [ "$TAILSCALE" = 1 ] && [ -n "$DOMAIN" ] && [ "$DNS_PROVIDER" = cloudflare ]; then
+  echo "==> public access switch (Automation in the dashboard)"
+  install -m 755 "$HERE/after-office-access" /usr/local/sbin/after-office-access
+  install -d -m 755 -o root -g root "$ACCESS_DIR"
+  install -d -m 770 -o root -g "$APP_USER" "$ACCESS_DIR/in"
+  install -d -m 750 -o root -g "$APP_USER" "$ACCESS_DIR/out"
+  printf 'DOMAIN=%s\nPORTS=%s\n' "$DOMAIN" "$(for p in $PORT_LIST; do printf '%s ' "$((p + PUB_OFFSET))"; done | sed 's/ $//')" > /etc/after-office/access.conf
+  for u in after-office-access.service after-office-access.path after-office-access.timer; do install -m 644 "$HERE/$u" "/etc/systemd/system/$u"; done
+  systemctl daemon-reload
+  /usr/local/sbin/after-office-access off-now
+  systemctl enable --now after-office-access.path after-office-access.timer >/dev/null
+else
+  systemctl disable --now after-office-access.path after-office-access.timer >/dev/null 2>&1 || true
+  rm -f /etc/after-office/access.conf "$ACCESS_DIR/out/status.json"
+fi
+
 echo "==> SSH: keys only (only if you have a key, so this can't lock you out)"
 if [ -n "$(admin_keys)" ]; then
   cat > /etc/ssh/sshd_config.d/10-after-office.conf <<'EOF'

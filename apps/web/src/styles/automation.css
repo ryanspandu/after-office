@@ -37,6 +37,10 @@
 .boss-modal__hours { display: flex; flex-wrap: wrap; }
 .boss-modal__time { display: block; margin-top: 6px; max-width: 260px; }
 @media (max-width: 560px) { .boss-modal__lists { grid-template-columns: 1fr; } }
+/* public access (ui/PublicAccess.tsx): same shapes as Boss mode, in the warning color (the server is open) */
+.public-chip, .public-badge { background: var(--danger); border-color: var(--danger); }
+.public-modal__lists > div:first-child { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: color-mix(in srgb, var(--danger) 6%, var(--card)); }
+.public-modal__lists > div:first-child li svg { color: var(--danger); }
 .tfa__code .primary { border-radius: 12px; padding: 0 18px; }
 /* notification channels (ui/NotifyChannels.tsx): a tab per channel */
 .channels { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }

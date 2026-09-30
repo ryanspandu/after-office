@@ -205,6 +205,16 @@ export interface BossMode {
   until: number
 }
 
+/** Public access: the dashboard also on the open internet until `until` (a server on a domain on the tailnet). */
+export interface PublicAccess {
+  /** can be switched on this server (setup-vps.sh --tailscale --domain … --dns cloudflare) */
+  supported: boolean
+  domain?: string
+  public: boolean
+  since?: number
+  until?: number
+}
+
 export interface WorkState {
   tasks: OfficeTask[]
   projects: Project[]
@@ -223,6 +233,7 @@ export interface WorkState {
   tags: Tag[]
   /** on (until when), or null */
   bossMode: BossMode | null
+  publicAccess: PublicAccess
 }
 
 /** An archived task, with when it was last touched (≈ when it was finished). */

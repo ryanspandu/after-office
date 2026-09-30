@@ -14,6 +14,7 @@ import { Select } from './Select'
 import { tip } from './Tooltip'
 import { UsageMeter } from './UsagePopover'
 import { BossModeBadge } from './BossMode'
+import { PublicAccessBadge } from './PublicAccess'
 import { AutomationButton, useAutomationModal } from './AutomationModal'
 import { useLive } from '../state/live'
 import { useManager, useManagerPanel } from './ManagerPanel'
@@ -111,6 +112,7 @@ export function Navbar() {
           {!mobile && tzSelect}
         </div>
         <BossModeBadge compact={mobile} />
+        <PublicAccessBadge compact={mobile} />
         {mobile ? (
           <NavMenu>
             <div className="nav-menu__section">

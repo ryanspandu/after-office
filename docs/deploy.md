@@ -22,48 +22,190 @@ What an agent (even a prompt-injected one) **cannot** do:
 
 What remains: all agents share the `office-agent` user, so one agent can read or type into another agent's session, including the manager's. Treat the agents as one trust zone. That is why the manager's riskier actions (hiring, quality-check commands, and optionally every task) wait for your approval.
 
-## Quick start: from GitHub, start to finish
+## Quick start: a fresh VPS, start to finish
 
-Two commands, as root on a fresh VPS, when your code is in a (private) GitHub repository. Each part is explained in
-the sections below.
+The whole install, in order, from a new Ubuntu VPS to agents working. The code comes from your (private) GitHub
+repository. Every part is explained further down; this is the path to follow.
+
+### 0. What you need
+
+- **A VPS:** Ubuntu 24.04 (or 22.04), root or a user with sudo. For agents that write code: 4 vCPU / 8 GB RAM / 60 GB
+  (see Requirements).
+- **Your repository** on GitHub (private is fine).
+- **A Claude Pro or Max subscription:** the agents run on it.
+- **Google Authenticator** (or any authenticator app) on your phone: the dashboard requires two-factor.
+- **How you'll open the dashboard**, one of:
+
+  | Access | Address | Who can open it | Also needs |
+  |---|---|---|---|
+  | **Tailscale** (recommended) | `https://after-office.<tailnet>.ts.net` | only your devices on your tailnet | a Tailscale account |
+  | **Tailscale + your domain** | `https://office.example.com` | only your devices on your tailnet | Tailscale + a domain whose DNS is at Cloudflare |
+  | **Public domain** | `https://office.example.com` | anyone can reach the sign-in page | a domain; DNS anywhere |
+
+  With either Tailscale option no web port is open to the internet.
+
+### 1. Before you start
+
+- **Tailscale:** make an account at tailscale.com. In the admin console under
+  [DNS](https://login.tailscale.com/admin/dns), turn on **MagicDNS** and **HTTPS Certificates**.
+- **Tailscale + your domain:** make a Cloudflare API token. Go to dash.cloudflare.com → My Profile → **API Tokens** →
+  Create Token → template **Edit zone DNS**.
+  - Zone Resources: *Include → Specific zone →* your domain.
+  - Optional: Client IP filtering to the VPS's public IP.
+  - No expiry.
+
+  Copy it; Cloudflare shows it once. You paste it into the setup, never anywhere else.
+- **Public domain:** add an **A record** pointing at the VPS's public IP (`curl -4 ifconfig.me` on the VPS). At
+  Cloudflare, set it to *DNS only* (grey cloud). Wait until `getent hosts office.example.com` on the VPS shows that IP.
+
+### 2. Clone the repository on the VPS (as root)
+
+The root user needs read access to the repo just for this first clone. Pick one way:
+
+- **An SSH key of your own** on the VPS, added to your GitHub account (Settings → SSH keys):
+  ```bash
+  ssh-keygen -t ed25519 -C "vps" -f ~/.ssh/id_ed25519      # then add ~/.ssh/id_ed25519.pub on GitHub
+  ssh -T git@github.com                                     # "Hi <you>!"
+  ```
+- **A public repo:** use the `https://github.com/<you>/after-office.git` address; nothing to set up.
+
+Then:
 
 ```bash
-# 1. a copy of the repo to run the setup from (any way you can clone it, e.g. your own key)
 git clone git@github.com:<you>/after-office.git ~/after-office
-
-# 2. everything else; --tailscale (private) or your domain (public)
-bash ~/after-office/deploy/setup-vps.sh --tailscale --dev-tools --containers
-#    or:  bash ~/after-office/deploy/setup-vps.sh office.example.com --dev-tools --containers
 ```
 
-Run it in a terminal (not in the background): it stops twice to ask you something. What it does after the server
-setup:
+This copy is only for running the setup. The dashboard runs from its own checkout in `/opt/after-office` (below), which
+never uses your key.
 
-1. **The code.** Run from a clone, it takes the clone's `origin` and branch (or pass `--repo <url>` / `--branch <name>`;
-   `--no-repo` skips this, e.g. when you use `deploy/sync.sh`). For a private repo over SSH it makes a read-only
-   **deploy key** for the `office` user, prints it with the link to the repo's *Settings → Deploy keys*, and waits:
-   add it there (leave "Allow write access" off), then press Enter. Then it checks the code out into
-   `/opt/after-office`, builds and starts the dashboard (`update.sh --init`). The dashboard user never gets your own
-   SSH keys, only this one, which can read this one repository.
-2. **The dashboard login:** it asks for a username and a new password (written to `/etc/after-office.env`).
-3. With `--tailscale`, before all that: the Tailscale login link (open it, sign in; the script carries on).
+### 3. Run the setup
 
-Left for you, printed at the end:
+Run it in the VPS's terminal or through `ssh -t`, not in the background: it stops to ask you things. Pick the line for
+your access:
 
 ```bash
-sudo -iu office-agent claude     # log the agents in with your Claude subscription once, then /exit
+# Tailscale
+bash ~/after-office/deploy/setup-vps.sh --tailscale --dev-tools --containers
+
+# Tailscale + your domain (DNS at Cloudflare)
+bash ~/after-office/deploy/setup-vps.sh --tailscale --domain office.example.com --dns cloudflare --dev-tools --containers
+
+# Public domain
+bash ~/after-office/deploy/setup-vps.sh office.example.com --dev-tools --containers
 ```
 
-Then open the URL it printed. The first sign-in sets up two-factor (Google Authenticator); keep the recovery codes.
+- Not root? Put `sudo` in front.
+- `--dev-tools` and `--containers` are for agents that write and run code (Node, Python, build tools, GitHub CLI,
+  rootless Docker). Leave them out for agents that only research and write. Other options: `--android`, `--apt "pkgs"`,
+  `--preview-ports`; see "Agents that write code".
+- It saves nothing to your terminal history: it asks for the token and passwords, hidden.
 
-- **Every update:** push from your machine, then on the VPS `bash /opt/after-office/deploy/update.sh`.
-- **The clone in `~/after-office`** is only for running `setup-vps.sh`. When an update says the server setup changed:
-  `git -C ~/after-office pull`, then run the setup again with the same options (safe to re-run; the code and the
-  login are left as they are).
-- **Typed "skip" at the deploy key, or ran it without a terminal?** Add the key later
-  (`cat /home/office/.ssh/github_deploy.pub`), then `bash ~/after-office/deploy/update.sh --init <repo url>` and create
-  the login as root: `OFFICE_ENV_FILE=/etc/after-office.env /home/office/.bun/bin/bun
-  /opt/after-office/apps/server/src/setup-auth.ts && systemctl restart after-office`.
+The first run takes 10–20 minutes. What it asks, in this order:
+
+1. **Tailscale login link** (Tailscale options): open it, sign in with your Tailscale account; the script carries on.
+2. **Cloudflare API token** (`--dns cloudflare`): paste the token from step 1. It isn't shown as you paste.
+   - The token is kept in `/etc/caddy/cloudflare.env`, readable by root only.
+   - The setup creates the A record `office.example.com → the server's Tailscale IP` itself.
+3. **Deploy key** (private repo): it prints a key and the link to your repo's *Settings → Deploy keys → Add deploy key*.
+   Paste the key there, leave **Allow write access off**, save, then press Enter in the terminal. It checks the key,
+   checks the code out into `/opt/after-office`, builds it and starts the dashboard.
+4. **Dashboard login:** a username and a **new** password (not one you use elsewhere).
+
+It ends with "Done. Next", listing what's left: the next steps below.
+
+### 4. Tailnet access rules (Tailscale options)
+
+A new tailnet lets your devices reach each other, so nothing is needed. If you've changed the
+[access controls](https://login.tailscale.com/admin/acls) (no `{"src": ["*"], "dst": ["*"], "ip": ["*"]}` grant), allow
+yourself to reach the server. `100.x.y.z` is the server's Tailscale IP (`tailscale ip -4` on the VPS):
+
+```jsonc
+"hosts": {
+  "after-office": "100.x.y.z",
+},
+"grants": [
+  // the dashboard (443) and the agents' app previews
+  { "src": ["you@example.com"], "dst": ["after-office"], "ip": ["tcp:443", "tcp:3000-3009"] },
+],
+```
+
+With `--domain`, the previews are on `tcp:13000-13009` instead of `3000-3009` (see Previews). Symptom when this is
+missing: `tailscale ping` answers, but the browser times out.
+
+In the admin console → Machines → `after-office` → **Disable key expiry**, so the server never drops off the tailnet.
+
+### 5. Log the agents in to Claude (once)
+
+```bash
+sudo -iu office-agent claude
+```
+
+Sign in with your Claude subscription, then type `/exit`. Every agent uses this login.
+
+### 6. Open the dashboard
+
+- **Tailscale options:** install the Tailscale app on the device (Mac, iPhone, Android…) and sign in to the same
+  tailnet.
+- Open the address the setup printed.
+- Sign in with the username and password from step 3.
+- The first sign-in makes you set up **two-factor**: scan the QR code with Google Authenticator, enter the code, and
+  **keep the recovery codes** somewhere safe.
+- Hire the manager (and agents) from the dashboard. A new agent is online within a few seconds.
+
+On your phone: open the address, then *Add to Home Screen*. Then bell icon → Automation → Notifications → **This app**
+for push notifications.
+
+### 7. Finish
+
+```bash
+reboot                                              # once, if the setup installed a new kernel; everything restarts itself
+systemctl is-active after-office after-office-agents # both "active"
+```
+
+Back up `/etc/after-office.env` together with `/opt/after-office/apps/server/data` (the database). The two-factor
+secret and the notification tokens are encrypted with that file's `SESSION_SECRET`: one without the other is useless.
+
+### Updates
+
+Push from your machine, then on the VPS:
+
+```bash
+bash /opt/after-office/deploy/update.sh
+```
+
+That pulls, builds and restarts the dashboard. Agents keep running.
+
+When an update changes the server setup (it lists files in `deploy/`), apply it once:
+
+```bash
+git -C ~/after-office pull
+```
+
+Then run the setup again with the options you used. It's safe to re-run: the code, login, data and token stay. It
+restarts the agents' service, so do it when they're idle.
+
+### When something's off
+
+| What you see | Look at | Usual cause, fix |
+|---|---|---|
+| The page times out | on your device: `tailscale ping 100.x.y.z` | ping answers but the page doesn't: the tailnet access rules (step 4) |
+| The page times out (domain) | `systemctl is-active caddy` and `journalctl -u caddy -n 40 --no-pager` | Caddy failed: run the setup again after fixing what the log says (DNS, token) |
+| Certificate error right after setup | wait 1–2 minutes | the first certificate is still being issued |
+| An agent stays offline | `sudo -u office-agent tmux -S /run/after-office/tmux.sock ls`, then `… capture-pane -p -t ao-<name>` | its session exits at once: the screen says why (not logged in: step 5) |
+| An agent's chat is empty | `sudo -u office-agent chmod -R g+rX /home/office-agent/.claude/projects` | its transcript was written unreadable to the dashboard (fixed on its own after an update) |
+| SSH locked out after enabling the firewall | the provider's console | the firewall allows the port sshd listens on; a port changed after the setup needs `ufw allow <port>/tcp` |
+| The domain still open to the internet (public access) | `cat /var/lib/after-office-access/out/status.json` | close it as root: `after-office-access off-now` |
+| Lost phone and recovery codes | `sudo -iu office sh -c 'cd /opt/after-office/apps/server && ~/.bun/bin/bun run auth:reset-2fa'` | the next sign-in sets two-factor up again |
+| Forgot the password | `OFFICE_ENV_FILE=/etc/after-office.env /home/office/.bun/bin/bun /opt/after-office/apps/server/src/setup-auth.ts && systemctl restart after-office` | sets a new one (as root) |
+
+Skipped the deploy key (typed "skip") or ran the setup without a terminal? Add the key later
+(`cat /home/office/.ssh/github_deploy.pub`), then:
+
+```bash
+bash ~/after-office/deploy/update.sh --init git@github.com:<you>/after-office.git
+```
+
+Then create the login with the "Forgot the password" line above.
 
 ## Requirements
 
@@ -166,6 +308,19 @@ Options and tips:
   - `https://after-office.<tailnet>.ts.net` stops answering (Caddy takes 443 over). Web push: turn notifications on
     again from the app opened on the new address (a new address is a new app to the browser).
   - Back to the `.ts.net` name: run the setup again without `--domain`.
+  - **Public access for a while**, from the dashboard: Automation → Security → **Public access**. It asks for your
+    two-factor code and how long (1 hour, 4 hours, 1 day, or until a time; at most 7 days). Then:
+    - the server opens 80/443 and the preview ports;
+    - the A record points at its public IP, so the domain opens from any device without Tailscale;
+    - at the end it points back at the Tailscale IP and closes the ports again.
+
+    Tailscale keeps working throughout, and SSH is never touched. Every change is a report and a security notification;
+    a badge in the navbar shows it's on (click to close it now).
+
+    How it works: the dashboard has no root, so it only leaves a request in `/var/lib/after-office-access/in/`. A root
+    helper, `/usr/local/sbin/after-office-access`, run by `after-office-access.path`, carries it out: only "on until …",
+    "off" and "status" exist. `after-office-access.timer` closes it at its time, also when the dashboard is down.
+    Close it by hand as root: `after-office-access off-now`. Re-running the setup leaves it closed.
 - **Share with someone else:** use *Share* on the machine in the admin console. They still need the dashboard login.
 - **Switching:** you can switch from a public domain setup to Tailscale (or back) by running the script again with the other option.
 - **Why Tailscale and not WireGuard by hand:** Tailscale *is* WireGuard, with the key exchange, NAT traversal, device list and HTTPS certificates handled for you.

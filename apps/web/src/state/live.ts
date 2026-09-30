@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useActivityLive } from './activity'
 import { create } from 'zustand'
-import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, WorkState, Workspace, GitCommit } from '@after-office/shared'
+import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, WorkState, Workspace, GitCommit } from '@after-office/shared'
 import { api, useAuth } from './auth'
 import { mergeServer, useDashboard, ymd } from './dashboard'
 import { useOffice } from './store'
@@ -28,9 +28,10 @@ interface LiveStore {
   automation: AutomationStatus
   /** Boss mode: the manager works without approvals until then (null: off) */
   bossMode: BossMode | null
+  publicAccess: PublicAccess
 }
 
-export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null }))
+export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null, publicAccess: { supported: false, public: false } }))
 
 /** Task timelines, loaded per task when one is opened (useTaskComments) and kept current by the SSE stream. */
 export const useComments = create<{ byTask: Record<string, TaskComment[]> }>(() => ({ byTask: {} }))
@@ -52,6 +53,7 @@ function applyWork(work: Partial<WorkState>) {
   if (work.settings) useLive.setState({ settings: work.settings })
   if (work.automation) useLive.setState({ automation: work.automation })
   if (work.bossMode !== undefined) useLive.setState({ bossMode: work.bossMode })
+  if (work.publicAccess) useLive.setState({ publicAccess: work.publicAccess })
 }
 
 const BRIEFING_MS = 8000
@@ -345,6 +347,8 @@ export const liveApi = {
   /** Turn Boss mode on: the authenticator code, how long, and whether the tasks waiting for approval start too. */
   startBossMode: (body: { code: string; hours?: number; until?: number; runWaiting?: boolean }) => call('/api/boss-mode', body) as Promise<{ until: number; started: number }>,
   stopBossMode: () => call('/api/boss-mode', undefined, 'DELETE'),
+  startPublicAccess: (body: { code: string; hours?: number; until?: number }) => call('/api/public-access', body) as Promise<PublicAccess>,
+  stopPublicAccess: () => call('/api/public-access', undefined, 'DELETE') as Promise<PublicAccess & { warning?: string }>,
   testNotifications: () => call('/api/automation/test', {}) as Promise<{ results: { channel: string; ok: boolean; error?: string }[] }>,
   workspaces: async (fresh = false): Promise<Workspace[]> => {
     const res = await api(`/api/workspaces${fresh ? '?fresh=1' : ''}`)

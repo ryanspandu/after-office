@@ -33,6 +33,8 @@ UMask=0077
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/opt/after-office/apps/server/data /home/office-agent/agents /home/office-agent/projects
+# requests for public access on/off (deploy/after-office-access runs them as root); "-": only on servers that have it
+ReadWritePaths=-/var/lib/after-office-access/in
 PrivateTmp=true
 PrivateDevices=true
 ProtectKernelTunables=true

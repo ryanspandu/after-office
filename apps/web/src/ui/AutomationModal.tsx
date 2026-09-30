@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BossModeSwitch } from './BossMode'
+import { PublicAccessSwitch } from './PublicAccess'
 import { NotifyChannels } from './NotifyChannels'
 import { LuBell, LuBellRing, LuCircleCheck, LuCircleX, LuSend, LuUserRound } from 'react-icons/lu'
 import { useProfileModal } from './ProfileModal'
@@ -230,6 +231,7 @@ export function AutomationModal() {
         </section>
         <section className="automation__section">
           <h4>Security</h4>
+          <PublicAccessSwitch />
           <div className="automation__signout">
             <span className="field__hint">Signed-in devices, sign-in history and signing devices out are in your profile.</span>
             <button

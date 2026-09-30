@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# Public access to the dashboard, on or off, for a server set up with --tailscale --domain … --dns cloudflare.
+# Installed by setup-vps.sh as /usr/local/sbin/after-office-access (root). Run by systemd only:
+#   after-office-access.path   when the dashboard leaves a request in $DIR/in/request
+#   after-office-access.timer  every minute: turns public access off once its time is up (also when the dashboard is down)
+# The dashboard never gets root: it can only ask for exactly these, and reads the answer in $DIR/out/status.json.
+#
+#   on <until, epoch ms> <id>   open 80/443 and the preview ports; the A record -> the server's public IPv4
+#   off <id>                    the A record -> the Tailscale IP; close those ports
+#   status <id>                 just write the status
+# Tailscale stays on either way (a way in that doesn't depend on any of this), and SSH is never touched.
+# By hand, as root:  after-office-access off-now   (e.g. from the provider's console)
+set -euo pipefail
+umask 077
+
+# the ACCESS_TEST_* overrides are for testing this script elsewhere (systemd never sets them)
+DIR=${ACCESS_TEST_DIR:-/var/lib/after-office-access}
+CONF=${ACCESS_TEST_CONF:-/etc/after-office/access.conf}
+CF_ENV=${ACCESS_TEST_CF_ENV:-/etc/caddy/cloudflare.env}
+APP_GROUP=${ACCESS_TEST_GROUP:-office}
+IN=$DIR/in/request
+OUT=$DIR/out
+STATE=$DIR/state
+
+conf() { sed -n "s/^$1=//p" "$CONF" 2>/dev/null | head -1; }
+DOMAIN=$(conf DOMAIN)
+PORTS=$(conf PORTS)
+[[ "$DOMAIN" =~ ^[a-zA-Z0-9.-]+$ ]] || DOMAIN=''
+[[ "$PORTS" =~ ^[0-9\ ]*$ ]] || PORTS=''
+
+PUBLIC=0 UNTIL=0 SINCE=0
+if [ -f "$STATE" ]; then
+  PUBLIC=$(sed -n 's/^PUBLIC=//p' "$STATE"); UNTIL=$(sed -n 's/^UNTIL=//p' "$STATE"); SINCE=$(sed -n 's/^SINCE=//p' "$STATE")
+  [[ "$PUBLIC" =~ ^[01]$ ]] || PUBLIC=0; [[ "$UNTIL" =~ ^[0-9]+$ ]] || UNTIL=0; [[ "$SINCE" =~ ^[0-9]+$ ]] || SINCE=0
+fi
+ID='' REASON='' ERROR=''
+now_ms() { echo $(($(date +%s) * 1000)); }
+
+save_state() { printf 'PUBLIC=%s\nUNTIL=%s\nSINCE=%s\n' "$PUBLIC" "$UNTIL" "$SINCE" > "$STATE"; }
+
+public_ip() {
+  local ip
+  ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit }}')
+  case "$ip" in '' | 10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[01].* | 100.*) return 1 ;; esac
+  echo "$ip"
+}
+tailnet_ip() { tailscale ip -4 2>/dev/null | head -1; }
+
+# the A record, through the Cloudflare token setup-vps.sh stored (it goes to curl in a file, not on a command line)
+set_record() {
+  local ip=$1 token hdr zone='' name=$DOMAIN rec body out
+  token=$(sed -n 's/^CF_API_TOKEN=//p' "$CF_ENV" 2>/dev/null)
+  [ -n "$token" ] || { ERROR="No Cloudflare token ($CF_ENV): run setup-vps.sh again"; return 1; }
+  hdr=$(mktemp)
+  printf 'Authorization: Bearer %s\n' "$token" > "$hdr"
+  cf() { curl -sS -m 20 -H @"$hdr" -H 'Content-Type: application/json' "https://api.cloudflare.com/client/v4/$1" "${@:2}"; }
+  first_id() { python3 -c 'import json,sys; r=json.load(sys.stdin).get("result") or []; print(r[0]["id"] if r else "")' 2>/dev/null; }
+  while [ -z "$zone" ] && [ "${name#*.}" != "$name" ]; do
+    zone=$(cf "zones?name=$name" | first_id || true)
+    name=${name#*.}
+  done
+  if [ -z "$zone" ]; then rm -f "$hdr"; ERROR="The Cloudflare token can't see the zone of $DOMAIN"; return 1; fi
+  rec=$(cf "zones/$zone/dns_records?type=A&name=$DOMAIN" | first_id || true)
+  body=$(printf '{"type":"A","name":"%s","content":"%s","ttl":60,"proxied":false,"comment":"After Office"}' "$DOMAIN" "$ip")
+  if [ -n "$rec" ]; then out=$(cf "zones/$zone/dns_records/$rec" -X PUT --data "$body"); else out=$(cf "zones/$zone/dns_records" -X POST --data "$body"); fi
+  rm -f "$hdr"
+  if ! printf '%s' "$out" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("success") else 1)' 2>/dev/null; then
+    ERROR="Cloudflare didn't accept the A record change"
+    return 1
+  fi
+}
+
+open_ports() { for p in 80 443 $PORTS; do ufw allow "$p/tcp" comment 'After Office public access' >/dev/null; done; }
+close_ports() { for p in 80 443 $PORTS; do ufw delete allow "$p/tcp" >/dev/null 2>&1 || true; done; }
+
+turn_on() {
+  local until=$1 ip
+  ip=$(public_ip) || { ERROR="This server has no public IPv4 address"; return 1; }
+  # the ports first, then the name: nobody is sent to a closed door
+  open_ports
+  if ! set_record "$ip"; then close_ports; return 1; fi
+  [ "$PUBLIC" = 1 ] || SINCE=$(now_ms)
+  PUBLIC=1 UNTIL=$until
+  save_state
+}
+
+turn_off() {
+  local ip
+  ip=$(tailnet_ip)
+  # the name first, then the ports. Even if Cloudflare can't be reached, the ports close: off means off.
+  if [ -n "$ip" ]; then set_record "$ip" || true; else ERROR="Tailscale isn't up: the A record still points at the public IP"; fi
+  close_ports
+  PUBLIC=0 UNTIL=0
+  save_state
+}
+
+write_status() {
+  local tmp
+  tmp=$(mktemp "$OUT/.status.XXXXXX")
+  STATUS_DOMAIN=$DOMAIN STATUS_PUBLIC=$PUBLIC STATUS_SINCE=$SINCE STATUS_UNTIL=$UNTIL STATUS_ID=$ID STATUS_REASON=$REASON \
+    STATUS_ERROR=$ERROR STATUS_AT=$(now_ms) python3 -c '
+import json, os, sys
+e = os.environ
+json.dump({
+  "supported": bool(e["STATUS_DOMAIN"]),
+  "domain": e["STATUS_DOMAIN"] or None,
+  "public": e["STATUS_PUBLIC"] == "1",
+  "since": int(e["STATUS_SINCE"]) or None,
+  "until": int(e["STATUS_UNTIL"]) or None,
+  "id": e["STATUS_ID"] or None,
+  "reason": e["STATUS_REASON"] or None,
+  "error": e["STATUS_ERROR"] or None,
+  "at": int(e["STATUS_AT"]),
+}, open(sys.argv[1], "w"))' "$tmp"
+  chgrp "$APP_GROUP" "$tmp"
+  chmod 640 "$tmp"
+  mv -f "$tmp" "$OUT/status.json"
+}
+
+handle() {
+  local req=$1 action until
+  if [[ "$req" =~ ^on\ ([0-9]{10,13})\ ([0-9a-f-]{36})$ ]]; then
+    action=on until=${BASH_REMATCH[1]} ID=${BASH_REMATCH[2]}
+  elif [[ "$req" =~ ^(off|status)\ ([0-9a-f-]{36})$ ]]; then
+    action=${BASH_REMATCH[1]} ID=${BASH_REMATCH[2]}
+  else
+    ERROR='Unknown request'; return
+  fi
+  if [ -z "$DOMAIN" ]; then ERROR='Public access needs setup-vps.sh --tailscale --domain … --dns cloudflare'; return; fi
+  case "$action" in
+    on)
+      local now max
+      now=$(now_ms); max=$((now + 7 * 24 * 3600 * 1000))
+      if [ "$until" -le "$((now + 60000))" ] || [ "$until" -gt "$max" ]; then ERROR='Pick an end between a minute and 7 days from now'; return; fi
+      turn_on "$until" || true ;;
+    off) REASON=owner; turn_off ;;
+    status) ;;
+  esac
+}
+
+case "${1:-run}" in
+  off-now)
+    REASON=owner
+    if [ -n "$DOMAIN" ]; then turn_off; fi
+    write_status
+    exit 0 ;;
+  run) ;;
+  *) echo "usage: after-office-access [run | off-now]" >&2; exit 2 ;;
+esac
+
+# its time is up: off (the timer runs this every minute)
+if [ "$PUBLIC" = 1 ] && [ "$UNTIL" -le "$(now_ms)" ]; then
+  REASON=expired
+  turn_off
+  write_status
+  REASON=''
+fi
+
+# the dashboard's requests. The folder is writable by the dashboard's group: only a plain file is read (never a link),
+# at most one line, matched against the forms above and never echoed back.
+# a link there is removed unread (a request written through it would land somewhere else)
+if [ -L "$IN" ]; then rm -f "$IN"; fi
+while [ -f "$IN" ] && [ ! -L "$IN" ]; do
+  req=$(head -c 200 "$IN" | head -1 | tr -d '\r')
+  rm -f "$IN"
+  ID='' ERROR=''
+  handle "$req"
+  write_status
+done
+[ -f "$OUT/status.json" ] || write_status

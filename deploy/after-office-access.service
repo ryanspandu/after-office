@@ -1,0 +1,9 @@
+# Public access on/off (deploy/after-office-access): run by the .path unit on the dashboard's request, and by the timer
+# every minute (turns it off once its time is up, whether or not the dashboard runs).
+[Unit]
+Description=After Office public access (on/off, on the dashboard's request)
+After=network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/after-office-access run

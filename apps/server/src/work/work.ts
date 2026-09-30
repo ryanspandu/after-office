@@ -18,6 +18,7 @@ import { checkFor, runGate } from './gate'
 import { restoreApprovals } from './managerTasks'
 import { tickCrons } from './crons'
 import { endBossMode } from './bossMode'
+import { publicAccess, watchPublicAccess } from './publicAccess'
 
 
 // Tasks, cron jobs and the prompt queue. Handing work to an agent is just typing a prompt into its session; if the
@@ -50,6 +51,7 @@ export function workState(): WorkState {
     automation: { channels: channelNames(), quotaPaused: quotaPause() },
     tags: listTags(),
     bossMode: ((b) => (b ? { since: b.since, until: b.until } : null))(bossMode()),
+    publicAccess: publicAccess(),
   }
 }
 
@@ -512,6 +514,8 @@ export async function tickTasks(now = Date.now()) {
   // Boss mode ends on its own at the time the owner picked
   const boss = bossModeState()
   if (boss && boss.until <= now) endBossMode('expired')
+  // public access: the root helper ends it at its time; tell the dashboards (and the owner) when it did
+  watchPublicAccess()
   // done tasks age into the archive on their own: tell the dashboards when that happens
   const archived = tasksRepo.archivedCount()
   if (archived !== lastArchived) {
@@ -649,3 +653,4 @@ export * from './managerTasks'
 export * from './reports'
 export * from './crons'
 export * from './bossMode'
+export * from './publicAccess'

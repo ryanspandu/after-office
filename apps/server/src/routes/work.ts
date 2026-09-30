@@ -12,7 +12,7 @@ import { updateSettings } from '../work/settings'
 import { cleanTagIds, deleteTag, putTag } from '../work/tags'
 import { listPreviews } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
-import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, startBossMode, startTask, tickTasks } from '../work/work'
+import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 
 // /api routes for tasks, projects, cron jobs and settings (live mode). Every change is pushed to all dashboards.
@@ -388,6 +388,19 @@ workRoutes.post('/boss-mode', async (c) => {
   return c.json(await startBossMode(until, body?.runWaiting === true))
 })
 workRoutes.delete('/boss-mode', (c) => c.json({ ok: endBossMode('owner') }))
+
+// Public access: the dashboard on the open internet until a time the owner picks (Tailscale stays on). Only with the
+// authenticator code typed just now, like Boss mode; turning it off needs nothing.
+workRoutes.post('/public-access', async (c) => {
+  const body = await c.req.json<{ code?: unknown; hours?: unknown; until?: unknown }>().catch(() => null)
+  const hours = Number(body?.hours)
+  const until = typeof body?.until === 'number' ? body.until : [1, 4, 24].includes(hours) ? Date.now() + hours * 3_600_000 : NaN
+  if (!Number.isFinite(until)) throw new AgentError('Pick how long: 1, 4 or 24 hours, or an end time')
+  const refused = requireFreshCode(c, body?.code)
+  if (refused) return refused
+  return c.json(await startPublicAccess(until))
+})
+workRoutes.delete('/public-access', async (c) => c.json(await stopPublicAccess()))
 
 workRoutes.put('/automation', async (c) => {
   updateSettings(await c.req.json())

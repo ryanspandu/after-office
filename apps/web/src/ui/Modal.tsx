@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { usePresence } from '../state/usePresence'
+import { MOBILE } from '../state/useMediaQuery'
 import { LuX } from 'react-icons/lu'
 
 interface Props {
@@ -73,13 +74,51 @@ export function Modal({ open, title, description, onClose, children, width = 460
     return () => ro.disconnect()
   })
 
+  // phones: a bottom sheet (styles/sheet.css). Dragging the handle or the header down follows the finger; let go past
+  // a third of its height (or with a quick flick) and it closes, otherwise it springs back.
+  const card = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ y: number; t: number; id: number } | null>(null)
+  const onDragStart = (e: React.PointerEvent) => {
+    if (!window.matchMedia(MOBILE).matches || e.button !== 0) return
+    // the header's own buttons stay buttons
+    if ((e.target as HTMLElement).closest('button, a, input, select, textarea')) return
+    drag.current = { y: e.clientY, t: performance.now(), id: e.pointerId }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    card.current?.classList.add('is-dragging')
+  }
+  const onDragMove = (e: React.PointerEvent) => {
+    const d = drag.current
+    if (!d || d.id !== e.pointerId || !card.current) return
+    const dy = Math.max(0, e.clientY - d.y)
+    card.current.style.transform = dy ? `translateY(${dy}px)` : ''
+  }
+  const onDragEnd = (e: React.PointerEvent) => {
+    const d = drag.current
+    const el = card.current
+    if (!d || d.id !== e.pointerId || !el) return
+    drag.current = null
+    el.classList.remove('is-dragging')
+    const dy = Math.max(0, e.clientY - d.y)
+    const speed = dy / Math.max(1, performance.now() - d.t)
+    if (dy > el.offsetHeight / 3 || (dy > 40 && speed > 0.6)) {
+      onClose()
+      return
+    }
+    el.classList.add('is-settling')
+    el.style.transform = ''
+    setTimeout(() => el.classList.remove('is-settling'), 220)
+  }
+  const dragProps = { onPointerDown: onDragStart, onPointerMove: onDragMove, onPointerUp: onDragEnd, onPointerCancel: onDragEnd }
+
   // stays mounted briefly after closing so it can animate out
   const { mounted, closing } = usePresence(open, 180)
   if (!mounted) return null
   return createPortal(
     <div ref={setBackdrop} className={`modal-backdrop${closing ? ' modal-backdrop--closing' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} style={{ width: `min(${width}px, 100%)` }}>
-        <header className="modal__head">
+      <div ref={card} className={`modal${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} style={{ width: `min(${width}px, 100%)` }}>
+        {/* phones: the grab handle of the bottom sheet (hidden on larger screens) */}
+        <div className="modal__grab" aria-hidden="true" {...dragProps} />
+        <header className="modal__head" {...dragProps}>
           <div>
             <h3>{title}</h3>
             {description && <p className="muted">{description}</p>}
