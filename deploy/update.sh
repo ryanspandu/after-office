@@ -40,9 +40,11 @@ warn() { printf '\033[33m    ! %s\033[0m\n' "$1"; }
 id "$APP_USER" >/dev/null 2>&1 || { echo "No '$APP_USER' user: run deploy/setup-vps.sh on this server first." >&2; exit 1; }
 [ -x "$BUN" ] || { echo "Bun isn't installed for $APP_USER ($BUN): run deploy/setup-vps.sh first." >&2; exit 1; }
 
-# git, bun and the build run as the dashboard user (the checkout is theirs; agents can't read it)
+# git, bun and the build run as the dashboard user (the checkout is theirs; agents can't read it). Bun's folder goes on
+# PATH: the build's own scripts call `bun` by name, and sudo's PATH doesn't have ~/.bun/bin.
+BUN_PATH="$(dirname "$BUN"):$PATH"
 as_app() {
-  if [ "$(id -un)" = "$APP_USER" ]; then bash -c "$1"; else sudo -u "$APP_USER" -H bash -c "cd '$APP_DIR' && $1"; fi
+  if [ "$(id -un)" = "$APP_USER" ]; then PATH="$BUN_PATH" bash -c "$1"; else sudo -u "$APP_USER" -H env PATH="$BUN_PATH" bash -c "cd '$APP_DIR' && $1"; fi
 }
 if [ "$(id -un)" != "$APP_USER" ] && [ "$(id -u)" != 0 ]; then
   echo "Run this as root (sudo) or as $APP_USER." >&2

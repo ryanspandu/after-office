@@ -444,7 +444,9 @@ if [ -n "$REPO" ] && [ ! -d "$APP_DIR/.git" ]; then
     fi
   fi
   if can_read; then
-    bash "$HERE/update.sh" --init "$REPO" ${BRANCH:+--branch "$BRANCH"}
+    if ! bash "$HERE/update.sh" --init "$REPO" ${BRANCH:+--branch "$BRANCH"}; then
+      echo "    ! The code is checked out, but the build or start failed (see above). After fixing it: bash $HERE/update.sh --force"
+    fi
   else
     echo "    ! Can't read $REPO as $APP_USER yet. Once it can: bash $HERE/update.sh --init $REPO"
     if [ -n "$GH_HOST" ]; then echo "      (its deploy key: cat /home/$APP_USER/.ssh/github_deploy.pub)"; fi
