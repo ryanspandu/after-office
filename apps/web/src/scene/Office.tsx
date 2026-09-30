@@ -26,6 +26,9 @@ export function Office() {
   const layout = useLayout()
   const { advanced, dpr, setDpr, setTier } = useQuality()
   const cfg = useRenderConfig()
+  // fewer frames while nobody's looking: the window in the background, or untouched for a while
+  const fps = usePace(cfg.fps)
+  const throttled = fps < cfg.fps
   // The first seconds are always slow (shaders compile, the scene is built): judging the device then would lower
   // the resolution and drop to the low tier on almost every visit, a visible glitch. Start measuring once it settled.
   const [warm, setWarm] = useState(false)
@@ -51,7 +54,8 @@ export function Office() {
       orthographic
       shadows
       dpr={dpr}
-      frameloop={cfg.fps ? 'demand' : 'always'}
+      // frames on demand, paced by FrameCap (never every frame of a 120 Hz display)
+      frameloop="demand"
       camera={{ position: [22, 20, 22], zoom: 38, near: -100, far: 200 }}
       onPointerMissed={() => select(null)}
       onCreated={(state) => {
@@ -67,11 +71,12 @@ export function Office() {
           ratio clears the canvas (a visible flicker), so no ping-pong. 1) sustained slow frames: lowest pixel ratio of
           the tier; 2) still slow: the low tier (no real lights, no shadows, 30 fps). Both are remembered for the next
           visit (quality.ts), which then starts there instead of changing on screen. */}
-      {warm && (
+      {/* judged against the frame cap (not the display's rate), and only while it runs at full pace */}
+      {warm && !throttled && (
         <PerformanceMonitor
           ms={500}
           iterations={10}
-          bounds={(refresh) => (refresh > 90 ? [50, 200] : [40, 200])}
+          bounds={() => [cfg.fps * 0.7, cfg.fps * 2 + 10]}
           onDecline={() => {
             if (document.visibilityState !== 'visible') return
             if (dpr > cfg.dpr[0]) setDpr(cfg.dpr[0])
@@ -79,7 +84,7 @@ export function Office() {
           }}
         />
       )}
-      {cfg.fps > 0 && <FrameCap fps={cfg.fps} />}
+      <FrameCap fps={fps} />
       <DayNight layout={layout} />
       <FitCamera layout={layout} />
       <MapControls makeDefault enableRotate={false} minZoom={4} maxZoom={120} screenSpacePanning={false} target={center(layout)} />
@@ -144,12 +149,52 @@ function FitCamera({ layout }: { layout: Layout }) {
   return null
 }
 
-/** Low tier: render at most `fps` frames a second (the canvas runs on demand; this asks for frames). */
+/** Render at most `fps` frames a second (the canvas runs on demand; this asks for frames). 0: none. */
 function FrameCap({ fps }: { fps: number }) {
   const invalidate = useThree((s) => s.invalidate)
   useEffect(() => {
+    if (!fps) return
     const id = setInterval(() => invalidate(), 1000 / fps)
     return () => clearInterval(id)
   }, [fps, invalidate])
   return null
+}
+
+/** Frames per second while the window isn't focused, and after IDLE_MS without a touch, key or mouse move. */
+const UNFOCUSED_FPS = 8
+const IDLE_FPS = 15
+const IDLE_MS = 2 * 60_000
+
+/**
+ * The frame rate to run at: the tier's cap while someone's using the dashboard; fewer frames with the window in the
+ * background or nobody touching it for a while; none while it's hidden. Back to full pace on the next move.
+ */
+function usePace(cap: number) {
+  const [state, setState] = useState<'active' | 'idle' | 'unfocused' | 'hidden'>('active')
+  useEffect(() => {
+    let last = Date.now()
+    const judge = () =>
+      setState(
+        document.visibilityState !== 'visible' ? 'hidden' : !document.hasFocus() ? 'unfocused' : Date.now() - last > IDLE_MS ? 'idle' : 'active',
+      )
+    const touched = () => {
+      last = Date.now()
+      setState((s) => (s === 'idle' ? 'active' : s))
+    }
+    const events = ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart'] as const
+    for (const e of events) window.addEventListener(e, touched, { passive: true })
+    window.addEventListener('focus', judge)
+    window.addEventListener('blur', judge)
+    document.addEventListener('visibilitychange', judge)
+    const id = setInterval(judge, 5_000)
+    judge()
+    return () => {
+      for (const e of events) window.removeEventListener(e, touched)
+      window.removeEventListener('focus', judge)
+      window.removeEventListener('blur', judge)
+      document.removeEventListener('visibilitychange', judge)
+      clearInterval(id)
+    }
+  }, [])
+  return state === 'hidden' ? 0 : state === 'unfocused' ? Math.min(cap, UNFOCUSED_FPS) : state === 'idle' ? Math.min(cap, IDLE_FPS) : cap
 }

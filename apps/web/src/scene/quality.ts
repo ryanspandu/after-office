@@ -18,15 +18,16 @@ export interface TierConfig {
   shadowMap: number
   /** device pixel ratio range; PerformanceMonitor moves within it */
   dpr: [number, number]
-  /** frame cap; 0 = every display frame */
+  /** frame cap: the office never needs a 120 Hz display's every frame (and drawing them heats a laptop up) */
   fps: number
   /** extra night ambience to make up for fewer real lights */
   nightBoost: number
 }
 
 export const TIERS: Record<Tier | 'advanced', TierConfig> = {
-  advanced: { deskLights: 12, fixedLights: 'all', shadowMap: 4096, dpr: [1, 2], fps: 0, nightBoost: 0 },
-  high: { deskLights: 4, fixedLights: 'key', shadowMap: 2048, dpr: [1, 2], fps: 0, nightBoost: 0.25 },
+  advanced: { deskLights: 12, fixedLights: 'all', shadowMap: 4096, dpr: [1, 2], fps: 60, nightBoost: 0 },
+  // at most 1.5× pixels on a Retina screen: hardly different to look at, less than half the pixels of 2×
+  high: { deskLights: 4, fixedLights: 'key', shadowMap: 2048, dpr: [1, 1.5], fps: 45, nightBoost: 0.25 },
   low: { deskLights: 0, fixedLights: 'none', shadowMap: 0, dpr: [1, 1.5], fps: 30, nightBoost: 0.4 },
 }
 

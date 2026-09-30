@@ -17,11 +17,18 @@ export function placeLabel(id: string, world: Vector3, camera: Camera, width: nu
   v.copy(world).project(camera)
   const x = (v.x * 0.5 + 0.5) * width
   const y = (-v.y * 0.5 + 0.5) * height
-  el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -100%)`
+  // written only when it moved: a style write each frame for every tag keeps the browser re-laying out the page
+  const transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -100%)`
   // keep nearer (lower on screen) labels on top; the selected agent's tag above everything
-  el.style.zIndex = el.classList.contains('tag--selected') ? '100000' : String(Math.round(y))
+  const z = el.classList.contains('tag--selected') ? '100000' : String(Math.round(y))
+  const was = placed.get(el)
+  if (!was || was.transform !== transform) el.style.transform = transform
+  if (!was || was.z !== z) el.style.zIndex = z
+  placed.set(el, { transform, z })
   return el
 }
+/** what each tag was last set to (so an unchanged one isn't written again) */
+const placed = new WeakMap<HTMLElement, { transform: string; z: string }>()
 
 function useRegister(id: string) {
   return useCallback(

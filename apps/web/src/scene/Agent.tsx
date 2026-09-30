@@ -279,10 +279,13 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
     const tagAt: Vec2 = shown ? n.pos : c.pos
     const tag = placeLabel(agent.id, anchor.set(tagAt[0], shown ? 2.0 + j.rootY : 1.9, tagAt[1]), camera, size.width, size.height)
     if (tag) {
-      tag.style.opacity = n.phase === 'gone' ? '0' : leaving ? '0.6' : '1'
+      // only what changed is written (every write makes the browser redo the page's layout)
+      const opacity = n.phase === 'gone' ? '0' : leaving ? '0.6' : '1'
+      if (tag.style.opacity !== opacity) tag.style.opacity = opacity
       if (tag.dataset.pose !== pose) tag.dataset.pose = pose
       const bubble = tag.firstElementChild as HTMLElement
-      bubble.style.translate = `0 ${pose === 'wait' ? Math.sin(t * 8) * 3 : 0}px`
+      const bob = `0 ${pose === 'wait' ? (Math.sin(t * 8) * 3).toFixed(1) : 0}px`
+      if (bubble.style.translate !== bob) bubble.style.translate = bob
     }
   })
 

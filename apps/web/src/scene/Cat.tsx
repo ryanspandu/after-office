@@ -107,8 +107,11 @@ export function Cat() {
     const tag = placeLabel('cat', anchor.current.set(c.pos[0], 0.75, c.pos[1]), camera, size.width, size.height)
     const hearts = tag?.firstElementChild as HTMLElement | null
     if (hearts) {
-      hearts.style.opacity = petting && !walking ? '1' : '0'
-      hearts.style.transform = `translateY(${-((t * 12) % 14)}px)`
+      // written only when it changes, and the float only while the hearts show
+      const on = petting && !walking
+      const opacity = on ? '1' : '0'
+      if (hearts.style.opacity !== opacity) hearts.style.opacity = opacity
+      if (on) hearts.style.transform = `translateY(${(-((t * 12) % 14)).toFixed(1)}px)`
     }
   })
 
