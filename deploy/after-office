@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# after-office: run the server from one command. Installed by setup-vps.sh as /usr/local/bin/after-office.
+# Run it as root (or with sudo). `after-office help` lists the commands.
+set -euo pipefail
+
+APP_USER=office
+AGENT_USER=office-agent
+APP_DIR=/opt/after-office
+ENV_FILE=/etc/after-office.env
+SETUP_ARGS=/etc/after-office/setup.args
+TMUX_SOCK=/run/after-office/tmux.sock
+ACCESS_DIR=/var/lib/after-office-access
+BUN=/home/$APP_USER/.bun/bin/bun
+
+bold() { printf '\033[1m%s\033[0m\n' "$1"; }
+ok() { printf '  \033[32m●\033[0m %s\n' "$1"; }
+bad() { printf '  \033[31m●\033[0m %s\n' "$1"; }
+warn() { printf '\033[33m%s\033[0m\n' "$1"; }
+die() { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+after-office: run the After Office server
+
+  status                          services, address, version, agents, public access
+  start | stop | restart [what]   what: dashboard, agents or all (default: dashboard)
+                                  (stopping or restarting the agents ends their sessions; they resume after)
+  update [-y]                     pull from GitHub, build, restart the dashboard (agents keep running);
+                                  if the update changed the server setup, offers to apply it (-y: without asking)
+  setup                           run setup-vps.sh again with the options it was first run with
+  logs [dashboard|agents|caddy]   follow the log (Ctrl+C to stop)
+  agents                          the agents' sessions
+  peek <name> [lines]             what an agent's screen shows right now (read only)
+  public [status|on <time>|off]   public access (a domain on the tailnet): on for 30m, 4h, 1d… (at most 7d)
+  claude-login                    log the agents in to your Claude subscription (then /exit)
+  password                        set a new dashboard password
+  reset-2fa                       lost phone and recovery codes: the next sign-in sets two-factor up again
+  backup                          the database and the secrets into one file in /root
+  help                            this
+EOF
+}
+
+need_root() { [ "$(id -u)" = 0 ] || die "Run it as root: sudo after-office $*"; }
+as_app() { sudo -u "$APP_USER" -H bash -c "cd '$APP_DIR' && $1"; }
+tmux_agents() { sudo -u "$AGENT_USER" tmux -S "$TMUX_SOCK" "$@"; }
+env_value() { sed -n "s/^$1=//p" "$ENV_FILE" 2>/dev/null | tail -1; }
+
+unit_of() {
+  case "${1:-dashboard}" in
+    dashboard) echo after-office ;;
+    agents) echo after-office-agents ;;
+    all) echo after-office-agents after-office ;;
+    *) die "Which one: dashboard, agents or all" ;;
+  esac
+}
+
+cmd_status() {
+  local url ver health s
+  url=$(env_value OFFICE_PUBLIC_URL)
+  bold "After Office${url:+  $url}"
+  for s in after-office after-office-agents caddy tailscaled after-office-access.timer; do
+    # only what this server has (caddy: a domain; the timer: public access), and what's switched on
+    if ! systemctl cat "$s" >/dev/null 2>&1; then continue; fi
+    if [ "$(systemctl is-enabled "$s" 2>/dev/null)" = disabled ] && ! systemctl is-active --quiet "$s"; then continue; fi
+    if systemctl is-active --quiet "$s"; then ok "$s"; else bad "$s ($(systemctl is-active "$s" 2>/dev/null || true))"; fi
+  done
+  health=$(curl -fsS -m 3 http://127.0.0.1:8787/health >/dev/null 2>&1 && echo answering || echo 'not answering')
+  echo "  dashboard: $health"
+  if [ -d "$APP_DIR/.git" ]; then ver=$(as_app "git log -1 --format='%h %s (%cr)'" 2>/dev/null || true); echo "  version: ${ver:-?}"; fi
+  echo "  agents: $(tmux_agents list-sessions -F '#{session_name}' 2>/dev/null | grep -c '^ao-' || true) running"
+  if [ -f "$ACCESS_DIR/out/status.json" ]; then echo "  public access: $(public_line)"; fi
+}
+
+cmd_service() {
+  local action=$1 what=${2:-dashboard} units
+  units=$(unit_of "$what")
+  if [ "$action" != start ] && [[ "$units" == *after-office-agents* ]]; then
+    warn "This ends every agent's session (they resume their conversations when started again)."
+  fi
+  # shellcheck disable=SC2086
+  systemctl "$action" $units
+  echo "$action: $units"
+}
+
+cmd_update() {
+  local yes=${1:-} before after changed tmp
+  [ -d "$APP_DIR/.git" ] || die "$APP_DIR isn't a git checkout (set up with deploy/sync.sh?): nothing to pull"
+  before=$(as_app 'git rev-parse HEAD')
+  # a copy of update.sh runs: the pull may rewrite the file bash is reading
+  tmp=$(mktemp)
+  cp "$APP_DIR/deploy/update.sh" "$tmp"
+  bash "$tmp" || { rm -f "$tmp"; exit 1; }
+  rm -f "$tmp"
+  after=$(as_app 'git rev-parse HEAD')
+  [ "$before" = "$after" ] && return 0
+  changed=$(as_app "git diff --name-only $before $after -- deploy/" | grep -v '^deploy/update\.sh$' || true)
+  [ -n "$changed" ] || return 0
+  echo
+  warn "This update changed the server setup:"
+  printf '%s\n' "$changed" | sed 's/^/  /'
+  if [ "$yes" != -y ]; then
+    if [ ! -t 0 ]; then warn "Apply it with: after-office setup"; return 0; fi
+    read -r -p "Apply it now (runs the setup again; the agents' sessions restart)? [y/N] " answer
+    case "$answer" in y | Y | yes) ;; *) warn "Later: after-office setup"; return 0 ;; esac
+  fi
+  cmd_setup
+}
+
+cmd_setup() {
+  [ -f "$SETUP_ARGS" ] || die "No saved setup options ($SETUP_ARGS): run setup-vps.sh by hand once with your options"
+  local args
+  args=$(cat "$SETUP_ARGS")
+  bold "setup-vps.sh $args"
+  # the options were saved quoted (printf %q) by setup-vps.sh itself
+  eval "set -- $args"
+  bash "$APP_DIR/deploy/setup-vps.sh" "$@"
+}
+
+cmd_logs() {
+  local units
+  case "${1:-dashboard}" in
+    dashboard) units=(-u after-office) ;;
+    agents) units=(-u after-office-agents) ;;
+    caddy) units=(-u caddy) ;;
+    *) die "Which one: dashboard, agents or caddy" ;;
+  esac
+  journalctl "${units[@]}" -n 100 -f
+}
+
+cmd_agents() {
+  local list
+  list=$(tmux_agents list-sessions -F '#{session_name}|#{t:session_created}|#{pane_dead}' 2>/dev/null | grep '^ao-' || true)
+  if [ -z "$list" ]; then echo "No agent sessions running."; return; fi
+  printf '%-22s %-26s %s\n' SESSION STARTED STATE
+  printf '%s\n' "$list" | while IFS='|' read -r name created dead; do
+    printf '%-22s %-26s %s\n' "$name" "$created" "$([ "$dead" = 1 ] && echo exited || echo running)"
+  done
+  echo
+  echo "What one shows:  after-office peek <name>"
+}
+
+cmd_peek() {
+  local name=${1:-} lines=${2:-40}
+  [ -n "$name" ] || die "Which agent: after-office peek <name> (after-office agents lists them)"
+  [[ "$lines" =~ ^[0-9]+$ ]] || die "Lines: a number"
+  name=${name#ao-}
+  [[ "$name" =~ ^[a-z0-9-]+$ ]] || die "An agent's name: letters, digits and -"
+  # the screen without its empty bottom rows
+  tmux_agents capture-pane -p -t "=ao-$name:" | awk 'NF { last = NR } { row[NR] = $0 } END { for (i = 1; i <= last; i++) print row[i] }' | tail -n "$lines"
+}
+
+public_line() {
+  python3 - "$ACCESS_DIR/out/status.json" <<'PY'
+import json, sys, time
+try:
+    s = json.load(open(sys.argv[1]))
+except Exception:
+    print("unknown"); sys.exit()
+if not s.get("supported"):
+    print("not available here (needs --tailscale --domain … --dns cloudflare)"); sys.exit()
+if s.get("public"):
+    until = s.get("until")
+    print(f"ON: {s.get('domain')} open to the internet until " + (time.strftime('%a %d %b %H:%M', time.localtime(until / 1000)) if until else "?"))
+else:
+    print(f"off: {s.get('domain')} on the tailnet only")
+if s.get("error"):
+    print(f"  last error: {s['error']}")
+PY
+}
+
+cmd_public() {
+  local what=${1:-status} dur=${2:-} secs until id
+  [ -d "$ACCESS_DIR/in" ] || die "Public access needs a domain on the tailnet: setup-vps.sh --tailscale --domain … --dns cloudflare"
+  case "$what" in
+    status) public_line; return ;;
+    off) id=$(cat /proc/sys/kernel/random/uuid); printf 'off %s\n' "$id" > "$ACCESS_DIR/in/request" ;;
+    on)
+      [[ "$dur" =~ ^([0-9]+)([mhd])$ ]] || die "How long: after-office public on 30m | 4h | 1d (at most 7d)"
+      case "${BASH_REMATCH[2]}" in m) secs=$((BASH_REMATCH[1] * 60)) ;; h) secs=$((BASH_REMATCH[1] * 3600)) ;; d) secs=$((BASH_REMATCH[1] * 86400)) ;; esac
+      until=$((($(date +%s) + secs) * 1000))
+      id=$(cat /proc/sys/kernel/random/uuid)
+      printf 'on %s %s\n' "$until" "$id" > "$ACCESS_DIR/in/request" ;;
+    *) die "public status | public on <30m|4h|1d> | public off" ;;
+  esac
+  # the helper runs now (as the dashboard's requests do), then the answer
+  systemctl start after-office-access.service
+  public_line
+  if [ "$what" = on ]; then echo "  (the dashboard shows it within a minute; every device sees the new address within a minute or two)"; fi
+}
+
+cmd_backup() {
+  local out latest stamp
+  stamp=$(date +%Y%m%d-%H%M%S)
+  out=/root/after-office-backup-$stamp.tar.gz
+  as_app "cd apps/server && '$BUN' run backup" >/dev/null
+  latest=$(ls -t "$APP_DIR"/apps/server/data/backups/*.db.gz 2>/dev/null | head -1)
+  [ -n "$latest" ] || die "The database backup didn't come out: see sudo -iu $APP_USER sh -c 'cd $APP_DIR/apps/server && ~/.bun/bin/bun run backup'"
+  (umask 077; tar -czf "$out" -C / "${latest#/}" "${ENV_FILE#/}" $([ -f /etc/caddy/cloudflare.env ] && echo etc/caddy/cloudflare.env) 2>/dev/null)
+  echo "Backup: $out"
+  echo "  the database, $ENV_FILE (its SESSION_SECRET unlocks the two-factor secret and the notification tokens)"
+  echo "  Copy it off the server, e.g. from your machine:  scp root@<vps>:$out ."
+}
+
+main() {
+  local cmd=${1:-help}
+  [ $# -gt 0 ] && shift
+  case "$cmd" in
+    help | -h | --help) usage; return ;;
+  esac
+  need_root "$cmd"
+  case "$cmd" in
+    status) cmd_status ;;
+    start | stop | restart) cmd_service "$cmd" "${1:-dashboard}" ;;
+    update) cmd_update "${1:-}" ;;
+    setup) cmd_setup ;;
+    logs) cmd_logs "${1:-dashboard}" ;;
+    agents) cmd_agents ;;
+    peek) cmd_peek "${1:-}" "${2:-40}" ;;
+    public) cmd_public "${1:-status}" "${2:-}" ;;
+    claude-login) exec sudo -iu "$AGENT_USER" claude ;;
+    password)
+      OFFICE_ENV_FILE=$ENV_FILE "$BUN" "$APP_DIR/apps/server/src/setup-auth.ts"
+      systemctl restart after-office
+      echo "Signed every browser out: sign in with the new password." ;;
+    reset-2fa) sudo -iu "$APP_USER" sh -c "cd $APP_DIR/apps/server && ~/.bun/bin/bun run auth:reset-2fa" ;;
+    backup) cmd_backup ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
+main "$@"

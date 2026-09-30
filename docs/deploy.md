@@ -165,24 +165,35 @@ systemctl is-active after-office after-office-agents # both "active"
 Back up `/etc/after-office.env` together with `/opt/after-office/apps/server/data` (the database). The two-factor
 secret and the notification tokens are encrypted with that file's `SESSION_SECRET`: one without the other is useless.
 
+### The `after-office` command
+
+The setup installs `after-office` (in `/usr/local/bin`), for running the server from then on (as root, or with sudo):
+
+| Command | What it does |
+|---|---|
+| `after-office status` | services, address, version, agents running, public access |
+| `after-office update` | pull from GitHub, build, restart the dashboard (agents keep running) |
+| `after-office start / stop / restart [dashboard\|agents\|all]` | the services (default: the dashboard); stopping the agents ends their sessions, they resume after |
+| `after-office setup` | run the setup again, with the options it was first run with |
+| `after-office logs [dashboard\|agents\|caddy]` | follow a log |
+| `after-office agents` / `peek <name>` | the agents' sessions / what one's screen shows (read only) |
+| `after-office public [status\|on 4h\|off]` | public access (Tailscale + your domain) |
+| `after-office claude-login` | log the agents in to Claude |
+| `after-office password` / `reset-2fa` | a new dashboard password / two-factor from scratch |
+| `after-office backup` | the database and the secrets in one file in `/root` |
+
 ### Updates
 
 Push from your machine, then on the VPS:
 
 ```bash
-bash /opt/after-office/deploy/update.sh
+after-office update
 ```
 
-That pulls, builds and restarts the dashboard. Agents keep running.
-
-When an update changes the server setup (it lists files in `deploy/`), apply it once:
-
-```bash
-git -C ~/after-office pull
-```
-
-Then run the setup again with the options you used. It's safe to re-run: the code, login, data and token stay. It
-restarts the agents' service, so do it when they're idle.
+That pulls, builds and restarts the dashboard. Agents keep running. When the update changed the server setup (files in
+`deploy/`), it lists them and offers to apply them: that runs the setup again with your options. It's safe to re-run: the
+code, login, data and token stay. It restarts the agents' service, so say yes when they're idle, or later with
+`after-office setup`.
 
 ### When something's off
 

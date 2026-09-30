@@ -52,6 +52,8 @@ REPO=''
 NO_REPO=0
 BRANCH=''
 ARGS="$*"
+# the options as given, quoted: saved for `after-office setup` (runs this again the same way)
+SAVED_ARGS=$(printf '%q ' "$@")
 while [ $# -gt 0 ]; do
   case "$1" in
     --tailscale) TAILSCALE=1 ;;
@@ -546,6 +548,12 @@ EOF
   if sshd -t; then systemctl reload ssh 2>/dev/null || systemctl reload sshd; fi
 fi
 
+echo "==> the after-office command (status, restart, update, logs, public access…: after-office help)"
+install -m 755 "$HERE/after-office" /usr/local/bin/after-office
+install -d -m 755 /etc/after-office
+printf '%s\n' "${SAVED_ARGS% }" > /etc/after-office/setup.args
+chmod 600 /etc/after-office/setup.args
+
 echo "==> logs: keep journald small"
 install -d /etc/systemd/journald.conf.d
 cat > /etc/systemd/journald.conf.d/after-office.conf <<'EOF'
@@ -631,7 +639,8 @@ cat <<NEXT
   - Open $PUBLIC_URL. First sign-in: set up two-factor (scan the QR code with Google Authenticator), keep the recovery codes.
     Notifications (this app / ntfy / Telegram / webhook): bell icon -> Automation -> Notifications.
     Lost phone and recovery codes:  sudo -iu $APP_USER sh -c 'cd $APP_DIR/apps/server && ~/.bun/bin/bun run auth:reset-2fa'
-  - Updates:  bash $APP_DIR/deploy/update.sh  (from GitHub)  or  deploy/sync.sh  (from your machine)
+  - Updates:  after-office update  (from GitHub)  or  deploy/sync.sh  (from your machine)
+  - Everything else: after-office help  (status, restart, logs, agents, public access, password, backup…)
   Back up $ENV_FILE with the database: the two-factor secret and notification tokens are encrypted with its SESSION_SECRET.
 NEXT
 if [ "$CONTAINERS" = 1 ]; then echo "  Containers: agents run  docker compose up -d  in a project (ports on 127.0.0.1 only). Check: sudo -iu $AGENT_USER env DOCKER_HOST=unix:///run/user/$(id -u "$AGENT_USER")/docker.sock docker info"; fi

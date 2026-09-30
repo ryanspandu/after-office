@@ -103,6 +103,6 @@ SETUP=$(printf '%s\n' "$CHANGED" | grep -E '^deploy/' | grep -v '^deploy/update\
 if [ -n "$SETUP" ]; then
   warn "The server setup changed in this update:"
   printf '%s\n' "$SETUP" | sed 's/^/      /'
-  warn "Apply it once, with the options you used before (it's safe to run again):"
-  warn "  bash $APP_DIR/deploy/setup-vps.sh <your domain | --tailscale> [--dev-tools --containers …]"
+  warn "Apply it once (runs the setup again with the options it was first run with; safe to re-run):"
+  warn "  after-office setup"
 fi
