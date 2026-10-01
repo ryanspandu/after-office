@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { matchesSearch } from './SearchBox'
-import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight } from 'react-icons/lu'
+import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen } from 'react-icons/lu'
 import { DeleteProject } from './DeleteProject'
 import { ProjectReports } from './Reports'
 import { confirm } from './Confirm'
@@ -151,6 +151,11 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
         <button className="icon-btn small" data-tip="New project" aria-label="New project" onClick={() => openUrl({ newproject: '1' })}>
           <LuFolderPlus />
         </button>
+        {view === 'projects' && home && (
+          <button className="icon-btn small" data-tip={`Open the projects folder · ${home.path}`} aria-label="Open the projects folder" onClick={() => setOpen({ folder: home, agentIds: home.agentIds })}>
+            <LuFolderOpen />
+          </button>
+        )}
         {view === 'agents' && (
         <button
           className="icon-btn small"
@@ -176,11 +181,6 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
                 </li>
               ))}
             </ul>
-          )}
-          {home && (
-            <button className="ws-home link" onClick={() => setOpen({ folder: home, agentIds: home.agentIds })} data-tip={home.path}>
-              <LuFolder /> Open the projects folder
-            </button>
           )}
         </div>
       ) : (

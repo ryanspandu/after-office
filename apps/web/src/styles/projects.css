@@ -99,10 +99,11 @@
 .preview-row__port { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; color: var(--hl); font-weight: 600; flex-shrink: 0; }
 .preview-row__go { margin-left: auto; color: var(--muted); flex-shrink: 0; }
 /* Projects tab: two lists (the projects folder / the agents' folders) */
-.ws-tabs { align-self: flex-start; margin: 0 0 8px; }
-.ws-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+.ws-tabs { display: flex; width: 100%; box-sizing: border-box; margin: 0 0 8px; }
+.ws-tabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .ws__projects--flat { padding: 0; margin-left: 0; border-left: none; gap: 2px; }
-.ws-home { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-size: 12px; margin: 4px 0 0 8px; }
 /* the agent drawer's Folder tab: where the agent works */
 .agent-folder { display: flex; flex-direction: column; gap: 10px; }
 .agent-folder__path { font-size: 12px; color: var(--muted); padding: 6px 10px; border-radius: 8px; background: var(--card-2); }
+.ws-tabs button.active { background: var(--hl); color: #fff; }
+.ws-tabs button.active .seg__count { color: rgba(255, 255, 255, 0.85); }
