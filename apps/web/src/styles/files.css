@@ -78,3 +78,32 @@
 .fb__new input { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
 @keyframes fb-new-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .fb__new { animation: none; } }
+
+/* previews: a sheet as a table, a PDF page by page, a Word document, a picture (ui/Attachments.tsx FilePreview) */
+.file-preview__mode { margin-left: 8px; }
+.file-preview__mode button { display: inline-flex; align-items: center; gap: 5px; }
+.csv { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.csv__scroll { overflow: auto; max-height: min(62vh, 640px); border: 1px solid var(--line); border-radius: 12px; }
+.modal--full .csv__scroll { max-height: calc(100vh - 220px); }
+.csv__table { border-collapse: separate; border-spacing: 0; font-size: 12.5px; min-width: 100%; }
+.csv__table th, .csv__table td { padding: 6px 10px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: left; vertical-align: top; white-space: pre-wrap; max-width: 360px; }
+.csv__table th { position: sticky; top: 0; z-index: 1; background: var(--card-2); font-weight: 600; white-space: nowrap; }
+.csv__table tr:last-child td { border-bottom: none; }
+.csv__table th:last-child, .csv__table td:last-child { border-right: none; }
+.csv__table tbody tr:hover td { background: var(--hl-soft); }
+.csv__n { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right !important; width: 1%; white-space: nowrap; position: sticky; left: 0; background: var(--card); }
+.csv__table th.csv__n { z-index: 2; background: var(--card-2); }
+.csv__foot { font-size: 12px; }
+.pdf { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 4px 0; }
+.pdf__page { width: 100%; display: flex; justify-content: center; }
+.pdf__page canvas { display: block; border-radius: 6px; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18); background: #fff; max-width: 100%; }
+.pdf__more { font-size: 12px; }
+.docx { font-size: 14px; line-height: 1.6; padding: 4px 6px; overflow-wrap: anywhere; }
+.docx h1, .docx h2, .docx h3 { line-height: 1.25; margin: 1.1em 0 0.5em; }
+.docx p { margin: 0 0 0.8em; }
+.docx table { border-collapse: collapse; margin: 0.8em 0; display: block; overflow-x: auto; }
+.docx td, .docx th { border: 1px solid var(--line); padding: 5px 9px; vertical-align: top; }
+.docx img { max-width: 100%; height: auto; }
+.docx a { color: var(--hl); }
+.file-preview__image { display: block; max-width: 100%; max-height: min(70vh, 900px); margin: 0 auto; border-radius: 10px; object-fit: contain; background: repeating-conic-gradient(var(--card-2) 0% 25%, transparent 0% 50%) 50% / 16px 16px; }
+.modal--full .file-preview__image { max-height: calc(100vh - 200px); }

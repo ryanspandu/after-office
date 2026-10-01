@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { LuDownload, LuFile, LuFileText, LuFileX } from 'react-icons/lu'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { LuDownload, LuFile, LuFileText, LuFileX, LuSheet, LuTable } from 'react-icons/lu'
+import { CsvTable } from './preview/CsvTable'
 import { useModalMaximize } from './Maximize'
 import { Markdown } from './FollowUps'
 import { Modal } from './Modal'
@@ -20,11 +21,30 @@ export function formatSize(n: number) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
-/** Text files shown right here instead of downloaded: Markdown rendered, the rest as plain text. */
+/** Text files shown right here instead of downloaded: Markdown rendered, sheets as a table, the rest as plain text. */
 const TEXT_RE = /\.(md|markdown|mdx|txt|text|csv|tsv|json|jsonl|log|ya?ml|toml|ini|env\.example|xml|html?|css|js|jsx|ts|tsx|py|sh|sql|go|rs|rb|php|java|kt|swift)$/i
 const isMarkdown = (p: string) => /\.(md|markdown|mdx)$/i.test(p)
-const PREVIEW_MAX = 2 * 1024 * 1024
-export const canPreview = (f: Attachment) => !f.image && TEXT_RE.test(f.path) && f.size <= PREVIEW_MAX
+const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i
+type Kind = 'markdown' | 'sheet' | 'text' | 'pdf' | 'docx' | 'image'
+/** How a file is previewed here, if it is. */
+export function previewKind(path: string): Kind | null {
+  if (isMarkdown(path)) return 'markdown'
+  if (/\.(csv|tsv)$/i.test(path)) return 'sheet'
+  if (TEXT_RE.test(path)) return 'text'
+  if (/\.pdf$/i.test(path)) return 'pdf'
+  if (/\.docx$/i.test(path)) return 'docx'
+  if (IMAGE_RE.test(path)) return 'image'
+  return null
+}
+const TEXT_MAX = 2 * 1024 * 1024
+const FILE_MAX = 30 * 1024 * 1024
+export const canPreview = (f: Pick<Attachment, 'path' | 'size'>) => {
+  const kind = previewKind(f.path)
+  return !!kind && f.size <= (kind === 'markdown' || kind === 'text' || kind === 'sheet' ? TEXT_MAX : FILE_MAX)
+}
+// the heavy viewers load only when such a file is opened
+const PdfView = lazy(() => import('./preview/PdfView'))
+const DocxView = lazy(() => import('./preview/DocxView'))
 
 /** Where a file is fetched from: the agent's file route, or (reports) the report's own. */
 export type UrlFor = (path: string, inline?: boolean) => string
@@ -50,13 +70,13 @@ export function Attachments({ agentId, files, urlFor }: { agentId: string; files
         ) : (
         <div key={f.path} className={`attachment${f.image ? ' attachment--image' : ''}`} data-tip={f.path}>
           {f.image ? (
-            <a className="attachment__preview" href={url(f.path, true)} target="_blank" rel="noreferrer noopener">
+            <button type="button" className="attachment__preview" onClick={() => setPreview(f)} aria-label={`Preview ${baseName(f.path)}`}>
               <img src={url(f.path, true)} alt={baseName(f.path)} loading="lazy" />
-            </a>
+            </button>
           ) : (
-            <span className="attachment__icon">{/\.(md|txt|csv|json|log)$/i.test(f.path) ? <LuFileText /> : <LuFile />}</span>
+            <span className="attachment__icon">{/\.(csv|tsv)$/i.test(f.path) ? <LuSheet /> : /\.(md|txt|json|log|pdf|docx)$/i.test(f.path) ? <LuFileText /> : <LuFile />}</span>
           )}
-          {canPreview(f) ? (
+          {!f.image && canPreview(f) ? (
             <button type="button" className="attachment__meta attachment__open" onClick={() => setPreview(f)} aria-label={`Preview ${baseName(f.path)}`}>
               <span className="attachment__name truncate">{baseName(f.path)}</span>
               <span className="attachment__size">{formatSize(f.size)} · preview</span>
@@ -77,42 +97,79 @@ export function Attachments({ agentId, files, urlFor }: { agentId: string; files
   )
 }
 
-/** A text file the agent made, read through the same checked file route as downloads. */
+/**
+ * A file the agent made, previewed through the same checked file route as downloads: text (Markdown rendered, sheets as
+ * a table), PDFs page by page, Word documents, pictures.
+ */
 export function FilePreview({ agentId, file, onClose, url }: { agentId?: string; file: Attachment; onClose: () => void; url?: string }) {
   // the file's download address: an agent's file route, or another (e.g. the Projects tab's file manager)
   const src = url ?? fileUrl(agentId ?? '', file.path)
+  const kind = previewKind(file.path) ?? 'text'
+  const binary = kind === 'pdf' || kind === 'docx' || kind === 'image'
   const [text, setText] = useState<string | null>(null)
+  const [data, setData] = useState<ArrayBuffer | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // a sheet: the table, or the file as it is
+  const [raw, setRaw] = useState(false)
   // full size: the whole window, for long documents and wide tables
-  const max = useModalMaximize(820)
+  const max = useModalMaximize(kind === 'sheet' || kind === 'pdf' || kind === 'docx' ? 960 : 820)
   useEffect(() => {
     let gone = false
     api(src)
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Could not open the file (${r.status})`)
-        return r.text()
+        if (binary) {
+          const buf = await r.arrayBuffer()
+          if (!gone) setData(buf)
+        } else {
+          const t = await r.text()
+          if (!gone) setText(t)
+        }
       })
-      .then((t) => !gone && setText(t))
       .catch((e: Error) => !gone && setError(e.message))
     return () => void (gone = true)
-  }, [src])
+  }, [src, binary])
+  // a picture: shown from memory (the file route sends a download)
+  const imageUrl = useMemo(() => (kind === 'image' && data ? URL.createObjectURL(new Blob([data], { type: imageType(file.path) })) : null), [kind, data, file.path])
+  useEffect(() => () => void (imageUrl && URL.revokeObjectURL(imageUrl)), [imageUrl])
   const body = text === null ? null : /\.json$/i.test(file.path) ? pretty(text) : text
+  const loading = <div className="muted">Loading…</div>
   return (
     <Modal open onClose={onClose} title={baseName(file.path)} description={file.path.replace(/^\/(Users|home)\/[^/]+/, '~')} {...max.modalProps}>
-      <div className="modal__body file-preview" ref={max.bodyRef}>
+      <div className={`modal__body file-preview file-preview--${kind}`} ref={max.bodyRef}>
         {error ? (
           <div className="row__error">{error}</div>
+        ) : binary ? (
+          !data ? (
+            loading
+          ) : kind === 'image' ? (
+            imageUrl && <img className="file-preview__image" src={imageUrl} alt={baseName(file.path)} />
+          ) : (
+            <Suspense fallback={loading}>{kind === 'pdf' ? <PdfView data={data} /> : <DocxView data={data} />}</Suspense>
+          )
         ) : body === null ? (
-          <div className="muted">Loading…</div>
-        ) : isMarkdown(file.path) ? (
+          loading
+        ) : kind === 'markdown' ? (
           <div className="file-preview__md">
             <Markdown text={body} />
           </div>
+        ) : kind === 'sheet' && !raw ? (
+          <CsvTable text={body} path={file.path} />
         ) : (
           <pre className="file-preview__text">{body}</pre>
         )}
         <footer className="modal__foot">
           <span className="muted">{formatSize(file.size)}</span>
+          {kind === 'sheet' && text !== null && (
+            <div className="seg file-preview__mode">
+              <button className={raw ? '' : 'active'} onClick={() => setRaw(false)}>
+                <LuTable /> Table
+              </button>
+              <button className={raw ? 'active' : ''} onClick={() => setRaw(true)}>
+                <LuFileText /> Raw
+              </button>
+            </div>
+          )}
           <span className="grow" />
           <button
             className="small"
@@ -127,6 +184,11 @@ export function FilePreview({ agentId, file, onClose, url }: { agentId?: string;
       </div>
     </Modal>
   )
+}
+
+function imageType(path: string) {
+  const ext = path.split('.').pop()?.toLowerCase() ?? ''
+  return ext === 'svg' ? 'image/svg+xml' : ext === 'jpg' ? 'image/jpeg' : `image/${ext}`
 }
 
 function pretty(json: string) {
