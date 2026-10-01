@@ -18,10 +18,14 @@ import { Modal } from './Modal'
 import { STATUS_BY_ID } from './taskMeta'
 import { Previews } from './Previews'
 
-// Projects tab: what the agents are working on, straight from their folders. A folder that is a git repo is one
-// project; any other agent folder is a home with one project per subfolder. The office's own projects folder
-// (~/after-office/project, where new projects get a folder) is listed too. Folders are only read here; projects can
-// be set up, renamed and deleted (with their folder, if the office made it).
+// Projects tab: what the agents are working on, straight from their folders, in two lists. "Projects": the folders in
+// the office's own projects folder (~/after-office/project, where new projects get a folder). "Agents": each agent's
+// folder (a git repo is one project; any other folder holds one project per subfolder), and folders whose agent was
+// removed (hideable). Folders are only read here; projects can be set up, renamed and deleted (with their folder, if
+// the office made it).
+
+type View = 'projects' | 'agents'
+const VIEW_KEY = 'ao-projects-view'
 
 /** The agents' folders, loaded on mount and refreshed quietly every minute while the page is visible. */
 function useWorkspaceData() {
@@ -71,6 +75,22 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
       }
       return next
     })
+  // which list: remembered in this browser
+  const [view, setView] = useState<View>(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === 'agents' ? 'agents' : 'projects'
+    } catch {
+      return 'projects'
+    }
+  })
+  const pickView = (v: View) => {
+    setView(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      /* this visit only */
+    }
+  }
   const toggleOrphans = () =>
     setShowOrphans((v) => {
       try {
@@ -87,8 +107,12 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
   if (!ws.data.length) return <div className="empty">No agents yet. Their folders show up here.</div>
 
   const orphans = ws.data.filter((w) => w.orphan).length
+  // the office's projects folder: its subfolders are the Projects list
+  const home = ws.data.find((w) => w.shared)
+  const homeProjects = (home?.projects ?? []).filter((p) => matchesSearch(q, p.name, p.path))
   // a search keeps the agent folders that match, or that hold a project that does (only those projects then)
   const shown = (showOrphans ? ws.data : ws.data.filter((w) => !w.orphan))
+    .filter((w) => !w.shared)
     .map((w) => {
       if (!q.trim()) return w
       const people = w.agentIds.map((id) => agents.find((a) => a.id === id)?.name).join(' ')
@@ -98,13 +122,26 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
     })
     .filter((w): w is NonNullable<typeof w> => !!w)
   const count = shown.reduce((n, w) => n + (w.isProject ? 1 : w.projects.length), 0)
-  const agentFolders = shown.filter((w) => !w.shared).length
-  const summary = `${count} project${count === 1 ? '' : 's'} in ${agentFolders} agent folder${agentFolders === 1 ? '' : 's'}${
-    !showOrphans && orphans ? ` (${orphans} without an agent hidden)` : ''
-  }`
+  const agentFolders = shown.length
+  const summary =
+    view === 'projects'
+      ? `${homeProjects.length} project${homeProjects.length === 1 ? '' : 's'} in the projects folder`
+      : `${count} project${count === 1 ? '' : 's'} in ${agentFolders} agent folder${agentFolders === 1 ? '' : 's'}${
+          !showOrphans && orphans ? ` (${orphans} without an agent hidden)` : ''
+        }`
   return (
     <>
       <Previews />
+      <div className="seg ws-tabs" role="tablist">
+        <button role="tab" aria-selected={view === 'projects'} className={view === 'projects' ? 'active' : ''} onClick={() => pickView('projects')}>
+          Projects
+          <span className="seg__count">{home?.projects.length ?? 0}</span>
+        </button>
+        <button role="tab" aria-selected={view === 'agents'} className={view === 'agents' ? 'active' : ''} onClick={() => pickView('agents')}>
+          Agents
+          <span className="seg__count">{ws.data.filter((w) => !w.shared && !w.orphan).length}</span>
+        </button>
+      </div>
       <div className="ws-bar">
         {/* may be cut short in a narrow column: the whole line in a tooltip */}
         <span className="muted" data-tip={summary}>
@@ -114,6 +151,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
         <button className="icon-btn small" data-tip="New project" aria-label="New project" onClick={() => openUrl({ newproject: '1' })}>
           <LuFolderPlus />
         </button>
+        {view === 'agents' && (
         <button
           className="icon-btn small"
           disabled={!orphans}
@@ -123,10 +161,31 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
         >
           {showOrphans ? <LuEyeOff /> : <LuEye />}
         </button>
+        )}
         <ProjectsRefresh ws={ws} />
       </div>
+      {view === 'projects' ? (
+        <div className="ws-list">
+          {!homeProjects.length ? (
+            <div className="empty">{q.trim() ? 'No projects match.' : 'No projects yet. New projects get their folder in the projects folder.'}</div>
+          ) : (
+            <ul className="ws__projects ws__projects--flat">
+              {homeProjects.map((p) => (
+                <li key={p.path}>
+                  <FolderRow folder={p} now={now} onOpen={() => setOpen({ folder: p, agentIds: home?.agentIds ?? [] })} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {home && (
+            <button className="ws-home link" onClick={() => setOpen({ folder: home, agentIds: home.agentIds })} data-tip={home.path}>
+              <LuFolder /> Open the projects folder
+            </button>
+          )}
+        </div>
+      ) : (
       <div className="ws-list">
-        {!shown.length && <div className="empty">No projects match.</div>}
+        {!shown.length && <div className="empty">{q.trim() ? 'No folders match.' : 'No agent folders.'}</div>}
         {shown.map((w) => {
           const people = w.agentIds.map((id) => agents.find((a) => a.id === id)).filter(Boolean) as OfficeAgent[]
           const foldable = !w.isProject && w.projects.length > 0
@@ -168,27 +227,33 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
                 <ul className="ws__projects">
                   {w.projects.map((p) => (
                     <li key={p.path}>
-                      <button className="ws-row" onClick={() => setOpen({ folder: p, agentIds: w.agentIds })} data-tip={p.path}>
-                        {p.git ? <LuFolderGit2 className="ws-row__icon" /> : <LuFolder className="ws-row__icon" />}
-                        <span className="ws-row__body">
-                          <span className="ws-row__name">
-                            <span className="truncate">{p.name}</span>
-                            <LinkedTag projectId={p.projectId} />
-                          </span>
-                          <GitLine folder={p} now={now} compact />
-                        </span>
-                      </button>
+                      <FolderRow folder={p} now={now} onOpen={() => setOpen({ folder: p, agentIds: w.agentIds })} />
                     </li>
                   ))}
                 </ul>
-              ) : w.shared ? (
-                <div className="ws__empty muted">New projects get their folder here.</div>
               ) : null}
             </section>
           )
         })}
       </div>
+      )}
     </>
+  )
+}
+
+/** One project folder in a list: its name, the dashboard project it's linked to, its git state. */
+function FolderRow({ folder: p, now, onOpen }: { folder: WorkspaceFolder; now: number; onOpen: () => void }) {
+  return (
+    <button className="ws-row" onClick={onOpen} data-tip={p.path}>
+      {p.git ? <LuFolderGit2 className="ws-row__icon" /> : <LuFolder className="ws-row__icon" />}
+      <span className="ws-row__body">
+        <span className="ws-row__name">
+          <span className="truncate">{p.name}</span>
+          <LinkedTag projectId={p.projectId} />
+        </span>
+        <GitLine folder={p} now={now} compact />
+      </span>
+    </button>
   )
 }
 

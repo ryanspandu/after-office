@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { LuFileText, LuLoader, LuMessageSquare, LuPlug, LuPlus, LuRotateCw, LuSettings2, LuSparkles, LuSquareTerminal, LuTrash2, LuX, LuCopy, LuInfo, LuShuffle, LuActivity } from 'react-icons/lu'
+import { LuFileText, LuLoader, LuMessageSquare, LuPlug, LuPlus, LuRotateCw, LuSettings2, LuSparkles, LuSquareTerminal, LuTrash2, LuX, LuCopy, LuInfo, LuShuffle, LuActivity, LuFolder } from 'react-icons/lu'
+import { FileBrowser } from './FileBrowser'
 import type { AgentEffort, AgentSkill, LiveMode, AccountSkill } from '@after-office/shared'
 import { EFFORT_OPTIONS } from './effort'
 import { api } from '../state/auth'
@@ -28,7 +29,7 @@ import { RulesPicker } from './RulesPicker'
 // Agent drawer. Live: Chat + Terminal with the real Claude Code session, plus Overview / CLAUDE.md / Skills read from
 // and saved to the agent's folder on the server. Demo: the profile tabs edit local state only.
 
-type Tab = 'chat' | 'terminal' | 'overview' | 'claude' | 'skills' | 'connectors' | 'activity'
+type Tab = 'chat' | 'terminal' | 'folder' | 'overview' | 'claude' | 'skills' | 'connectors' | 'activity'
 
 /** Editable profile: name/role plus the agent folder's CLAUDE.md and skills. */
 interface Doc {
@@ -64,7 +65,7 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
   // the tab is in the address bar too (?agent=<id>&tab=terminal)
   const [tab, setTabState] = useState<Tab>(() => {
     const fromUrl = getParam('tab') as Tab | null
-    const ok: Tab[] = live ? ['chat', 'terminal', 'overview', 'claude', 'skills', 'connectors', 'activity'] : ['overview', 'claude', 'skills']
+    const ok: Tab[] = live ? ['chat', 'terminal', 'folder', 'overview', 'claude', 'skills', 'connectors', 'activity'] : ['overview', 'claude', 'skills']
     return fromUrl && ok.includes(fromUrl) ? fromUrl : live ? 'chat' : 'overview'
   })
   const setTab = (t: Tab) => {
@@ -141,6 +142,7 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
   const tabs: { id: Tab; label: string; icon: ReactNode; liveOnly?: boolean }[] = [
     { id: 'chat', label: 'Chat', icon: <LuMessageSquare />, liveOnly: true },
     { id: 'terminal', label: 'Terminal', icon: <LuSquareTerminal />, liveOnly: true },
+    { id: 'folder', label: 'Folder', icon: <LuFolder />, liveOnly: true },
     { id: 'overview', label: 'Overview', icon: <LuSettings2 /> },
     { id: 'claude', label: 'CLAUDE.md', icon: <LuFileText /> },
     { id: 'skills', label: 'Skills', icon: <LuSparkles /> },
@@ -199,6 +201,16 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
         <div className={`drawer__body${tab === 'chat' || tab === 'terminal' ? ' drawer__body--flush' : ''}`}>
           {tab === 'chat' && <ChatTab agent={agent} />}
           {tab === 'terminal' && <TerminalTab agentId={agent.id} offline={agent.status === 'offline'} />}
+          {tab === 'folder' && !agent.cwd && <div className="empty">No folder known for this agent yet.</div>}
+          {tab === 'folder' && agent.cwd && (
+            // the agent's own folder: browse, preview, upload, new folders (the same file manager as the Projects tab)
+            <div className="agent-folder">
+              <code className="agent-folder__path truncate" data-tip={agent.cwd}>
+                {agent.cwd.replace(/^\/(Users|home)\/[^/]+/, '~')}
+              </code>
+              <FileBrowser key={agent.cwd} root={agent.cwd} />
+            </div>
+          )}
           {profileTab && !draft && <div className="empty">{error || <LuLoader className="spin" />}</div>}
           {tab === 'overview' && draft && <Overview agent={agent} live={live} draft={draft} set={set} />}
           {tab === 'claude' && draft && live && agent.kind !== 'manager' && (
