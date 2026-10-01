@@ -110,12 +110,39 @@ export interface AgentInfo {
   contextSize?: number
   /** Replies the dashboard user hasn't seen in the Chat tab yet. */
   unread?: number
+  /** Live: its side sessions (extra chats the owner opened, each its own Claude Code process), open and recently closed */
+  sessions?: SideSessionInfo[]
+}
+
+/**
+ * One of an agent's side sessions: a second (third…) Claude Code process in its folder, for chatting in parallel with
+ * the owner. Tasks, daily jobs and the manager's messages always go to the main session; a side session is the owner's.
+ */
+export interface SideSessionInfo {
+  /** s2, s3, … */
+  key: string
+  /** its conversation's title (from Claude Code), when it has one */
+  title?: string
+  /** running (its process is up); closed ones can be opened again */
+  open: boolean
+  status: AgentStatus
+  waitingFor?: 'permission' | 'plan' | 'question'
+  tool?: string
+  permissionMode?: LiveMode
+  costUsd?: number
+  contextPct?: number | null
+  lastMessage?: string
+  unread?: number
+  createdAt: number
+  closedAt?: number
 }
 
 /** Something a human has to answer, created from a held PermissionRequest hook. */
 export interface LiveFollowUp {
   id: string
   agentId: string
+  /** asked in one of the agent's side sessions (unset: its main session) */
+  sessionKey?: string
   /** `delegation`: the manager wants to hand out a task and approval is on */
   kind: 'permission' | 'plan' | 'question' | 'delegation' | 'hire' | 'check' | 'daily'
   tool: string

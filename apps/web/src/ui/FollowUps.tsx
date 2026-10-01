@@ -54,7 +54,7 @@ export interface Question {
 }
 
 /** planOptions: the live plan dialog's own choices, read from the agent's screen by the server. */
-export type Item = FollowUp & { questions?: Question[]; live?: boolean; planOptions?: string[]; hire?: Required<Omit<HireEdits, 'figure'>> & { figure?: AgentFigure } }
+export type Item = FollowUp & { sessionKey?: string; questions?: Question[]; live?: boolean; planOptions?: string[]; hire?: Required<Omit<HireEdits, 'figure'>> & { figure?: AgentFigure } }
 
 /** Server follow-up → the card/modal shape. */
 /** "mcp__claude_ai_Apify_Trending_Now__get-dataset-items" → "Apify Trending Now · get-dataset-items". */
@@ -65,9 +65,12 @@ export function toolLabel(tool: string) {
   return `${server} · ${m[2]}`
 }
 
+/** "Marcus · session 2" for a prompt asked in one of its side sessions. */
+const withSession = (name: string, key?: string) => (key ? `${name} · session ${key.slice(1)}` : name)
+
 export function fromLive(f: LiveFollowUp): Item {
   const input = f.input as Record<string, unknown>
-  const base = { id: f.id, agentId: f.agentId, message: f.message, createdAt: f.createdAt, tool: toolLabel(f.tool), live: true }
+  const base = { id: f.id, agentId: f.agentId, ...(f.sessionKey ? { sessionKey: f.sessionKey } : {}), message: f.message, createdAt: f.createdAt, tool: toolLabel(f.tool), live: true }
   if (f.kind === 'plan')
     return { ...base, kind: 'plan', detail: String(input.plan ?? ''), planOptions: Array.isArray(input.options) ? (input.options as string[]) : undefined }
   if (f.kind === 'question') return { ...base, kind: 'question', questions: (input.questions as Question[]) ?? [] }
@@ -255,7 +258,7 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
     <FollowUpCard
       key={item.id}
       item={item}
-      agentName={agentOf(item.agentId)?.name ?? 'Unknown'}
+      agentName={withSession(agentOf(item.agentId)?.name ?? 'Unknown', item.sessionKey)}
       agentColor={agentOf(item.agentId)?.look.shirt ?? '#aaa'}
       age={ago(now - item.createdAt)}
       onResolve={(d) => resolve(item, d)}
@@ -305,7 +308,7 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
       {detail && (
         <FollowUpDetail
           item={detail}
-          agentName={agentOf(detail.agentId)?.name ?? 'Unknown'}
+          agentName={withSession(agentOf(detail.agentId)?.name ?? 'Unknown', detail.sessionKey)}
           agentColor={agentOf(detail.agentId)?.look.shirt ?? '#aaa'}
           age={ago(now - detail.createdAt)}
           onResolve={(d) => resolve(detail, d)}

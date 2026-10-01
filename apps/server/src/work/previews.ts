@@ -3,6 +3,7 @@ import { readSessionFromCookie, SESSION_COOKIE_NAMES } from '../auth'
 import { AgentError } from '../agents/errors'
 import { runAsAgent } from '../agents/asagent'
 import { AGENTS_DIR } from '../fsroots'
+import { tmuxCmd } from '../agents/tmux'
 
 // Previews: the apps agents run while they work (a dev server on a preview port, 3000–3009 by default), opened from
 // the dashboard. On your own machine the link is simply http://localhost:<port>. On a server they come through a
@@ -76,25 +77,78 @@ export async function listPreviews(c: Context): Promise<Preview[]> {
 }
 
 /**
- * Stop the app on a preview port: the processes listening on it get SIGTERM (then SIGKILL if it's still up after a few
- * seconds). Found and stopped with the agents' rights (runAsAgent): on a server that is the agents' own Unix user, so
- * only an agent's app can be stopped this way, never the dashboard, Caddy or anything else on the machine.
+ * Stop the app on a preview port, all of it: the processes listening there and the rest of their process group (the
+ * `npm run dev` above the server, a file watcher that would start it again, workers), SIGTERM then SIGKILL if still
+ * there after a few seconds. A group that holds an agent's Claude Code session (or the dashboard) is never signalled:
+ * then only the listener and what it started go. Sent with the agents' rights (runAsAgent): on a server that is the
+ * agents' own Unix user, so only an agent's app can be stopped this way, never the dashboard, Caddy or the system.
  */
 export async function stopPreview(port: number): Promise<{ stopped: boolean }> {
   if (!previewPorts().includes(port)) throw new AgentError('Not a preview port', 400)
   if (!(await listening(port))) return { stopped: true }
   const pids = (await listenerPids(port)).filter((pid) => pid !== process.pid && pid !== process.ppid)
   if (!pids.length) throw new AgentError(`Nothing the agents run is listening on ${port}: it may belong to another user`, 409)
-  await runAsAgent(['kill', '-TERM', ...pids.map(String)], { cwd: AGENTS_DIR, timeoutMs: 5000 })
-  for (let i = 0; i < 12; i++) {
+  const target = appOf(pids)
+  await signal('TERM', target)
+  for (let i = 0; i < 16; i++) {
     await Bun.sleep(250)
-    if (!(await listening(port))) return { stopped: true }
+    if (!(await listening(port)) && !alive(target)) return { stopped: true }
   }
-  // still up (ignores SIGTERM, or a new listener took over): the hard way
-  const left = (await listenerPids(port)).filter((pid) => pid !== process.pid && pid !== process.ppid)
-  if (left.length) await runAsAgent(['kill', '-KILL', ...left.map(String)], { cwd: AGENTS_DIR, timeoutMs: 5000 })
-  await Bun.sleep(400)
+  // still up (ignores SIGTERM, or a watcher brought it back): the hard way
+  await signal('KILL', { groups: target.groups, pids: [...target.pids, ...(await listenerPids(port)).filter((p) => p !== process.pid)] })
+  await Bun.sleep(500)
   return { stopped: !(await listening(port)) }
+}
+
+const sh = (cmd: string[]) => {
+  const r = Bun.spawnSync(cmd, { stdout: 'pipe', stderr: 'ignore' })
+  return r.stdout.toString()
+}
+const numbers = (out: string) => (out.match(/\d+/g) ?? []).map(Number).filter((n) => n > 1)
+const pgidOf = (pid: number) => numbers(sh(['ps', '-o', 'pgid=', '-p', String(pid)]))[0]
+
+/** The process groups the agents' sessions run in (their Claude Code processes, the tmux panes) and the dashboard's. */
+function protectedGroups() {
+  const out = new Set<number>()
+  const own = pgidOf(process.pid)
+  if (own) out.add(own)
+  for (const pane of numbers(sh(tmuxCmd('list-panes', '-a', '-F', '#{pane_pid}')))) {
+    const g = pgidOf(pane)
+    if (g) out.add(g)
+  }
+  return out
+}
+
+/** A process and everything it started (children, grandchildren…). */
+function withDescendants(pid: number, seen = new Set<number>()) {
+  if (seen.has(pid) || seen.size > 500) return seen
+  seen.add(pid)
+  for (const child of numbers(sh(['pgrep', '-P', String(pid)]))) withDescendants(child, seen)
+  return seen
+}
+
+/** What makes up the app: the listeners' process groups, or (a group that's not the app's own) the listeners' trees. */
+function appOf(listeners: number[]) {
+  const guard = protectedGroups()
+  const groups = new Set<number>()
+  const pids = new Set<number>()
+  for (const pid of listeners) {
+    const g = pgidOf(pid)
+    if (g && g > 1 && !guard.has(g)) groups.add(g)
+    else for (const p of withDescendants(pid)) if (p !== process.pid) pids.add(p)
+  }
+  return { groups: [...groups], pids: [...pids] }
+}
+
+/** Is any of it still running? */
+const alive = (t: { groups: number[]; pids: number[] }) =>
+  (t.groups.length > 0 && numbers(sh(['pgrep', '-g', t.groups.join(',')])).length > 0) ||
+  t.pids.some((p) => numbers(sh(['ps', '-o', 'pid=', '-p', String(p)])).length > 0)
+
+async function signal(sig: 'TERM' | 'KILL', t: { groups: number[]; pids: number[] }) {
+  const ids = [...t.groups.map((g) => `-${g}`), ...t.pids.map(String)]
+  if (!ids.length) return
+  await runAsAgent(['sh', '-c', `kill -${sig} -- ${ids.join(' ')} 2>/dev/null; true`], { cwd: AGENTS_DIR, timeoutMs: 5000 })
 }
 
 /** The processes (that the agents' user can see) listening on a TCP port: lsof, else fuser, else ss. */

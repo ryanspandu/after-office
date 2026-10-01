@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
-import { agentsRepo } from '../db'
+import { agentsRepo, sideSessionsRepo } from '../db'
 import { agentEnv } from './env'
 import { sameOrigin } from '../auth'
 import { tmux, tmuxCmd } from './tmux'
@@ -32,6 +32,9 @@ const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, M
 
 export const terminalSocket = upgradeWebSocket((c) => {
   const row = agentsRepo.get(c.req.param('id') ?? '')!
+  // ?session=s2: one of its side sessions (an unknown or closed one: its main session)
+  const side = /^s\d{1,4}$/.test(c.req.query('session') ?? '') ? sideSessionsRepo.get(row.id, c.req.query('session')!) : null
+  const target = side && !side.closed_at ? side.tmux_session : row.tmux_session
   let term: InstanceType<typeof Bun.Terminal> | null = null
   let proc: ReturnType<typeof Bun.spawn> | null = null
 
@@ -56,7 +59,7 @@ export const terminalSocket = upgradeWebSocket((c) => {
         })
         // agentEnv has no TMUX (attaching from inside another tmux would refuse) and none of the server's secrets
         const env = { ...agentEnv(), TERM: 'xterm-256color' }
-        proc = Bun.spawn(tmuxCmd('attach-session', '-t', `=${row.tmux_session}`), { terminal: term, env })
+        proc = Bun.spawn(tmuxCmd('attach-session', '-t', `=${target}`), { terminal: term, env })
         proc.exited.then(() => {
           try {
             ws.close(1000, 'Session ended')
@@ -72,7 +75,7 @@ export const terminalSocket = upgradeWebSocket((c) => {
       // detaching (killing the attach client) leaves the tmux session and Claude running
       proc?.kill()
       term?.close()
-      void (proc?.exited ?? Promise.resolve()).then(() => tmux.resetSize(row.tmux_session))
+      void (proc?.exited ?? Promise.resolve()).then(() => tmux.resetSize(target))
     },
   }
 })

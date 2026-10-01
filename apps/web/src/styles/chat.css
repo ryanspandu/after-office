@@ -219,3 +219,46 @@
 .composer-menu__pop button svg { color: var(--muted); font-size: 16px; }
 .composer-menu__pop button.is-on svg { color: var(--hl); }
 @media (prefers-reduced-motion: reduce) { .composer-menu__pop, .composer-menu__btn svg { transition: none; } }
+
+/* an agent's sessions: Main + side sessions (ui/agent/SessionTabs.tsx) */
+.stabs-wrap { display: flex; flex-direction: column; gap: 6px; }
+.stabs { display: flex; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: none; padding-bottom: 1px; }
+.stabs::-webkit-scrollbar { display: none; }
+.stab { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; max-width: 200px; height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.stab:not(.is-on):hover { color: var(--text); }
+.stab.is-on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.stab.is-on .stab__x { color: var(--accent-fg); opacity: 0.8; }
+span.stab { padding: 0 4px 0 10px; }
+.stab__pick { all: unset; display: inline-flex; align-items: center; gap: 6px; min-width: 0; cursor: pointer; height: 100%; }
+.stab__pick:focus-visible, .stab__x:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; border-radius: 6px; }
+.stab__x { all: unset; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); cursor: pointer; flex-shrink: 0; }
+.stab__x:hover { background: rgba(0, 0, 0, 0.12); color: inherit; }
+.stab--add { width: 30px; padding: 0; justify-content: center; }
+.stab__dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--muted); opacity: 0.6; }
+.stab__dot--working { background: #3b82f6; opacity: 1; animation: stab-pulse 1.2s ease-in-out infinite; }
+.stab__dot--waiting { background: #f5b914; opacity: 1; }
+.stab__dot--idle { background: #2f8f57; opacity: 1; }
+.stab.is-on .stab__dot { box-shadow: 0 0 0 1.5px var(--accent-fg); }
+@keyframes stab-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .stab__dot--working { animation: none; } }
+.stab__badge { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--hl); color: #fff; font-size: 10.5px; display: grid; place-items: center; }
+.stab-menu { position: relative; flex-shrink: 0; }
+.stab-menu__pop { position: fixed; z-index: 1500; max-height: min(60vh, 420px); overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); }
+.stab-menu__pop button[role='menuitem'] { all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; font-size: 13px; cursor: pointer; }
+.stab-menu__pop button[role='menuitem']:hover { background: var(--card-2); }
+.stab-menu__pop button[role='menuitem'] svg { color: var(--muted); flex-shrink: 0; }
+.stab-menu__head { font-size: 11px; padding: 6px 10px 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+.stab-menu__row { display: flex; align-items: center; gap: 2px; }
+.stab-menu__when { margin-left: auto; font-size: 11.5px; flex-shrink: 0; }
+/* phones: the search / settings buttons float at the top right of the chat box, under the session tabs */
+.chat--mobile > .stabs-wrap + .chat__float { top: calc(30px + 10px + 8px); right: 10px; }
+.stab--edit { padding: 0 4px 0 10px; max-width: none; }
+.stab--edit input { width: 140px; min-width: 0; border: none; outline: none; background: transparent; color: inherit; font: inherit; padding: 0; }
+/* the chat's project: a button that opens the folder picker */
+.chat-ctx__project { display: inline-flex; align-items: center; min-width: 0; height: 26px; border: 1px solid var(--line); border-radius: 999px; background: var(--card-2); }
+.chat-ctx__pick { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 220px; height: 100%; padding: 0 10px; font-size: 12px; cursor: pointer; border-radius: 999px; }
+.chat-ctx__pick:hover { color: var(--text); }
+.chat-ctx__pick:focus-visible, .chat-ctx__unpick:focus-visible { outline: 2px solid var(--hl); outline-offset: 1px; }
+.chat-ctx__unpick { all: unset; display: grid; place-items: center; width: 20px; height: 20px; margin-right: 3px; border-radius: 50%; color: var(--muted); cursor: pointer; }
+.chat-ctx__unpick:hover { background: var(--card); color: var(--text); }
+@media (max-width: 768px) { .chat-ctx__project, .chat-ctx__pick { flex: 1; max-width: none; } }

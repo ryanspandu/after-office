@@ -25,3 +25,20 @@ test('stops the app listening on a preview port; refuses other ports', async () 
   expect(await stopPreview(PORT)).toEqual({ stopped: true })
   await expect(stopPreview(8787)).rejects.toThrow('Not a preview port')
 }, 15_000)
+
+test('stops the whole app: the dev server, the watcher above it and its workers (their own process group)', async () => {
+  // like `npm run dev` started in the background: a shell (the watcher) with the server and a worker under it, in a
+  // process group of their own
+  const script = `bun -e 'Bun.serve({ port: ${PORT}, hostname: "127.0.0.1", fetch: () => new Response("hi") }); setInterval(() => {}, 1000)' & sleep 300 & wait`
+  const app = Bun.spawn(['perl', '-e', 'setpgrp(0, 0); exec @ARGV', 'sh', '-c', script], { stdout: 'ignore', stderr: 'ignore' })
+  for (let i = 0; i < 40; i++) {
+    if (await fetch(`http://127.0.0.1:${PORT}/`).then(() => true, () => false)) break
+    await Bun.sleep(100)
+  }
+  const group = app.pid
+  expect(Bun.spawnSync(['pgrep', '-g', String(group)]).stdout.toString().trim().split('\n').length).toBeGreaterThanOrEqual(3)
+  expect(await stopPreview(PORT)).toEqual({ stopped: true })
+  await app.exited
+  // nothing of it is left: not the watcher, not the worker
+  expect(Bun.spawnSync(['pgrep', '-g', String(group)]).stdout.toString().trim()).toBe('')
+}, 15_000)

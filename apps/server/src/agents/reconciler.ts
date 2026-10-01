@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs'
-import { agentsRepo, settingsRepo } from '../db'
+import { agentsRepo, settingsRepo, sideSessionsRepo } from '../db'
 import { agentToken, ISOLATED, TMUX_SOCKET_ARGS } from './env'
 import { AgentError } from './errors'
 import { CLAUDE_CONFIG_DIR } from '../fsroots'
-import { isImportsDialog, restartAgent, reviveAgent } from './manager'
-import { addPending, pendingFor, resolvePending, runtimeOf, tickAll, updateRuntime } from './registry'
+import { isImportsDialog, restartAgent, reviveAgent, tidySideSessions } from './manager'
+import { addPending, pendingFor, resolvePending, runtimeOf, sideRuntimeOf, tickAll, updateRuntime, updateSideRuntime } from './registry'
 import { tmux } from './tmux'
 import { pollTranscripts } from './transcripts'
 
@@ -78,6 +78,14 @@ export async function reconcile() {
         .catch((e) => console.error(`[reconcile] could not restart ${row.name}:`, e))
         .finally(() => setTimeout(() => reviving.delete(row.id), 60_000))
     }
+  }
+  // side sessions: one whose process is gone is closed (not brought back: each one costs memory); one that survived a
+  // server restart but hasn't reported yet is there, just quiet
+  await tidySideSessions()
+  for (const side of sideSessionsRepo.open()) {
+    if (!alive.has(side.tmux_session)) continue
+    const srt = sideRuntimeOf(side.agent_id, side.key)
+    if (srt.status === 'offline' && Date.now() - side.created_at > 20_000 && Date.now() - srt.lastEventAt > 20_000) updateSideRuntime(side.agent_id, side.key, (r) => ({ ...r, status: 'idle' }))
   }
 }
 

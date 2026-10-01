@@ -2,11 +2,11 @@ import { appendFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { Context } from 'hono'
 import type { FollowUpDecision, LiveFollowUp, RateLimits } from '@after-office/shared'
-import { agentsRepo } from '../db'
-import { answerPermissionByKeys, answerPlan, AgentError, applyDeferredMode, readDialogOptions, takeDeferredMode } from './manager'
-import { addPending, clearPendingFor, currentRateLimits, getPending, patchPending, resolvePending, runtimeOf, setRateLimits, updateRuntime } from './registry'
-import { applyHook, applyStatusline, type HookPayload, type StatuslinePayload } from './state'
-import { decideCheck, decideCron, decideDelegation, deliver, handleStop, noteFileWritten, onPromptSubmitted } from '../work/work'
+import { agentsRepo, sideSessionsRepo } from '../db'
+import { answerPermissionByKeys, answerPlan, AgentError, applyDeferredMode, readDialogOptions, sendPrompt, sessionKeyOf, takeDeferredMode } from './manager'
+import { addPending, clearPendingFor, currentRateLimits, getPending, patchPending, resolvePending, runtimeOf, setRateLimits, sideRuntimeOf, updateRuntime, updateSideRuntime } from './registry'
+import { applyHook, applyStatusline, type HookPayload, type Runtime, type StatuslinePayload } from './state'
+import { decideCheck, decideCron, decideDelegation, deliver, handleStop, noteFileWritten, onPromptSubmitted, onSidePromptSubmitted, onSideStopped } from '../work/work'
 import { writtenFile } from './files'
 import { decideHire } from '../work/hires'
 import { connectorWriteGate } from './connectors'
@@ -26,6 +26,20 @@ const agentIdOf = (c: Context) => {
 
 const noDecision = {}
 
+/**
+ * Which of the agent's sessions sent it (X-AO-Session): '' for its main session, s2, s3… for a side session. A side
+ * session that isn't open (closed, unknown) is null: its events are ignored.
+ */
+function sessionOf(c: Context, agentId: string) {
+  const key = sessionKeyOf(c.req.header('x-ao-session'))
+  if (!key) return ''
+  const side = sideSessionsRepo.get(agentId, key)
+  return side && !side.closed_at ? key : null
+}
+
+/** The runtime of that session changes (the agent's own for the main session). */
+const updateSession = (agentId: string, key: string, fn: (rt: Runtime) => Runtime) => (key ? updateSideRuntime(agentId, key, fn) : updateRuntime(agentId, fn))
+
 function summarize(tool: string, input: Record<string, unknown>) {
   if (tool === 'Bash') return String(input.command ?? '')
   if (tool === 'ExitPlanMode') return String(input.plan ?? '').split('\n').find((l) => l.trim())?.replace(/^#+\s*/, '') ?? 'Plan ready'
@@ -41,16 +55,21 @@ export async function handleHook(c: Context) {
   const agentId = agentIdOf(c)
   const e = (await c.req.json().catch(() => null)) as (HookPayload & { tool_use_id?: string; permission_suggestions?: unknown; tool_response?: unknown }) | null
   if (!agentId || !e?.hook_event_name) return c.json(noDecision)
+  const key = sessionOf(c, agentId)
+  if (key === null) return c.json(noDecision)
 
   // anything that shows the agent moved on means a pending prompt was answered elsewhere (e.g. in the terminal)
-  if (['PostToolUse', 'PostToolUseFailure', 'UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd'].includes(e.hook_event_name)) clearPendingFor(agentId)
+  if (['PostToolUse', 'PostToolUseFailure', 'UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd'].includes(e.hook_event_name)) clearPendingFor(agentId, undefined, key)
 
   // OFFICE_DEBUG_HOOKS=true appends every raw hook payload to data/hooks-debug.jsonl (for reverse-engineering fields)
-  if (process.env.OFFICE_DEBUG_HOOKS === 'true') appendFileSync(DEBUG_LOG, JSON.stringify({ t: Date.now(), agentId, e }) + '\n')
-  updateRuntime(agentId, (rt) => applyHook(rt, e))
+  if (process.env.OFFICE_DEBUG_HOOKS === 'true') appendFileSync(DEBUG_LOG, JSON.stringify({ t: Date.now(), agentId, key, e }) + '\n')
+  updateSession(agentId, key, (rt) => applyHook(rt, e))
   // /clear starts a new conversation (new session id): a later restart must --resume that one, not the old one
-  if (e.hook_event_name === 'UserPromptSubmit' && e.session_id && /^[0-9a-f-]{36}$/i.test(e.session_id) && agentsRepo.get(agentId)?.session_id !== e.session_id)
-    agentsRepo.update(agentId, { session_id: e.session_id })
+  if (e.hook_event_name === 'UserPromptSubmit' && e.session_id && /^[0-9a-f-]{36}$/i.test(e.session_id)) {
+    if (key) {
+      if (sideSessionsRepo.get(agentId, key)?.session_id !== e.session_id) sideSessionsRepo.update(agentId, key, { session_id: e.session_id })
+    } else if (agentsRepo.get(agentId)?.session_id !== e.session_id) agentsRepo.update(agentId, { session_id: e.session_id })
+  }
 
   // files the agent writes during a task become the report's attachments
   // a tool that failed: Claude Code sends PostToolUseFailure instead
@@ -58,15 +77,21 @@ export async function handleHook(c: Context) {
     toolFinished(agentId, e.tool_name, e.tool_input, { isError: true, content: [{ text: String((e as { error?: unknown }).error ?? 'Failed') }] }, e.tool_use_id)
   if (e.hook_event_name === 'PostToolUse') {
     const file = writtenFile(e.tool_name, e.tool_input)
-    if (file) noteFileWritten(agentId, file)
+    if (file) noteFileWritten(agentId, file, key)
     // the Activity log: what a connector tool returned (and pages read before a write)
     toolFinished(agentId, e.tool_name, e.tool_input, e.tool_response, e.tool_use_id)
   }
-  if (e.hook_event_name === 'Stop' || e.hook_event_name === 'StopFailure')
-    void handleStop(agentId, e.last_assistant_message, e.hook_event_name === 'StopFailure').catch((err) => console.error('[stop]', err))
-  if (e.hook_event_name === 'UserPromptSubmit') onPromptSubmitted(agentId, e.prompt)
+  // a side session's turns are the owner's chats: no task, queue or manager reply is theirs (work.ts onSideStopped)
+  if (e.hook_event_name === 'Stop' || e.hook_event_name === 'StopFailure') {
+    if (key) onSideStopped(agentId, key, e.last_assistant_message, e.hook_event_name === 'StopFailure')
+    else void handleStop(agentId, e.last_assistant_message, e.hook_event_name === 'StopFailure').catch((err) => console.error('[stop]', err))
+  }
+  if (e.hook_event_name === 'UserPromptSubmit') {
+    if (key) onSidePromptSubmitted(agentId, key, e.prompt)
+    else onPromptSubmitted(agentId, e.prompt)
+  }
   // a mode change asked for while a dialog was open can go through now
-  if (['PostToolUse', 'Stop', 'StopFailure', 'UserPromptSubmit'].includes(e.hook_event_name)) void applyDeferredMode(agentId)
+  if (['PostToolUse', 'Stop', 'StopFailure', 'UserPromptSubmit'].includes(e.hook_event_name)) void applyDeferredMode(agentId, key)
   // a read-only connector's tool that changes something: ask the owner (a permission prompt, also in Auto)
   if (e.hook_event_name === 'PreToolUse' && e.tool_name?.startsWith('mcp__')) {
     const row = agentsRepo.get(agentId)
@@ -81,8 +106,9 @@ export async function handleHook(c: Context) {
   const kind: LiveFollowUp['kind'] = tool === 'ExitPlanMode' ? 'plan' : tool === 'AskUserQuestion' ? 'question' : 'permission'
   const base: LiveFollowUp = {
     // namespaced: one agent's ids can never replace another agent's (or the office's own) follow-ups
-    id: `${agentId}:${e.tool_use_id ?? crypto.randomUUID()}`,
+    id: `${agentId}:${key ? `${key}:` : ''}${e.tool_use_id ?? crypto.randomUUID()}`,
     agentId,
+    ...(key ? { sessionKey: key } : {}),
     kind,
     tool,
     message: summarize(tool, input),
@@ -98,7 +124,7 @@ export async function handleHook(c: Context) {
     void (async () => {
       for (let i = 0; i < 10; i++) {
         await Bun.sleep(700)
-        const options = await readDialogOptions(agentId)
+        const options = await readDialogOptions(agentId, key)
         if (options.length) return patchPending(base.id, { input: { ...input, options: options.map((o) => o.label) } })
       }
     })()
@@ -106,7 +132,7 @@ export async function handleHook(c: Context) {
   }
 
   // the reconciler may have picked this dialog up from the screen a moment before the hook arrived
-  resolvePending(`screen-${agentId}`)
+  if (!key) resolvePending(`screen-${agentId}`)
 
   // Permissions and questions: hold the request until the dashboard decides (or time runs out).
   const out = await new Promise<unknown>((resolve) => {
@@ -140,7 +166,7 @@ export async function decide(id: string, d: FollowUpDecision, who: { device: str
 
   if (f.kind === 'plan') {
     if (d.type !== 'plan' || !d.option) throw new AgentError('Plans need one of the dialog options')
-    await answerPlan(f.agentId, d.option, d.feedback)
+    await answerPlan(f.agentId, d.option, d.feedback, f.sessionKey)
     resolvePending(id)
     return
   }
@@ -155,13 +181,17 @@ export async function decide(id: string, d: FollowUpDecision, who: { device: str
   // a note with the answer: a hook can only carry it with a denial, so otherwise it follows as a message (queued
   // until the agent's turn ends)
   const sendNote = (note?: string) => {
-    if (note?.trim()) void deliver(f.agentId, `[From the owner, about ${f.tool}] ${note.trim()}`).catch(() => {})
+    if (!note?.trim()) return
+    const text = `[From the owner, about ${f.tool}] ${note.trim()}`
+    // a side session has no queue: typed in (Claude Code holds it until the turn ends)
+    if (f.sessionKey) void sendPrompt(f.agentId, text, f.sessionKey).catch(() => {})
+    else void deliver(f.agentId, text).catch(() => {})
   }
 
   // not held any more (hold timed out, or the server restarted): answer the dialog on screen instead
   if (!f.respond) {
     if (d.type !== 'allow' && d.type !== 'deny') throw new AgentError('Permissions need allow or deny')
-    await answerPermissionByKeys(f.agentId, d.type === 'deny' ? 'deny' : d.always ? 'always' : 'allow')
+    await answerPermissionByKeys(f.agentId, d.type === 'deny' ? 'deny' : d.always ? 'always' : 'allow', f.sessionKey)
     resolvePending(id)
     sendNote(d.note)
     return
@@ -177,7 +207,7 @@ export async function decide(id: string, d: FollowUpDecision, who: { device: str
       : []
     const updates: unknown[] = d.always ? [...rules] : []
     // a mode change picked while this dialog was open goes out with the answer (Shift+Tab can't reach the footer now)
-    const mode = takeDeferredMode(f.agentId)
+    const mode = takeDeferredMode(f.agentId, f.sessionKey)
     if (mode) updates.push({ type: 'setMode', mode, destination: 'session' })
     resolvePending(id, permissionOutput({ behavior: 'allow', ...(updates.length ? { updatedPermissions: updates } : {}) }))
     sendNote(d.note)
@@ -216,7 +246,9 @@ export async function handleStatusline(c: Context) {
   const agentId = agentIdOf(c)
   const s = (await c.req.json().catch(() => null)) as StatuslinePayload | null
   if (!agentId || !s) return c.text('After Office')
-  updateRuntime(agentId, (rt) => applyStatusline(rt, s))
+  const key = sessionOf(c, agentId)
+  if (key === null) return c.text('After Office')
+  updateSession(agentId, key, (rt) => applyStatusline(rt, s))
   const rl = s.rate_limits
   if (rl?.five_hour || rl?.seven_day) {
     const prev = currentRateLimits()
@@ -225,12 +257,12 @@ export async function handleStatusline(c: Context) {
     // at most once a minute, to keep it quiet
     const now = Date.now()
     const moved = !prev || prev.fiveHourPct !== next.fiveHourPct || prev.sevenDayPct !== next.sevenDayPct
-    if (moved || (runtimeOf(agentId).status === 'working' && now - (next.checkedAt ?? 0) > 60_000)) next.checkedAt = now
+    if (moved || ((key ? sideRuntimeOf(agentId, key) : runtimeOf(agentId)).status === 'working' && now - (next.checkedAt ?? 0) > 60_000)) next.checkedAt = now
     setRateLimits(next)
   }
   // What the TUI's status bar shows: the curl in the statusline command prints our response.
   const row = agentsRepo.get(agentId)!
-  const rt = runtimeOf(agentId)
+  const rt = key ? sideRuntimeOf(agentId, key) : runtimeOf(agentId)
   const ctx = rt.contextPct != null ? ` · ${Math.round(rt.contextPct)}% context` : ''
-  return c.text(`After Office · ${row.name} · ${rt.modelName ?? row.model}${ctx}`)
+  return c.text(`After Office · ${row.name}${key ? ` · session ${key.slice(1)}` : ''} · ${rt.modelName ?? row.model}${ctx}`)
 }

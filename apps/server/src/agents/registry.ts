@@ -1,5 +1,5 @@
-import { isEffort, type AgentInfo, type LiveFollowUp, type OfficeEvent, type RateLimits, type WorkState } from '@after-office/shared'
-import { connectorsReadAskOf, connectorsWriteOf, agentsRepo, settingsRepo, type AgentRow, connectorsOf, extraDirsOf } from '../db'
+import { isEffort, type AgentInfo, type LiveFollowUp, type OfficeEvent, type RateLimits, type SideSessionInfo, type WorkState } from '@after-office/shared'
+import { connectorsReadAskOf, connectorsWriteOf, agentsRepo, settingsRepo, sideSessionsRepo, type AgentRow, connectorsOf, extraDirsOf } from '../db'
 import { DEFAULT_SETTINGS } from '../work/settings'
 import { applyTick, initialRuntime, type Runtime } from './state'
 import { gitIdentitiesRepo } from '../db'
@@ -9,6 +9,9 @@ import { toIdentity } from './git'
 // feeds the SSE stream. Persistent agent config lives in SQLite (db.ts).
 
 const runtimes = new Map<string, Runtime>()
+/** Side sessions' runtimes, by `${agentId}:${key}` (see agents/sessions.ts). The agent's own runtime is its main session. */
+const sideRuntimes = new Map<string, Runtime>()
+const sideId = (agentId: string, key: string) => `${agentId}:${key}`
 /** Last AgentInfo broadcast per agent, to skip no-op updates (and still catch DB-side changes like a rename). */
 const lastSent = new Map<string, AgentInfo>()
 const listeners = new Set<(e: OfficeEvent) => void>()
@@ -73,8 +76,47 @@ export function runtimeOf(id: string) {
   return rt
 }
 
+export function sideRuntimeOf(agentId: string, key: string) {
+  let rt = sideRuntimes.get(sideId(agentId, key))
+  if (!rt) sideRuntimes.set(sideId(agentId, key), (rt = initialRuntime()))
+  return rt
+}
+
+/** Apply a change to a side session's runtime; the agent (which lists its sessions) is broadcast again. */
+export function updateSideRuntime(agentId: string, key: string, fn: (rt: Runtime) => Runtime) {
+  sideRuntimes.set(sideId(agentId, key), fn(sideRuntimeOf(agentId, key)))
+  updateRuntime(agentId, (rt) => rt)
+}
+
+export const forgetSideRuntime = (agentId: string, key: string) => void sideRuntimes.delete(sideId(agentId, key))
+
+/** The agent's side sessions as the dashboard sees them. */
+function sessionsOf(row: AgentRow): SideSessionInfo[] {
+  return sideSessionsRepo.forAgent(row.id).map((s) => {
+    const rt = s.closed_at ? initialRuntime() : sideRuntimeOf(row.id, s.key)
+    // the owner's name wins over Claude Code's own title
+    const title = s.name ?? rt.title ?? s.title ?? undefined
+    return {
+      key: s.key,
+      ...(title ? { title } : {}),
+      open: !s.closed_at,
+      status: s.closed_at ? 'offline' : rt.status,
+      ...(rt.waitingFor ? { waitingFor: rt.waitingFor } : {}),
+      ...(rt.tool ? { tool: rt.tool } : {}),
+      permissionMode: rt.permissionMode ?? row.permission_mode,
+      ...(rt.costUsd != null ? { costUsd: rt.costUsd } : {}),
+      ...(rt.contextPct != null ? { contextPct: rt.contextPct } : {}),
+      ...(rt.lastMessage ? { lastMessage: rt.lastMessage } : {}),
+      ...(rt.unread ? { unread: rt.unread } : {}),
+      createdAt: s.created_at,
+      ...(s.closed_at ? { closedAt: s.closed_at } : {}),
+    }
+  })
+}
+
 export function toInfo(row: AgentRow, rt = runtimeOf(row.id)): AgentInfo {
   const extraDirs = extraDirsOf(row)
+  const sessions = sessionsOf(row)
   return {
     id: row.id,
     name: row.name,
@@ -111,6 +153,7 @@ export function toInfo(row: AgentRow, rt = runtimeOf(row.id)): AgentInfo {
     error: rt.error,
     unread: rt.unread || undefined,
     updatedAt: rt.lastEventAt,
+    ...(sessions.length ? { sessions } : {}),
   }
 }
 
@@ -132,6 +175,7 @@ export function updateRuntime(id: string, fn: (rt: Runtime) => Runtime) {
 export function forgetAgent(id: string) {
   storeUnread(id, 0)
   runtimes.delete(id)
+  for (const k of [...sideRuntimes.keys()]) if (k.startsWith(`${id}:`)) sideRuntimes.delete(k)
   lastSent.delete(id)
   for (const [fid, f] of pending) if (f.agentId === id) resolvePending(fid, {})
   publish({ type: 'remove', id })
@@ -168,9 +212,11 @@ export function resolvePending(id: string, hookOutput?: unknown) {
 /** Follow-ups of one agent that are no longer relevant once it moves on (e.g. answered in the terminal). */
 export const pendingFor = (agentId: string) => [...pending.values()].filter((f) => f.agentId === agentId)
 
-export function clearPendingFor(agentId: string, keep?: (f: Pending) => boolean) {
+/** `sessionKey`: only the ones asked in that session (unset: the main session's); `'*'`: every session's. */
+export function clearPendingFor(agentId: string, keep?: (f: Pending) => boolean, sessionKey: string | '*' = '') {
   // a delegation waiting for the owner isn't about the manager's screen: it stays until the owner decides
-  for (const [id, f] of pending) if (f.agentId === agentId && !['delegation', 'hire', 'check', 'daily'].includes(f.kind) && !keep?.(f)) resolvePending(id, {})
+  for (const [id, f] of pending)
+    if (f.agentId === agentId && (sessionKey === '*' || (f.sessionKey ?? '') === sessionKey) && !['delegation', 'hire', 'check', 'daily'].includes(f.kind) && !keep?.(f)) resolvePending(id, {})
 }
 
 export const currentRateLimits = () => rateLimits
@@ -198,5 +244,6 @@ export function snapshot(): OfficeEvent {
 
 /** Periodic housekeeping: stale "working" agents fall back to idle. */
 export function tickAll(now = Date.now()) {
+  for (const [k, rt] of sideRuntimes) sideRuntimes.set(k, applyTick(rt, now))
   for (const row of agentsRepo.all()) updateRuntime(row.id, (rt) => applyTick(rt, now))
 }

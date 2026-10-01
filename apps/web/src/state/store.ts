@@ -52,6 +52,8 @@ export interface OfficeAgent extends AgentInfo {
   /** Bumped each time the agent comes back after leaving: a fresh scene character (see Office.tsx) */
   gen?: number
   profile: AgentProfile
+  /** its main session's own status (`status` also counts its side sessions: busy when any of them is) */
+  mainStatus?: AgentInfo['status']
 }
 
 /** How long an agent may be offline before it walks out (a restart takes a few seconds). */
@@ -301,13 +303,19 @@ function lookFor(desk: number, info: AgentInfo, prev?: Look): Look {
 }
 
 /** Server AgentInfo → scene agent. Look and desk are stable per desk index, so reloads look the same. */
-function fromLive(info: AgentInfo, all: OfficeAgent[], prev?: OfficeAgent, atSpot = false): OfficeAgent {
+function fromLive(raw: AgentInfo, all: OfficeAgent[], prev?: OfficeAgent, atSpot = false): OfficeAgent {
+  // busy in a side session is busy: the character works (or waits) while any of its sessions does
+  const open = (raw.sessions ?? []).filter((s) => s.open)
+  const side = open.some((s) => s.status === 'waiting') ? 'waiting' : open.some((s) => s.status === 'working') ? 'working' : null
+  const status = raw.status === 'offline' || raw.status === 'waiting' || !side ? raw.status : raw.status === 'working' ? 'working' : side
+  const info: AgentInfo = { ...raw, status }
   const desk = info.desk ?? prev?.desk ?? 0
   const base = { id: info.id, desk }
   const spotId = prev && prev.status === info.status ? prev.spotId : assignSpot(base, info.status, all)
   const spot = spotById(spotId)
   return {
     ...info,
+    mainStatus: raw.status,
     desk,
     look: lookFor(desk, info, prev?.look),
     profile: prev?.profile ?? { ...defaultProfile(info.name, desk), role: info.role ?? '' },

@@ -280,8 +280,9 @@ export const liveApi = {
   },
   /** `uploads`: ids of files attached (staged) for this message; the server moves them into the agent's folder */
   /** `ctx`: the project and tags picked above the message box (optional) */
-  prompt: (id: string, text: string, uploads: string[] = [], ctx?: { projectId: string; tags: string[] }) =>
-    call(`/api/agents/${id}/prompt`, { text, ...(uploads.length ? { uploads } : {}), ...(ctx?.projectId ? { projectId: ctx.projectId } : {}), ...(ctx?.tags.length ? { tags: ctx.tags } : {}) }),
+  /** `session`: one of its side sessions (s2, s3…; unset: its main session) */
+  prompt: (id: string, text: string, uploads: string[] = [], ctx?: { projectId: string; tags: string[] }, session?: string) =>
+    call(`/api/agents/${id}/prompt${session ? `?session=${session}` : ''}`, { text, ...(uploads.length ? { uploads } : {}), ...(ctx?.projectId ? { projectId: ctx.projectId } : {}), ...(ctx?.tags.length ? { tags: ctx.tags } : {}) }),
   /** Attach a file in the chat: staged on the server until the message is sent (then it goes into the agent's folder). */
   upload: async (id: string, file: File): Promise<StagedUpload> => {
     // raw bytes + the name in a header (the server's one exception to JSON-only writes, see auth.ts)
@@ -292,7 +293,7 @@ export const liveApi = {
   /** A staged attachment removed from the message (or the message never sent): deleted on the server. */
   discardUpload: (id: string, upload: string, keepalive = false) =>
     api(`/api/agents/${id}/uploads/${upload}`, { method: 'DELETE', keepalive }).catch(() => undefined),
-  setMode: (id: string, mode: LiveMode) => call(`/api/agents/${id}/mode`, { mode }) as Promise<{ mode: LiveMode; deferred?: boolean }>,
+  setMode: (id: string, mode: LiveMode, session?: string) => call(`/api/agents/${id}/mode${session ? `?session=${session}` : ''}`, { mode }) as Promise<{ mode: LiveMode; deferred?: boolean }>,
   setModel: (id: string, model: string) => call(`/api/agents/${id}/model`, { model }),
   /** thinking effort (null: Claude Code's default); restarts the session, conversation kept */
   setEffort: (id: string, effort: AgentEffort | null) => call(`/api/agents/${id}/effort`, { effort }),
@@ -313,8 +314,16 @@ export const liveApi = {
   /** Restart every agent (their tmux server): each resumes its conversation. */
   restartAgentServer: () => call('/api/agents-server/restart', {}) as Promise<{ restarted: number }>,
   revokeDir: (id: string, dir: string) => call(`/api/agents/${id}/dirs`, { dir }, 'DELETE'),
-  interrupt: (id: string) => call(`/api/agents/${id}/interrupt`, {}),
-  markChatRead: (id: string) => call(`/api/agents/${id}/read`, {}),
+  interrupt: (id: string, session?: string) => call(`/api/agents/${id}/interrupt${session ? `?session=${session}` : ''}`, {}),
+  markChatRead: (id: string, session?: string) => call(`/api/agents/${id}/read${session ? `?session=${session}` : ''}`, {}),
+  /** side sessions: more chats with the same agent, each its own Claude Code process */
+  openSession: (id: string) => call(`/api/agents/${id}/sessions`, {}) as Promise<{ key: string }>,
+  /** closing stops its process (the conversation stays, to open again) */
+  closeSession: (id: string, key: string) => call(`/api/agents/${id}/sessions/${key}`, undefined, 'DELETE'),
+  /** the owner's name for a side session ('' goes back to Claude Code's title) */
+  renameSession: (id: string, key: string, name: string) => call(`/api/agents/${id}/sessions/${key}`, { name }, 'PUT'),
+  reopenSession: (id: string, key: string) => call(`/api/agents/${id}/sessions/${key}/reopen`, {}) as Promise<{ key: string }>,
+  forgetSession: (id: string, key: string) => call(`/api/agents/${id}/sessions/${key}/forget`, undefined, 'DELETE'),
   reviseTask: (taskId: string, feedback: string) => call(`/api/tasks/${taskId}/revise`, { feedback }) as Promise<{ result: 'sent' | 'queued' }>,
   startTask: (taskId: string, agentId?: string) => call(`/api/tasks/${taskId}/start`, { agentId }) as Promise<{ result: 'sent' | 'queued' }>,
   taskArchive: async (q: string, offset = 0): Promise<TaskArchivePage> => {

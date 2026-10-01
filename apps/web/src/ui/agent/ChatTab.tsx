@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, useMemo } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, useMemo } from 'react'
 import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX } from 'react-icons/lu'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import type { ChatItem, LiveMode } from '@after-office/shared'
@@ -16,6 +16,8 @@ import { OutgoingFiles, PendingTray, splitAttachments, usePendingFiles, type Pen
 import { tip } from '../Tooltip'
 import { OfflineBanner } from './OfflineBanner'
 import { ChatContextBar, ContextChips, splitContext, useChatContext } from './chatContext'
+import { SessionTabs } from './SessionTabs'
+import { setUrl, useUrl } from '../../state/url'
 
 // Chat with one agent. Messages come from its Claude Code transcript; what you send is typed into its tmux session.
 
@@ -25,7 +27,29 @@ const MODE_OPTIONS: { value: LiveMode; label: string }[] = (['default', 'acceptE
 /** "claude-sonnet-5" → "sonnet" so the dropdown shows the running model. */
 export const modelAlias = (id?: string) => modelChoiceOf(id)
 
+/**
+ * The agent's chats: its main session and its side sessions (tabs above the chat, ?session=s2 in the address bar).
+ * A side session's chat is the same view, on that session's process and state.
+ */
 export function ChatTab({ agent }: { agent: OfficeAgent }) {
+  const params = useUrl((s) => s.params)
+  const wanted = params.session ?? ''
+  const side = wanted ? agent.sessions?.find((s) => s.key === wanted && s.open) : undefined
+  const session = side ? wanted : ''
+  // a closed (or unknown) session in the address bar: back to the main chat
+  useEffect(() => {
+    if (wanted && agent.sessions && !side) setUrl({ session: null })
+  }, [wanted, side, agent.sessions])
+  const pick = (key: string) => setUrl({ session: key || null })
+  // the chat shows the session's own state (status, mode, cost, context…), the agent's name and folder
+  const view: OfficeAgent = side
+    ? { ...agent, status: side.status, waitingFor: side.waitingFor, tool: side.tool, permissionMode: side.permissionMode, costUsd: side.costUsd, contextPct: side.contextPct, contextTokens: undefined, contextSize: undefined, lastMessage: side.lastMessage, unread: side.unread, error: undefined }
+    : { ...agent, status: agent.mainStatus ?? agent.status }
+  return <ChatView key={`${agent.id}:${session}`} agent={view} session={session} header={<SessionTabs agent={agent} current={session} onPick={pick} />} />
+}
+
+function ChatView({ agent, session, header }: { agent: OfficeAgent; session: string; header: ReactNode }) {
+  const sk = session || undefined
   const [items, setItems] = useState<ChatItem[]>([])
   const [loaded, setLoaded] = useState(false)
   const [text, setText] = useState('')
@@ -35,7 +59,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
   const [busy, setBusy] = useState('')
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
-  const followUps = useLive((s) => s.followUps).filter((f) => f.agentId === agent.id)
+  const followUps = useLive((s) => s.followUps).filter((f) => f.agentId === agent.id && (f.sessionKey ?? '') === session)
   const [detail, setDetail] = useState<Item | null>(null)
   const offline = agent.status === 'offline'
   // time of our last prompt: show the typing bubble right away, before the agent's first hook arrives
@@ -53,7 +77,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
   const limit = findOpen ? 500 : 150
 
   const load = useCallback(async () => {
-    const res = await api(`/api/agents/${agent.id}/chat?limit=${limit}`)
+    const res = await api(`/api/agents/${agent.id}/chat?limit=${limit}${session ? `&session=${session}` : ''}`)
     if (res.ok) {
       const text = await res.text()
       // polling: nothing new means nothing to re-render (no flicker, scroll and selection stay put)
@@ -65,7 +89,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
       }
     }
     setLoaded(true)
-  }, [agent.id, limit])
+  }, [agent.id, limit, session])
 
   // refresh on every status change. Claude Code writes the reply to its transcript a moment *after* the Stop hook
   // (seen live: the read right on "idle" still misses it), so look again shortly after, too.
@@ -83,13 +107,17 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
 
   // the chat is on screen: its replies are seen (clears the badge on the agent's chat button)
   useEffect(() => {
-    if (agent.unread && document.visibilityState === 'visible') void liveApi.markChatRead(agent.id).catch(() => {})
-  }, [agent.id, agent.unread])
+    if (agent.unread && document.visibilityState === 'visible') void liveApi.markChatRead(agent.id, sk).catch(() => {})
+  }, [agent.id, agent.unread, sk])
   useEffect(() => {
-    const onVisible = () => document.visibilityState === 'visible' && useOffice.getState().agents.find((a) => a.id === agent.id)?.unread && void liveApi.markChatRead(agent.id).catch(() => {})
+    const unread = () => {
+      const a = useOffice.getState().agents.find((x) => x.id === agent.id)
+      return sk ? a?.sessions?.find((s) => s.key === sk)?.unread : a?.unread
+    }
+    const onVisible = () => document.visibilityState === 'visible' && unread() && void liveApi.markChatRead(agent.id, sk).catch(() => {})
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [agent.id])
+  }, [agent.id, sk])
 
   // the reply arrived (or the agent is done / needs us): stop the "typing" bubble we started on send
   useEffect(() => {
@@ -212,7 +240,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
     setText('')
     stick.current = true
     try {
-      await liveApi.prompt(agent.id, body, pending.ids, context.value)
+      await liveApi.prompt(agent.id, body, pending.ids, context.value, sk)
       setSentAt(at)
       pending.take()
       stick.current = true
@@ -385,14 +413,17 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
   // phones: the model / mode / status bar folds away behind an info button, so the chat gets the whole height
   const bar = (
       <div className={`chat__bar${mobile ? ' chat__bar--sheet' : ''}`}>
-        <Select
-          ariaLabel="Model"
-          size="sm"
-          value={modelAlias(agent.model)}
-          options={MODEL_OPTIONS}
-          disabled={offline || !!busy || active}
-          onChange={(m) => run('model', () => liveApi.setModel(agent.id, m))}
-        />
+        {/* the model is the agent's (changing it restarts the main session); a side session starts with it */}
+        {!session && (
+          <Select
+            ariaLabel="Model"
+            size="sm"
+            value={modelAlias(agent.model)}
+            options={MODEL_OPTIONS}
+            disabled={offline || !!busy || active}
+            onChange={(m) => run('model', () => liveApi.setModel(agent.id, m))}
+          />
+        )}
         <Select
           ariaLabel="Permission mode"
           size="sm"
@@ -401,7 +432,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
           disabled={offline || !!busy}
           onChange={(m) =>
             run('mode', async () => {
-              const r = await liveApi.setMode(agent.id, m)
+              const r = await liveApi.setMode(agent.id, m, sk)
               if (r.deferred) setNotice(`Switches to ${MODE_LABEL[m]} when you answer the current prompt.`)
             })
           }
@@ -418,7 +449,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
           </span>
         )}
         {active && !mobile && (
-          <button className="small" onClick={() => run('stop', () => liveApi.interrupt(agent.id))} data-tip="Press Esc in the session">
+          <button className="small" onClick={() => run('stop', () => liveApi.interrupt(agent.id, sk))} data-tip="Press Esc in the session">
             <LuCircleStop /> Stop
           </button>
         )}
@@ -446,11 +477,12 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
         attach([...e.dataTransfer.files])
       }}
     >
+      {header}
       {mobile ? (
         <>
           <div className={`chat__float${findOpen ? ' chat__float--find' : ''}`}>
             {active && !findOpen && (
-              <button className="small" onClick={() => run('stop', () => liveApi.interrupt(agent.id))} aria-label="Stop the agent">
+              <button className="small" onClick={() => run('stop', () => liveApi.interrupt(agent.id, sk))} aria-label="Stop the agent">
                 <LuCircleStop /> Stop
               </button>
             )}
@@ -547,7 +579,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
         ))}
       </div>
 
-      {offline && <OfflineBanner agent={agent} />}
+      {offline && (session ? <div className="chat__notice">Starting the session…</div> : <OfflineBanner agent={agent} />)}
       {error && <div className="chat__error">{error}</div>}
       {!error && notice && agent.status === 'waiting' && <div className="chat__notice">{notice}</div>}
       <PendingTray items={pending.items} onRemove={pending.remove} />
@@ -606,7 +638,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
             attach(files)
           }}
           rows={1}
-          placeholder={offline ? 'The agent is offline' : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
+          placeholder={offline ? (session ? 'The session is starting…' : 'The agent is offline') : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
           disabled={offline}
         />
         <button className="icon-btn primary" onClick={send} disabled={!canSend} data-tip={pending.uploading ? 'Waiting for the upload…' : 'Send'} aria-label="Send">

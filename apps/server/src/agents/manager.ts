@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { DEFAULT_MANAGER, DEFAULT_MODEL, EFFORTS, isEffort, defaultRulePacks, type RulePackId, type AgentEffort, type AgentFigure, type AgentKind, type AgentProfile, type LiveMode } from '@after-office/shared'
-import { agentsRepo, queueRepo, type AgentRow, extraDirsOf } from '../db'
-import { forgetAgent, runtimeOf, updateRuntime } from './registry'
+import { agentsRepo, queueRepo, sideSessionsRepo, type AgentRow, type SideSessionRow, extraDirsOf } from '../db'
+import { clearPendingFor, forgetAgent, forgetSideRuntime, runtimeOf, sideRuntimeOf, updateRuntime, updateSideRuntime } from './registry'
 import { tmux } from './tmux'
+import type { Runtime } from './state'
 import { agentToken } from './env'
 import { real, expandPath, ROOTS, rootOf, CLAUDE_CONFIG_DIR, CLAUDE_PROJECTS_DIR, PROJECTS_DIR } from '../fsroots'
 
@@ -55,8 +56,9 @@ function ourHook() {
   return {
     type: 'http',
     url: OUR_HOOK_URL,
-    headers: { Authorization: 'Bearer $AO_HOOK_TOKEN', 'X-AO-Agent': '$AO_AGENT_ID' },
-    allowedEnvVars: ['AO_HOOK_TOKEN', 'AO_AGENT_ID'],
+    // X-AO-Session: which of the agent's sessions (main, or a side session s2, s3…) this event is from
+    headers: { Authorization: 'Bearer $AO_HOOK_TOKEN', 'X-AO-Agent': '$AO_AGENT_ID', 'X-AO-Session': '$AO_SESSION_KEY' },
+    allowedEnvVars: ['AO_HOOK_TOKEN', 'AO_AGENT_ID', 'AO_SESSION_KEY'],
     // held PermissionRequests wait for a human; the server answers before this runs out
     timeout: 600,
   }
@@ -66,11 +68,16 @@ const STATUSLINE_COMMAND = [
   'curl -s -m 2',
   '-H "authorization: Bearer $AO_HOOK_TOKEN"',
   '-H "x-ao-agent: $AO_AGENT_ID"',
+  '-H "x-ao-session: $AO_SESSION_KEY"',
   "-H 'content-type: application/json'",
   '--data-binary @-',
   `"${BASE}/statusline"`,
   "|| echo 'After Office'",
 ].join(' ')
+
+/** What the hooks and status line looked like before side sessions: still ours (an upgrade, not tampering). */
+const LEGACY_HOOK = JSON.stringify({ ...ourHook(), headers: { Authorization: 'Bearer $AO_HOOK_TOKEN', 'X-AO-Agent': '$AO_AGENT_ID' }, allowedEnvVars: ['AO_HOOK_TOKEN', 'AO_AGENT_ID'] })
+const LEGACY_STATUSLINE = STATUSLINE_COMMAND.replace(' -H "x-ao-session: $AO_SESSION_KEY"', '')
 
 type Json = Record<string, unknown>
 
@@ -123,15 +130,16 @@ export function hooksTampered(cwd: string, opts: { ignoreNewer?: boolean } = {})
       // not ours to judge
     }
   }
-  const want = JSON.stringify(ourHook())
+  // ignoreNewer: the hooks of an older version count too (they're put back quietly, as an upgrade)
+  const wanted = new Set([JSON.stringify(ourHook()), ...(opts.ignoreNewer ? [LEGACY_HOOK] : [])])
   const hooks = (settings.hooks as Record<string, Json[]>) ?? {}
   for (const event of [...HOOK_EVENTS_WITH_MATCHER, ...HOOK_EVENTS_PLAIN]) {
     if (opts.ignoreNewer && NEWER_HOOK_EVENTS.includes(event)) continue
-    const found = (hooks[event] ?? []).some((g) => ((g.hooks as Json[]) ?? []).some((h) => JSON.stringify(h) === want) && (!HOOK_EVENTS_WITH_MATCHER.includes(event) || g.matcher === '*'))
+    const found = (hooks[event] ?? []).some((g) => ((g.hooks as Json[]) ?? []).some((h) => wanted.has(JSON.stringify(h))) && (!HOOK_EVENTS_WITH_MATCHER.includes(event) || g.matcher === '*'))
     if (!found) return `its ${event} hook was removed or changed`
   }
   const status = settings.statusLine as Json | undefined
-  if (status?.command !== STATUSLINE_COMMAND) return 'its status line was changed'
+  if (status?.command !== STATUSLINE_COMMAND && !(opts.ignoreNewer && status?.command === LEGACY_STATUSLINE)) return 'its status line was changed'
   return null
 }
 
@@ -258,7 +266,8 @@ export function writeManagerFiles(cwd: string, name?: string) {
   servers[MCP_NAME] = {
     type: 'http',
     url: `${BASE}/mcp`,
-    headers: { Authorization: 'Bearer ${AO_HOOK_TOKEN}', 'X-AO-Agent': '${AO_AGENT_ID}' },
+    // X-AO-Session: which of its sessions calls (the guards on its tools are per conversation)
+    headers: { Authorization: 'Bearer ${AO_HOOK_TOKEN}', 'X-AO-Agent': '${AO_AGENT_ID}', 'X-AO-Session': '${AO_SESSION_KEY:-main}' },
     timeout: 120000,
   }
   mcp.mcpServers = servers
@@ -317,7 +326,7 @@ export function writeProfileFiles(cwd: string, profile?: Partial<AgentProfile>) 
 
 // ── lifecycle ──
 
-function claudeArgs(row: AgentRow, resume: boolean) {
+function claudeArgs(row: AgentRow, resume: boolean, sessionId = row.session_id) {
   return [
     CLAUDE,
     '--model',
@@ -327,7 +336,7 @@ function claudeArgs(row: AgentRow, resume: boolean) {
     // thinking effort, only when chosen (unset: Claude Code's default)
     ...(isEffort(row.effort) ? ['--effort', row.effort] : []),
     // a fixed session id lets us find the transcript and resume the same conversation after restarts
-    ...(resume ? ['--resume', row.session_id] : ['--session-id', row.session_id]),
+    ...(resume ? ['--resume', sessionId] : ['--session-id', sessionId]),
     // project folders outside its own it was given (grantProjectDir): readable/editable like its own folder
     ...extraDirsOf(row).filter((d) => existsSync(d)).flatMap((d) => ['--add-dir', d]),
   ]
@@ -387,14 +396,23 @@ export async function revokeProjectDir(agentId: string, dir: string) {
 
 async function spawn(row: AgentRow, resume: boolean) {
   sessionDirs.set(row.id, new Set(extraDirsOf(row)))
+  await startProcess(row, { tmuxName: row.tmux_session, sessionId: row.session_id, resume, key: 'main' })
+  updateRuntime(row.id, (rt) => ({ ...rt, status: 'offline', error: undefined }))
+  void answerStartupDialogs(row.tmux_session, () => runtimeOf(row.id).status)
+}
+
+/** One Claude Code process of the agent in tmux: its main session, or a side session (key s2, s3…). */
+async function startProcess(row: AgentRow, p: { tmuxName: string; sessionId: string; resume: boolean; key: string }) {
   const gitEnvFor = await gitEnv(row)
   await tmux.newSession({
-    name: row.tmux_session,
+    name: p.tmuxName,
     cwd: row.cwd,
     // its own token: it can only report (and use MCP tools) as itself
     env: {
       AO_AGENT_ID: row.id,
       AO_HOOK_TOKEN: agentToken(row.id),
+      // which of its sessions this is (hooks, status line and MCP calls say so)
+      AO_SESSION_KEY: p.key,
       // CLAUDE.md of the project folders added with --add-dir / /add-dir is read too (the project's own rules)
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
       // one Claude account's folder for every agent, when set (fsroots.ts)
@@ -404,28 +422,122 @@ async function spawn(row: AgentRow, resume: boolean) {
     },
     // Agents run on the Claude subscription login. An API key in the environment would take precedence and bill the
     // API instead, so drop it (tmux sessions inherit the server's environment). OFFICE_ALLOW_API_KEY=true keeps it.
-    command: process.env.OFFICE_ALLOW_API_KEY === 'true' ? claudeArgs(row, resume) : ['env', '-u', 'ANTHROPIC_API_KEY', '-u', 'ANTHROPIC_AUTH_TOKEN', ...claudeArgs(row, resume)],
+    command:
+      process.env.OFFICE_ALLOW_API_KEY === 'true'
+        ? claudeArgs(row, p.resume, p.sessionId)
+        : ['env', '-u', 'ANTHROPIC_API_KEY', '-u', 'ANTHROPIC_AUTH_TOKEN', ...claudeArgs(row, p.resume, p.sessionId)],
   })
-  updateRuntime(row.id, (rt) => ({ ...rt, status: 'offline', error: undefined }))
-  void answerStartupDialogs(row)
 }
 
 /**
  * New folders show "Is this a project you trust?" with "No, exit" preselected (spike #1). The folder was chosen by
  * the signed-in owner, so accept it. Stops as soon as the session reports in or after 30 s.
  */
-async function answerStartupDialogs(row: AgentRow) {
+async function answerStartupDialogs(session: string, status: () => string) {
   const until = Date.now() + 30_000
   while (Date.now() < until) {
     await Bun.sleep(700)
-    if (runtimeOf(row.id).status !== 'offline') return
-    if (!(await tmux.hasSession(row.tmux_session))) return
-    const screen = await tmux.capture(row.tmux_session).catch(() => '')
+    if (status() !== 'offline') return
+    if (!(await tmux.hasSession(session))) return
+    const screen = await tmux.capture(session).catch(() => '')
     if (/trust this folder|Yes, I trust/i.test(screen)) {
-      await tmux.keys(row.tmux_session, 'Down')
+      await tmux.keys(session, 'Down')
       await Bun.sleep(200)
-      await tmux.keys(row.tmux_session, 'Enter')
+      await tmux.keys(session, 'Enter')
     }
+  }
+}
+
+// ── side sessions: more Claude Code processes of the same agent, for chatting with the owner in parallel ──
+
+/** "s2", "s3"…; anything else (unset, "main", an unexpanded "$AO_SESSION_KEY") is the main session: ''. */
+export const sessionKeyOf = (raw: string | null | undefined) => (raw && /^s\d{1,4}$/.test(raw) ? raw : '')
+
+/** The tmux session a key runs in (the main one for ''); throws for an unknown or closed side session. */
+function tmuxOf(row: AgentRow, key = '') {
+  if (!key) return row.tmux_session
+  const side = sideSessionsRepo.get(row.id, key)
+  if (!side || side.closed_at) throw new AgentError('That session is closed', 409)
+  return side.tmux_session
+}
+
+function sideTranscriptExists(row: AgentRow, sessionId: string) {
+  return existsSync(join(CLAUDE_PROJECTS_DIR, row.cwd.replace(/[^a-zA-Z0-9]/g, '-'), `${sessionId}.jsonl`))
+}
+
+async function startSide(row: AgentRow, side: SideSessionRow, resume: boolean) {
+  forgetSideRuntime(row.id, side.key)
+  await startProcess(row, { tmuxName: side.tmux_session, sessionId: side.session_id, resume, key: side.key })
+  updateSideRuntime(row.id, side.key, (rt) => ({ ...rt, status: 'offline', error: undefined }))
+  void answerStartupDialogs(side.tmux_session, () => sideRuntimeOf(row.id, side.key).status)
+}
+
+/** A new side session: its own Claude Code process in the agent's folder (same model, mode, rules and tools). */
+export async function openSideSession(agentId: string) {
+  const row = agentsRepo.get(agentId)
+  if (!row) throw new AgentError('No such agent', 404)
+  if (!(await tmux.available())) throw new AgentError('tmux is not installed on the server', 500)
+  const key = sideSessionsRepo.nextKey(agentId)
+  const side: SideSessionRow = { agent_id: agentId, key, tmux_session: `${row.tmux_session}--${key}`, session_id: crypto.randomUUID(), title: null, created_at: Date.now(), closed_at: null }
+  if (await tmux.hasSession(side.tmux_session)) await tmux.killSession(side.tmux_session)
+  sideSessionsRepo.insert(side)
+  try {
+    await startSide(row, side, false)
+  } catch (e) {
+    sideSessionsRepo.remove(agentId, key)
+    throw new AgentError(e instanceof Error ? e.message : 'Could not start the session', 500)
+  }
+  return key
+}
+
+/** Close a side session: its process stops (its memory comes back); the conversation stays, to open again. */
+export async function closeSideSession(agentId: string, key: string) {
+  const side = sideSessionsRepo.get(agentId, key)
+  if (!side) throw new AgentError('No such session', 404)
+  await tmux.killSession(side.tmux_session).catch(() => {})
+  sideSessionsRepo.update(agentId, key, { closed_at: Date.now(), title: sideRuntimeOf(agentId, key).title ?? side.title })
+  sideSessionsRepo.prune(agentId)
+  clearPendingFor(agentId, undefined, key)
+  forgetSideRuntime(agentId, key)
+  updateRuntime(agentId, (rt) => rt)
+}
+
+/** Open a closed side session again, in the same conversation. */
+export async function reopenSideSession(agentId: string, key: string) {
+  const row = agentsRepo.get(agentId)
+  const side = sideSessionsRepo.get(agentId, key)
+  if (!row || !side) throw new AgentError('No such session', 404)
+  if (!side.closed_at && (await tmux.hasSession(side.tmux_session))) return key
+  sideSessionsRepo.update(agentId, key, { closed_at: null })
+  await startSide(row, { ...side, closed_at: null }, sideTranscriptExists(row, side.session_id))
+  return key
+}
+
+/** The owner's name for a side session ('' goes back to Claude Code's title). */
+export function renameSideSession(agentId: string, key: string, name: string) {
+  if (!sideSessionsRepo.get(agentId, key)) throw new AgentError('No such session', 404)
+  const clean = name.replace(/\s+/g, ' ').trim().slice(0, 60)
+  sideSessionsRepo.update(agentId, key, { name: clean || null })
+  updateRuntime(agentId, (rt) => rt)
+}
+
+/** Take a closed side session off the list (its transcript stays on disk). */
+export function forgetSideSession(agentId: string, key: string) {
+  const side = sideSessionsRepo.get(agentId, key)
+  if (!side) return
+  if (!side.closed_at) throw new AgentError('Close the session first', 409)
+  sideSessionsRepo.remove(agentId, key)
+  updateRuntime(agentId, (rt) => rt)
+}
+
+/** Side sessions whose process is gone (a crash, a server reboot): marked closed (they're not brought back: memory). */
+export async function tidySideSessions() {
+  for (const side of sideSessionsRepo.open()) {
+    if (await tmux.hasSession(side.tmux_session)) continue
+    sideSessionsRepo.update(side.agent_id, side.key, { closed_at: Date.now(), title: sideRuntimeOf(side.agent_id, side.key).title ?? side.title })
+    clearPendingFor(side.agent_id, undefined, side.key)
+    forgetSideRuntime(side.agent_id, side.key)
+    updateRuntime(side.agent_id, (rt) => rt)
   }
 }
 
@@ -536,6 +648,8 @@ export async function deleteAgent(id: string) {
   const row = agentsRepo.get(id)
   if (!row) throw new AgentError('No such agent', 404)
   await tmux.killSession(row.tmux_session)
+  for (const side of sideSessionsRepo.forAgent(id)) if (!side.closed_at) await tmux.killSession(side.tmux_session).catch(() => {})
+  sideSessionsRepo.removeAgent(id)
   // its git identities and SSH keys go with it
   await removeGitFor(row).catch(() => {})
   agentsRepo.remove(id)
@@ -602,31 +716,33 @@ export async function reviveAgent(row: AgentRow) {
 
 // ── input ──
 
-async function requireLive(id: string) {
+/** The agent and the tmux session of `key` (its main session for ''), which must be running. */
+async function requireLive(id: string, key = '') {
   const row = agentsRepo.get(id)
   if (!row) throw new AgentError('No such agent', 404)
-  if (!(await tmux.hasSession(row.tmux_session))) throw new AgentError('The agent is offline', 409)
-  return row
+  const session = tmuxOf(row, key)
+  if (!(await tmux.hasSession(session))) throw new AgentError(key ? 'That session is not running' : 'The agent is offline', 409)
+  return { row, session }
 }
 
 /** Slash commands the dashboard may send. Anything else starting with "/" is refused (e.g. /model rewrites globals). */
 const ALLOWED_COMMANDS = ['/clear', '/compact', '/cost', '/context']
 
-export async function sendPrompt(id: string, text: string) {
-  const row = await requireLive(id)
+export async function sendPrompt(id: string, text: string, key = '') {
+  const { session } = await requireLive(id, key)
   const body = text.trim()
   if (!body) throw new AgentError('Message is empty')
   if (body.length > 20_000) throw new AgentError('Message is too long')
   if (body.startsWith('/') && !ALLOWED_COMMANDS.includes(body.split(/\s/)[0])) throw new AgentError(`Command ${body.split(/\s/)[0]} is not allowed from the dashboard`)
-  await tmux.paste(row.tmux_session, body)
+  await tmux.paste(session, body)
   // The Enter can get lost while the TUI is busy redrawing (e.g. right as a turn ends); the text then sits in the
   // input box. Check, and press Enter again.
   const probe = body.split('\n')[0].slice(0, 24)
   for (let i = 0; i < 3; i++) {
     await Bun.sleep(700)
-    const input = inputBoxText(await tmux.capture(row.tmux_session).catch(() => ''))
+    const input = inputBoxText(await tmux.capture(session).catch(() => ''))
     if (!input || !(input.includes(probe) || /\[Pasted text/i.test(input))) return
-    await tmux.keys(row.tmux_session, 'Enter')
+    await tmux.keys(session, 'Enter')
   }
 }
 
@@ -640,14 +756,16 @@ export function inputBoxText(screen: string) {
 }
 
 /** Esc stops the current turn. Claude Code sends no Stop hook for an interrupted turn, so mark the agent idle here. */
-export async function interrupt(id: string) {
-  const row = await requireLive(id)
-  await tmux.keys(row.tmux_session, 'Escape')
+export async function interrupt(id: string, key = '') {
+  const { session } = await requireLive(id, key)
+  await tmux.keys(session, 'Escape')
   for (let i = 0; i < 10; i++) {
     await Bun.sleep(400)
-    if (/interrupted/i.test(await tmux.capture(row.tmux_session).catch(() => ''))) break
+    if (/interrupted/i.test(await tmux.capture(session).catch(() => ''))) break
   }
-  updateRuntime(id, (rt) => (rt.status === 'working' ? { ...rt, status: 'idle', tool: undefined, lastEventAt: Date.now() } : rt))
+  const idle = (rt: Runtime) => (rt.status === 'working' ? { ...rt, status: 'idle' as const, tool: undefined, lastEventAt: Date.now() } : rt)
+  if (key) updateSideRuntime(id, key, idle)
+  else updateRuntime(id, idle)
 }
 
 /** Footer labels of each mode (spike #7). */
@@ -670,53 +788,59 @@ export const dialogOnScreen = (screen: string) => /(do you want|would you like) 
 
 /** Mode changes asked for while a dialog was open; applied once it's answered (see applyDeferredMode). */
 const deferredMode = new Map<string, LiveMode>()
+/** deferredMode's key: the agent, or the agent's side session */
+const modeKey = (id: string, key = '') => (key ? `${id}:${key}` : id)
+/** A side session's mode is its own (the agent's saved mode is the main session's) */
+function recordMode(id: string, key: string, mode: LiveMode) {
+  if (key) return updateSideRuntime(id, key, (rt) => ({ ...rt, permissionMode: mode }))
+  agentsRepo.update(id, { permission_mode: mode })
+  updateRuntime(id, (rt) => ({ ...rt, permissionMode: mode }))
+}
 
 /**
  * Cycle Shift+Tab until the footer shows the wanted mode. The cycle order depends on what's enabled, so read it.
  * While a dialog is open the footer isn't visible, so the change is remembered and applied after the dialog.
  */
-export async function setMode(id: string, target: LiveMode): Promise<{ mode: LiveMode; deferred?: boolean }> {
-  const row = await requireLive(id)
+export async function setMode(id: string, target: LiveMode, key = ''): Promise<{ mode: LiveMode; deferred?: boolean }> {
+  const { session } = await requireLive(id, key)
   if (target === 'bypassPermissions' && !ALLOW_BYPASS) throw new AgentError('bypassPermissions is disabled on this server')
   for (let i = 0; i < 6; i++) {
-    const screen = await tmux.capture(row.tmux_session)
+    const screen = await tmux.capture(session)
     if (dialogOnScreen(screen)) {
-      deferredMode.set(id, target)
+      deferredMode.set(modeKey(id, key), target)
       return { mode: target, deferred: true }
     }
-    const current = await readModeFromScreen(row.tmux_session)
+    const current = await readModeFromScreen(session)
     if (current === target) {
-      deferredMode.delete(id)
-      agentsRepo.update(id, { permission_mode: target })
-      updateRuntime(id, (rt) => ({ ...rt, permissionMode: target }))
+      deferredMode.delete(modeKey(id, key))
+      recordMode(id, key, target)
       return { mode: target }
     }
-    await tmux.keys(row.tmux_session, 'BTab')
+    await tmux.keys(session, 'BTab')
     await Bun.sleep(450)
   }
   throw new AgentError(`Could not switch to ${target}; it may not be enabled for this session`, 409)
 }
 
 /** Apply a mode change that had to wait for a dialog. Called after tool calls and turns finish. */
-export async function applyDeferredMode(id: string) {
-  const target = deferredMode.get(id)
+export async function applyDeferredMode(id: string, key = '') {
+  const target = deferredMode.get(modeKey(id, key))
   if (!target) return
   await Bun.sleep(300) // let the dialog close
-  await setMode(id, target).catch((e) => {
-    deferredMode.delete(id)
+  await setMode(id, target, key).catch((e) => {
+    deferredMode.delete(modeKey(id, key))
     console.warn('[mode] deferred switch failed:', e.message)
   })
 }
 
-export const hasDeferredMode = (id: string) => deferredMode.get(id)
+export const hasDeferredMode = (id: string, key = '') => deferredMode.get(modeKey(id, key))
 
 /** The deferred mode is being applied another way (with a permission decision): forget it, record the new mode. */
-export function takeDeferredMode(id: string) {
-  const target = deferredMode.get(id)
+export function takeDeferredMode(id: string, key = '') {
+  const target = deferredMode.get(modeKey(id, key))
   if (!target) return undefined
-  deferredMode.delete(id)
-  agentsRepo.update(id, { permission_mode: target })
-  updateRuntime(id, (rt) => ({ ...rt, permissionMode: target }))
+  deferredMode.delete(modeKey(id, key))
+  recordMode(id, key, target)
   return target
 }
 
@@ -739,10 +863,16 @@ export function parseDialogOptions(screen: string) {
   return out
 }
 
-export async function readDialogOptions(id: string) {
+export async function readDialogOptions(id: string, key = '') {
   const row = agentsRepo.get(id)
   if (!row) return []
-  return parseDialogOptions(await tmux.capture(row.tmux_session).catch(() => ''))
+  let session: string
+  try {
+    session = tmuxOf(row, key)
+  } catch {
+    return []
+  }
+  return parseDialogOptions(await tmux.capture(session).catch(() => ''))
 }
 
 /**
@@ -766,10 +896,10 @@ async function answerImportsDialog(session: string, screen: string, allow: boole
   await tmux.keys(session, 'Enter')
 }
 
-export async function answerPermissionByKeys(id: string, choice: 'allow' | 'always' | 'deny') {
-  const row = await requireLive(id)
-  const screen = await tmux.capture(row.tmux_session)
-  if (isImportsDialog(screen)) return answerImportsDialog(row.tmux_session, screen, choice !== 'deny')
+export async function answerPermissionByKeys(id: string, choice: 'allow' | 'always' | 'deny', key = '') {
+  const { session } = await requireLive(id, key)
+  const screen = await tmux.capture(session)
+  if (isImportsDialog(screen)) return answerImportsDialog(session, screen, choice !== 'deny')
   const options = parseDialogOptions(screen)
   const pick =
     choice === 'deny'
@@ -778,16 +908,16 @@ export async function answerPermissionByKeys(id: string, choice: 'allow' | 'alwa
         ? (options.find((o) => /don.t ask again|always/i.test(o.label)) ?? options.find((o) => /^yes\b/i.test(o.label)))
         : options.find((o) => /^yes\b/i.test(o.label) && !/don.t ask again|always/i.test(o.label))
   if (!pick) throw new AgentError('The permission dialog is not on screen any more; open the Terminal tab to answer it', 409)
-  await tmux.keys(row.tmux_session, pick.n)
+  await tmux.keys(session, pick.n)
 }
 
-export async function answerPlan(id: string, optionLabel: string, feedback?: string) {
-  const row = await requireLive(id)
-  const option = parseDialogOptions(await tmux.capture(row.tmux_session)).find((o) => o.label === optionLabel)
+export async function answerPlan(id: string, optionLabel: string, feedback?: string, key = '') {
+  const { session } = await requireLive(id, key)
+  const option = parseDialogOptions(await tmux.capture(session)).find((o) => o.label === optionLabel)
   if (!option) throw new AgentError('The plan dialog is not on screen any more; open the Terminal tab to answer it', 409)
-  await tmux.keys(row.tmux_session, option.n)
+  await tmux.keys(session, option.n)
   if (feedback?.trim() && /tell claude|change|feedback/i.test(option.label)) {
     await Bun.sleep(400)
-    await tmux.paste(row.tmux_session, feedback.trim())
+    await tmux.paste(session, feedback.trim())
   }
 }

@@ -22,7 +22,7 @@ import { FigurePicker } from './FigurePicker'
 import { ConnectorsTab } from './agent/ConnectorsTab'
 import { AgentActivityTab } from './Activity'
 import { GitSection } from './agent/GitSection'
-import { getParam, setUrl } from '../state/url'
+import { getParam, setUrl, useUrl } from '../state/url'
 import { tip } from './Tooltip'
 import { RulesPicker } from './RulesPicker'
 
@@ -61,6 +61,9 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
     setTimeout(close, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220)
   }, [close])
   const live = useOffice((s) => s.source === 'live')
+  // the side session open in the Chat tab: the Terminal tab shows that one too
+  const sessionParam = useUrl((s) => s.params.session)
+  const termSession = sessionParam && agent.sessions?.some((s) => s.key === sessionParam && s.open) ? sessionParam : undefined
   const updateAgent = useOffice((s) => s.updateAgent)
   // the tab is in the address bar too (?agent=<id>&tab=terminal)
   const [tab, setTabState] = useState<Tab>(() => {
@@ -200,7 +203,15 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
 
         <div className={`drawer__body${tab === 'chat' || tab === 'terminal' ? ' drawer__body--flush' : ''}`}>
           {tab === 'chat' && <ChatTab agent={agent} />}
-          {tab === 'terminal' && <TerminalTab agentId={agent.id} offline={agent.status === 'offline'} />}
+          {tab === 'terminal' && (
+            // the session picked in the Chat tab (?session=s2), else the main one
+            <TerminalTab
+              key={termSession ?? ''}
+              agentId={agent.id}
+              session={termSession}
+              offline={termSession ? false : (agent.mainStatus ?? agent.status) === 'offline'}
+            />
+          )}
           {tab === 'folder' && !agent.cwd && <div className="empty">No folder known for this agent yet.</div>}
           {tab === 'folder' && agent.cwd && (
             // the agent's own folder: browse, preview, upload, new folders (the same file manager as the Projects tab)

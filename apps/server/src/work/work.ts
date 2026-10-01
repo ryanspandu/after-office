@@ -115,18 +115,22 @@ interface ChatTurn {
   submitted?: boolean
   files?: Set<string>
 }
+/** By the agent (its main session) or `${agentId}:${key}` (one of its side sessions). */
 const chatTurns = new Map<string, ChatTurn>()
-export function expectChatReport(agentId: string, sent: string, asked: string, ctx: ChatContext) {
-  chatTurns.set(agentId, { head: promptHead(sent), asked, ctx, startedAt: Date.now() })
+const turnKey = (agentId: string, key = '') => (key ? `${agentId}:${key}` : agentId)
+export function expectChatReport(agentId: string, sent: string, asked: string, ctx: ChatContext, key = '') {
+  chatTurns.set(turnKey(agentId, key), { head: promptHead(sent), asked, ctx, startedAt: Date.now() })
 }
 
 /** A file the agent wrote (PostToolUse of Write/Edit): attached to the report of the work it's doing. */
-export function noteFileWritten(agentId: string, path: string) {
-  const c = chatTurns.get(agentId)
-  if (c?.submitted && !active.has(agentId)) {
+export function noteFileWritten(agentId: string, path: string, key = '') {
+  const c = chatTurns.get(turnKey(agentId, key))
+  if (c?.submitted && (key || !active.has(agentId))) {
     c.files ??= new Set()
     if (c.files.size < 100) c.files.add(path)
   }
+  // a side session's files are its own chat's, never a task's
+  if (key) return
   const a = active.get(agentId)
   if (!a) return
   a.files ??= new Set()
@@ -244,14 +248,7 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
   const manager = replyTo.get(agentId)
   replyTo.delete(agentId)
   // the answer to the owner's chat message with a project / tags: kept in Reports
-  const chat = !a && chatTurns.get(agentId)?.submitted ? chatTurns.get(agentId) : undefined
-  if (chat) {
-    chatTurns.delete(agentId)
-    const row = agentsRepo.get(agentId)
-    const files = row ? agentFiles(row, [...(chat.files ?? []), ...mentionedPaths(finalMessage ?? '')]) : []
-    putChatReport(chatReport(agentId, chat.asked, chat.ctx, finalMessage, !failed, chat.startedAt, files))
-    publishWork('reports')
-  }
+  const chat = !a && fileChatTurn(agentId, '', finalMessage, failed)
   // after a server restart the in-memory link is gone: fall back to the agent's task in progress
   const t = a?.taskId ? tasksRepo.get(a.taskId) : a || chat ? null : tasksRepo.active().find((x) => x.agentId === agentId && x.status === 'in_progress')
   const ref = a ?? (t ? { taskId: t.id, title: t.title, startedAt: t.startedAt ?? Date.now() } : null)
@@ -275,6 +272,36 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
     }
     await drainQueues()
   })()
+}
+
+/** The chat answer a turn ended with, kept as a report when the owner sent its message with a project / tags. */
+function fileChatTurn(agentId: string, key: string, finalMessage: string | undefined, failed: boolean) {
+  const chat = chatTurns.get(turnKey(agentId, key))
+  if (!chat?.submitted) return false
+  chatTurns.delete(turnKey(agentId, key))
+  const row = agentsRepo.get(agentId)
+  const files = row ? agentFiles(row, [...(chat.files ?? []), ...mentionedPaths(finalMessage ?? '')]) : []
+  putChatReport(chatReport(agentId, chat.asked, chat.ctx, finalMessage, !failed, chat.startedAt, files))
+  publishWork('reports')
+  return true
+}
+
+/**
+ * A side session's turn ended. Side sessions are the owner's chats: no task, queue, mode restore or manager reply is
+ * ever theirs. Only a chat answer the owner asked to keep (project / tags) becomes a report.
+ */
+export function onSideStopped(agentId: string, key: string, finalMessage?: string, failed = false) {
+  fileChatTurn(agentId, key, finalMessage, failed)
+}
+
+/** A prompt in a side session: only the chat-report bookkeeping (and where its tool calls came from). */
+export function onSidePromptSubmitted(agentId: string, key: string, prompt?: string) {
+  trackTurnOrigin(agentId, prompt ?? '')
+  const c = chatTurns.get(turnKey(agentId, key))
+  if (c && prompt) {
+    if (promptHead(unwrapPaste(prompt)) === c.head) c.submitted = true
+    else if (c.submitted && !/^\s*<task-notification>/.test(prompt)) chatTurns.delete(turnKey(agentId, key))
+  }
 }
 
 /** A prompt started. The first one is the work we sent; another one means the work's turn ended without a Stop

@@ -9,7 +9,8 @@ import { LuPlugZap, LuRotateCw } from 'react-icons/lu'
 
 type State = 'connecting' | 'open' | 'closed'
 
-export function TerminalTab({ agentId, offline }: { agentId: string; offline: boolean }) {
+/** `session`: one of its side sessions (s2, s3…; unset: its main session). */
+export function TerminalTab({ agentId, offline, session }: { agentId: string; offline: boolean; session?: string }) {
   const host = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<State>('connecting')
   const [attempt, setAttempt] = useState(0)
@@ -30,7 +31,7 @@ export function TerminalTab({ agentId, offline }: { agentId: string; offline: bo
     fit.fit()
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/api/agents/${agentId}/term`)
+    const ws = new WebSocket(`${proto}://${location.host}/api/agents/${agentId}/term${session ? `?session=${session}` : ''}`)
     ws.binaryType = 'arraybuffer'
     const send = (m: object) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m))
     ws.onopen = () => {
@@ -58,7 +59,7 @@ export function TerminalTab({ agentId, offline }: { agentId: string; offline: bo
       ws.close()
       term.dispose()
     }
-  }, [agentId, offline, attempt])
+  }, [agentId, offline, attempt, session])
 
   if (offline) return <div className="empty">The agent is offline. It restarts automatically, or use Restart in Overview.</div>
 

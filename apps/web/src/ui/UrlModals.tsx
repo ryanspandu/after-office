@@ -122,11 +122,11 @@ function useStoreSync() {
         if (s.profileId === prev.profileId || s.profileId === getParam('agent')) return
         // an agent's drawer only once the agents are known (a link opened while loading waits for them)
         if (!s.profileId && getParam('agent') && !s.agents.some((a) => a.id === getParam('agent'))) return
-        setUrl({ agent: s.profileId, tab: null }, s.profileId ? 'push' : 'replace')
+        setUrl({ agent: s.profileId, tab: null, session: null }, s.profileId ? 'push' : 'replace')
       }),
       useManagerPanel.subscribe((s) => {
         if (s.open === !!getParam('manager')) return
-        setUrl({ manager: s.open ? '1' : null, mtab: null }, s.open ? 'push' : 'replace')
+        setUrl({ manager: s.open ? '1' : null, mtab: null, session: null }, s.open ? 'push' : 'replace')
       }),
       useAutomationModal.subscribe((s) => {
         if (s.open === !!getParam('automation')) return

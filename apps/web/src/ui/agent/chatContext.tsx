@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { LuFolder, LuTag, LuX } from 'react-icons/lu'
 import { useDashboard } from '../../state/dashboard'
-import { ProjectSelect } from '../taskMeta'
+import { ProjectFolderPicker } from '../ProjectFolderPicker'
 import { TagPicker } from '../tags'
 
 // The chat's optional project and tags (above the message box). They stay picked for that agent (this browser) until
@@ -55,7 +55,7 @@ export function ChatContextBar({ value, onChange, manager }: { value: ChatContex
     <div className="chat-ctx">
       <span className="chat-ctx__field">
         <LuFolder className="chat-ctx__icon" />
-        <ProjectSelect size="sm" menuPlacement="top" value={value.projectId} onChange={(projectId) => onChange({ ...value, projectId })} />
+        <ProjectFolderButton value={value.projectId} onChange={(projectId) => onChange({ ...value, projectId })} />
       </span>
       <span className="chat-ctx__field chat-ctx__field--tags">
         <LuTag className="chat-ctx__icon" />
@@ -102,5 +102,42 @@ export function ContextChips({ project, tags }: { project?: string; tags: string
         </span>
       ))}
     </div>
+  )
+}
+
+/**
+ * The chat's project: picked as a folder (the folder picker, however deep). The project linked to that folder, or a new
+ * one named after it.
+ */
+function ProjectFolderButton({ value, onChange }: { value: string; onChange: (projectId: string) => void }) {
+  const projects = useDashboard((s) => s.projects)
+  const addProject = useDashboard((s) => s.addProject)
+  const [browsing, setBrowsing] = useState(false)
+  const project = projects.find((p) => p.id === value)
+  const pick = (folder: string) => {
+    const name = folder.split('/').filter(Boolean).pop() ?? folder
+    onChange(projects.find((p) => p.folder === folder)?.id ?? addProject(name, { folder }))
+  }
+  return (
+    <>
+      {browsing && <ProjectFolderPicker onPick={pick} onClose={() => setBrowsing(false)} />}
+      <span className="chat-ctx__project">
+        <button type="button" className="chat-ctx__pick" onClick={() => setBrowsing(true)} data-tip={project?.folder ?? 'Choose the folder this chat is about'}>
+          {project ? (
+            <>
+              <span className="chip__dot" style={{ background: project.color }} />
+              <span className="truncate">{project.name}</span>
+            </>
+          ) : (
+            <span className="muted">Choose a folder…</span>
+          )}
+        </button>
+        {project && (
+          <button type="button" className="chat-ctx__unpick" aria-label="No project" onClick={() => onChange('')}>
+            <LuX />
+          </button>
+        )}
+      </span>
+    </>
   )
 }

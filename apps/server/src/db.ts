@@ -55,6 +55,18 @@ CREATE TABLE IF NOT EXISTS crons (
   data        TEXT NOT NULL,        -- CronJob JSON
   updated_at  INTEGER NOT NULL
 );
+-- an agent's side sessions: extra Claude Code processes in its folder, opened by the owner to chat in parallel
+CREATE TABLE IF NOT EXISTS side_sessions (
+  agent_id     TEXT NOT NULL,
+  key          TEXT NOT NULL,       -- s2, s3, … (the main session has none)
+  tmux_session TEXT NOT NULL,
+  session_id   TEXT NOT NULL,       -- Claude Code's conversation id (followed after /clear)
+  title        TEXT,
+  name         TEXT,                -- the owner's name for it (wins over Claude Code's title)
+  created_at   INTEGER NOT NULL,
+  closed_at    INTEGER,             -- closed: its process was stopped (it can be opened again)
+  PRIMARY KEY (agent_id, key)
+);
 -- prompts waiting for a busy agent to become idle (cron slots, task starts)
 CREATE TABLE IF NOT EXISTS prompt_queue (
   id         TEXT PRIMARY KEY,
@@ -89,6 +101,7 @@ CREATE TABLE IF NOT EXISTS transcript_offsets (
 
 // columns added after the first release
 const hasColumn = (table: string, col: string) => db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all().some((c) => c.name === col)
+if (!hasColumn('side_sessions', 'name')) db.exec('ALTER TABLE side_sessions ADD COLUMN name TEXT')
 if (!hasColumn('prompt_queue', 'cron_id')) db.exec('ALTER TABLE prompt_queue ADD COLUMN cron_id TEXT')
 if (!hasColumn('agents', 'kind')) db.exec("ALTER TABLE agents ADD COLUMN kind TEXT NOT NULL DEFAULT 'worker'")
 if (!hasColumn('agents', 'figure')) db.exec('ALTER TABLE agents ADD COLUMN figure TEXT')
@@ -470,6 +483,56 @@ export interface QueuedPrompt {
   task_id: string | null
   cron_id: string | null
   created_at: number
+}
+
+export interface SideSessionRow {
+  agent_id: string
+  key: string
+  tmux_session: string
+  session_id: string
+  title: string | null
+  /** the owner's name for it */
+  name?: string | null
+  created_at: number
+  closed_at: number | null
+}
+/** How many closed side sessions an agent keeps listed (to open again); older ones drop off the list. */
+const CLOSED_KEPT = 20
+export const sideSessionsRepo = {
+  /** Open ones first (oldest first), then the closed ones (latest first). */
+  forAgent: (agentId: string) =>
+    db
+      .query<SideSessionRow, [string, number]>(
+        `SELECT * FROM side_sessions WHERE agent_id = ?1 AND (closed_at IS NULL OR key IN (SELECT key FROM side_sessions WHERE agent_id = ?1 AND closed_at IS NOT NULL ORDER BY closed_at DESC LIMIT ?2))
+         ORDER BY closed_at IS NOT NULL, CASE WHEN closed_at IS NULL THEN created_at ELSE -closed_at END`,
+      )
+      .all(agentId, CLOSED_KEPT),
+  open: () => db.query<SideSessionRow, []>('SELECT * FROM side_sessions WHERE closed_at IS NULL').all(),
+  get: (agentId: string, key: string) => db.query<SideSessionRow, [string, string]>('SELECT * FROM side_sessions WHERE agent_id = ? AND key = ?').get(agentId, key) ?? null,
+  /** The next free key: s2, s3, … (s1 would be the main session). */
+  nextKey: (agentId: string) => {
+    const used = new Set(db.query<{ key: string }, [string]>('SELECT key FROM side_sessions WHERE agent_id = ?').all(agentId).map((r) => r.key))
+    for (let n = 2; ; n++) if (!used.has(`s${n}`)) return `s${n}`
+  },
+  insert: (r: SideSessionRow) =>
+    db
+      .query('INSERT INTO side_sessions (agent_id, key, tmux_session, session_id, title, created_at, closed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
+      .run(r.agent_id, r.key, r.tmux_session, r.session_id, r.title, r.created_at, r.closed_at),
+  update: (agentId: string, key: string, patch: Partial<Pick<SideSessionRow, 'session_id' | 'title' | 'name' | 'closed_at'>>) => {
+    const row = sideSessionsRepo.get(agentId, key)
+    if (!row) return
+    const next = { ...row, ...patch }
+    db.query('UPDATE side_sessions SET session_id = ?3, title = ?4, closed_at = ?5, name = ?6 WHERE agent_id = ?1 AND key = ?2').run(agentId, key, next.session_id, next.title, next.closed_at, next.name ?? null)
+  },
+  remove: (agentId: string, key: string) => db.query('DELETE FROM side_sessions WHERE agent_id = ? AND key = ?').run(agentId, key),
+  removeAgent: (agentId: string) => db.query('DELETE FROM side_sessions WHERE agent_id = ?').run(agentId),
+  /** Closed ones beyond the kept list: gone from the database (their transcripts stay on disk). */
+  prune: (agentId: string) =>
+    db
+      .query(
+        `DELETE FROM side_sessions WHERE agent_id = ?1 AND closed_at IS NOT NULL AND key NOT IN (SELECT key FROM side_sessions WHERE agent_id = ?1 AND closed_at IS NOT NULL ORDER BY closed_at DESC LIMIT ?2)`,
+      )
+      .run(agentId, CLOSED_KEPT),
 }
 
 export const queueRepo = {

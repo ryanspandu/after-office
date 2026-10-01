@@ -4,12 +4,13 @@ import { noteOwnerMessage } from '../work/activity'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { FollowUpDecision, LiveMode } from '@after-office/shared'
-import { agentsRepo, projectsRepo, usageRepo } from '../db'
+import { agentsRepo, projectsRepo, sideSessionsRepo, usageRepo } from '../db'
 import { existsSync } from 'node:fs'
 import { cleanChatContext, contextBlock, expectChatReport, withContext } from '../work/work'
 import { decide } from '../agents/ingest'
-import { AgentError, changeFolder, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeProjectDir, randomStyle, grantProjectDir } from '../agents/manager'
-import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime } from '../agents/registry'
+import { AgentError, changeFolder, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeProjectDir, randomStyle, grantProjectDir, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
+import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime } from '../agents/registry'
+import type { Runtime } from '../agents/state'
 import { readChat } from '../agents/transcripts'
 import { requireSameOrigin, terminalSocket } from '../agents/term'
 import { readProfile, writeProfile, type ProfileDoc } from '../agents/profile'
@@ -63,6 +64,8 @@ agentRoutes.delete('/agents/:id', async (c) => {
 
 agentRoutes.post('/agents/:id/prompt', async (c) => {
   const { text, uploads, projectId, tags } = await c.req.json<{ text: string; uploads?: unknown; projectId?: unknown; tags?: unknown }>()
+  // ?session=s2: one of its side sessions (unset: its main session)
+  const key = sessionKeyOf(c.req.query('session'))
   // the project and tags picked above the message box (optional): a block after the owner's words (work/chatContext.ts)
   const ctx = cleanChatContext(projectId, tags)
   // attached files (staged by /uploads): moved into the agent's folder now, listed at the end of the message
@@ -70,7 +73,7 @@ agentRoutes.post('/agents/:id/prompt', async (c) => {
   const row = ids.length ? agentsRepo.get(c.req.param('id')) : null
   if (ids.length && !row) throw new AgentError('No such agent', 404)
   // offline: say so before moving anything (the files stay attached for another try)
-  if (row && !(await tmux.hasSession(row.tmux_session))) throw new AgentError('The agent is offline', 409)
+  if (row && !(await tmux.hasSession(key ? (sideSessionsRepo.get(row.id, key)?.tmux_session ?? '') : row.tmux_session))) throw new AgentError(key ? 'That session is not running' : 'The agent is offline', 409)
   const paths = row ? ids.map((id) => commitStaged(row, id).path) : []
   const id = c.req.param('id')
   const block = contextBlock(id, ctx)
@@ -81,11 +84,11 @@ agentRoutes.post('/agents/:id/prompt', async (c) => {
     const folder = ctx.projectId ? projectsRepo.get(ctx.projectId)?.folder : undefined
     if (folder && existsSync(folder) && folder !== agent.cwd) await grantProjectDir(id, folder).catch((e) => console.warn(`[chat] could not add ${folder} for ${id}:`, e.message))
     // its answer to this message is kept in Reports
-    expectChatReport(id, message, String(text ?? ''), ctx)
+    expectChatReport(id, message, String(text ?? ''), ctx, key)
   }
   // the Activity log: this turn is the owner's, from this device
   noteOwnerMessage(id, requestWho(c))
-  await sendPrompt(id, message)
+  await sendPrompt(id, message, key)
   return c.json({ ok: true })
 })
 
@@ -113,7 +116,7 @@ agentRoutes.delete('/agents/:id/uploads/:upload', (c) => {
 
 agentRoutes.post('/agents/:id/mode', async (c) => {
   const { mode } = await c.req.json<{ mode: LiveMode }>()
-  return c.json(await setMode(c.req.param('id'), mode))
+  return c.json(await setMode(c.req.param('id'), mode, sessionKeyOf(c.req.query('session'))))
 })
 
 agentRoutes.post('/agents/:id/model', async (c) => {
@@ -219,12 +222,33 @@ agentRoutes.post('/agents-server/restart', async (c) => c.json({ restarted: awai
 
 // the user looked at the Chat tab: clear the unread badge
 agentRoutes.post('/agents/:id/read', (c) => {
-  updateRuntime(c.req.param('id'), (rt) => (rt.unread ? { ...rt, unread: 0 } : rt))
+  const key = sessionKeyOf(c.req.query('session'))
+  const read = (rt: Runtime) => (rt.unread ? { ...rt, unread: 0 } : rt)
+  if (key) updateSideRuntime(c.req.param('id'), key, read)
+  else updateRuntime(c.req.param('id'), read)
   return c.json({ ok: true })
 })
 
 agentRoutes.post('/agents/:id/interrupt', async (c) => {
-  await interrupt(c.req.param('id'))
+  await interrupt(c.req.param('id'), sessionKeyOf(c.req.query('session')))
+  return c.json({ ok: true })
+})
+
+// ── side sessions: more chats with the same agent, each its own Claude Code process (agents/manager.ts) ──
+agentRoutes.post('/agents/:id/sessions', async (c) => c.json({ key: await openSideSession(c.req.param('id')) }))
+// closing stops its process; the conversation stays, to open again
+agentRoutes.delete('/agents/:id/sessions/:key', async (c) => {
+  await closeSideSession(c.req.param('id'), c.req.param('key'))
+  return c.json({ ok: true })
+})
+agentRoutes.put('/agents/:id/sessions/:key', async (c) => {
+  const b = await c.req.json<{ name?: unknown }>().catch(() => ({}) as { name?: unknown })
+  renameSideSession(c.req.param('id'), c.req.param('key'), typeof b.name === 'string' ? b.name : '')
+  return c.json({ ok: true })
+})
+agentRoutes.post('/agents/:id/sessions/:key/reopen', async (c) => c.json({ key: await reopenSideSession(c.req.param('id'), c.req.param('key')) }))
+agentRoutes.delete('/agents/:id/sessions/:key/forget', (c) => {
+  forgetSideSession(c.req.param('id'), c.req.param('key'))
   return c.json({ ok: true })
 })
 
@@ -305,7 +329,7 @@ agentRoutes.get('/agents/:id/chat', (c) => {
   const row = agentsRepo.get(c.req.param('id'))
   if (!row) return c.json({ error: 'No such agent' }, 404)
   const limit = Math.min(500, Number(c.req.query('limit') ?? 200) || 200)
-  return c.json(readChat(row, limit))
+  return c.json(readChat(row, limit, sessionKeyOf(c.req.query('session'))))
 })
 
 agentRoutes.post('/followups/:id/decision', async (c) => {

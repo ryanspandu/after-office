@@ -4,8 +4,9 @@ import { join } from 'node:path'
 import { ISOLATED } from './env'
 import { runAsAgent } from './asagent'
 import type { ChatItem, LiveMode } from '@after-office/shared'
-import { agentsRepo, offsetsRepo, usageRepo, type AgentRow } from '../db'
-import { publish, runtimeOf, updateRuntime } from './registry'
+import { agentsRepo, offsetsRepo, sideSessionsRepo, usageRepo, type AgentRow } from '../db'
+import { publish, runtimeOf, sideRuntimeOf, updateRuntime, updateSideRuntime } from './registry'
+import type { Runtime } from './state'
 import { ATTACH_HEADER, withAttachments } from './uploads'
 
 // Claude Code writes every session to ~/.claude/projects/<cwd with non-alphanumerics as "-">/<session-id>.jsonl.
@@ -14,8 +15,12 @@ import { ATTACH_HEADER, withAttachments } from './uploads'
 const TZ = process.env.OFFICE_TZ ?? 'Asia/Jakarta'
 const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
 
-export function transcriptPath(row: AgentRow) {
-  return runtimeOf(row.id).transcriptPath ?? join(CLAUDE_PROJECTS_DIR, row.cwd.replace(/[^a-zA-Z0-9]/g, '-'), `${row.session_id}.jsonl`)
+/** `key`: one of its side sessions (unset: its main session). */
+export function transcriptPath(row: AgentRow, key = '') {
+  const dir = join(CLAUDE_PROJECTS_DIR, row.cwd.replace(/[^a-zA-Z0-9]/g, '-'))
+  if (!key) return runtimeOf(row.id).transcriptPath ?? join(dir, `${row.session_id}.jsonl`)
+  const side = sideSessionsRepo.get(row.id, key)
+  return sideRuntimeOf(row.id, key).transcriptPath ?? join(dir, `${side?.session_id ?? 'none'}.jsonl`)
 }
 
 interface Line {
@@ -97,8 +102,17 @@ const seen = new Map<string, Set<string>>()
 
 /** Read new lines of every agent's transcript. Cheap: only the bytes appended since the last call. */
 export function pollTranscripts() {
-  for (const row of agentsRepo.all()) {
-    const path = transcriptPath(row)
+  // every agent's main session, and the side sessions that are open (their tokens count for the agent too)
+  const sessions = agentsRepo.all().flatMap((row) => [
+    { row, key: '' },
+    ...sideSessionsRepo
+      .forAgent(row.id)
+      .filter((s) => !s.closed_at)
+      .map((s) => ({ row, key: s.key })),
+  ])
+  for (const { row, key: sessionKey } of sessions) {
+    const update = (fn: (rt: Runtime) => Runtime) => (sessionKey ? updateSideRuntime(row.id, sessionKey, fn) : updateRuntime(row.id, fn))
+    const path = transcriptPath(row, sessionKey)
     if (!readable(path)) continue
     const offset = offsetsRepo.get(path)
     let text: string
@@ -123,9 +137,9 @@ export function pollTranscripts() {
       } catch {
         continue
       }
-      if (l.type === 'ai-title' && l.aiTitle) updateRuntime(row.id, (rt) => ({ ...rt, title: l.aiTitle }))
-      if (l.type === 'permission-mode' && l.permissionMode)
-        updateRuntime(row.id, (rt) => ({ ...rt, permissionMode: l.permissionMode as LiveMode }))
+      if (l.type === 'ai-title' && l.aiTitle) update((rt) => ({ ...rt, title: l.aiTitle }))
+      if (l.type === 'ai-title' && l.aiTitle && sessionKey) sideSessionsRepo.update(row.id, sessionKey, { title: l.aiTitle })
+      if (l.type === 'permission-mode' && l.permissionMode) update((rt) => ({ ...rt, permissionMode: l.permissionMode as LiveMode }))
       const u = l.type === 'assistant' ? l.message?.usage : undefined
       if (!u) continue
       const key = `${l.message?.id}:${l.requestId}`
@@ -165,8 +179,8 @@ function textOf(content: unknown): string {
 }
 
 /** Last `limit` conversation items of an agent, simplified for rendering. Reads only the tail of the file. */
-export function readChat(row: AgentRow, limit = 200): ChatItem[] {
-  const path = transcriptPath(row)
+export function readChat(row: AgentRow, limit = 200, key = ''): ChatItem[] {
+  const path = transcriptPath(row, key)
   if (!readable(path)) return []
   const size = statSync(path).size
   const { text } = readFrom(path, Math.max(0, size - 4_000_000))
