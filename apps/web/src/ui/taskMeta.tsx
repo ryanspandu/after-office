@@ -65,7 +65,7 @@ type ProjectOption = Option<string> & { hint?: string; folder?: boolean }
  * Pick a project, or one of the folders the agents work in (which becomes a project linked to that folder), or
  * type a new name.
  */
-export function ProjectSelect({ value, onChange, size = 'md' }: { value: string; onChange: (v: string) => void; size?: 'sm' | 'md' }) {
+export function ProjectSelect({ value, onChange, size = 'md', menuPlacement = 'auto' }: { value: string; onChange: (v: string) => void; size?: 'sm' | 'md'; menuPlacement?: 'auto' | 'top' }) {
   const projects = useDashboard((s) => s.projects)
   const addProject = useDashboard((s) => s.addProject)
   const live = useOffice((s) => s.source === 'live')
@@ -119,7 +119,7 @@ export function ProjectSelect({ value, onChange, size = 'md' }: { value: string;
       }
       placeholder="Search or create…"
       menuPortalTarget={document.body}
-      menuPlacement="auto"
+      menuPlacement={menuPlacement}
       classNames={{
         control: (s) => (s.isFocused ? 'rs__control--focused' : ''),
         option: (s) => [s.isSelected && 'rs__option--selected', s.isFocused && 'rs__option--focused'].filter(Boolean).join(' '),

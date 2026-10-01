@@ -201,3 +201,21 @@
 .chat-ctx__clear:hover { border-color: var(--hl); color: var(--hl); }
 .chat-ctx__clear:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
 .chat-ctx__clear svg { font-size: 12px; }
+
+/* phones: attach + project/tags behind one + button (ui/agent/ChatTab.tsx ComposerMenu), its menu opening upwards */
+.composer-menu { position: relative; flex-shrink: 0; }
+.composer-menu__btn { position: relative; }
+.composer-menu__btn svg { transition: transform 0.2s ease; }
+.composer-menu__btn.is-open svg { transform: rotate(45deg); }
+.composer-menu__dot { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl); }
+.composer-menu__pop {
+  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 20; min-width: 200px; padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--card); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  opacity: 0; transform: translateY(6px) scale(0.97); transform-origin: bottom left; pointer-events: none; transition: opacity 0.16s ease, transform 0.18s ease;
+}
+.composer-menu__pop.is-open { opacity: 1; transform: none; pointer-events: auto; }
+.composer-menu__pop button { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 14px; cursor: pointer; }
+.composer-menu__pop button:active, .composer-menu__pop button:hover { background: var(--card-2); }
+.composer-menu__pop button svg { color: var(--muted); font-size: 16px; }
+.composer-menu__pop button.is-on svg { color: var(--hl); }
+@media (prefers-reduced-motion: reduce) { .composer-menu__pop, .composer-menu__btn svg { transition: none; } }

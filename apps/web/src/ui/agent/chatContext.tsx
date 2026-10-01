@@ -55,11 +55,11 @@ export function ChatContextBar({ value, onChange, manager }: { value: ChatContex
     <div className="chat-ctx">
       <span className="chat-ctx__field">
         <LuFolder className="chat-ctx__icon" />
-        <ProjectSelect size="sm" value={value.projectId} onChange={(projectId) => onChange({ ...value, projectId })} />
+        <ProjectSelect size="sm" menuPlacement="top" value={value.projectId} onChange={(projectId) => onChange({ ...value, projectId })} />
       </span>
       <span className="chat-ctx__field chat-ctx__field--tags">
         <LuTag className="chat-ctx__icon" />
-        <TagPicker size="sm" value={value.tags} onChange={(tags) => onChange({ ...value, tags })} />
+        <TagPicker size="sm" menuPlacement="top" value={value.tags} onChange={(tags) => onChange({ ...value, tags })} />
       </span>
       <span className="chat-ctx__hint muted">
         {manager ? 'Used for the tasks and reports this leads to.' : any ? 'The answer goes to Reports under these.' : 'Optional: the answer then goes to Reports.'}

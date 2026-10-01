@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LuChevronRight, LuCornerLeftUp, LuDownload, LuFile, LuFileArchive, LuFileImage, LuFileText, LuFolder, LuLink, LuRefreshCw, LuUpload, LuX } from 'react-icons/lu'
+import { LuChevronRight, LuCornerLeftUp, LuDownload, LuFile, LuFileArchive, LuFileImage, LuFileText, LuFolder, LuLink, LuRefreshCw, LuUpload, LuFolderPlus, LuCheck, LuX } from 'react-icons/lu'
 import type { FolderEntry, FolderListing } from '@after-office/shared'
 import { api } from '../state/auth'
 import { useNow } from '../state/clock'
@@ -27,8 +27,26 @@ export function FileBrowser({ root }: { root: string }) {
   // files the owner adds to the folder on screen (the agents can use them right away)
   const [uploading, setUploading] = useState(0)
   const uploadInput = useRef<HTMLInputElement>(null)
+  // a new folder in the folder on screen: its name typed in a row under the bar
+  const [newFolder, setNewFolder] = useState<string | null>(null)
+  const [making, setMaking] = useState(false)
 
   const rootName = root.split('/').filter(Boolean).pop() ?? root
+  const makeFolder = async () => {
+    const name = newFolder?.trim()
+    if (!name || making) return
+    setMaking(true)
+    try {
+      const r = await api('/api/workspaces/folders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ root, path, name }) })
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? 'Could not make the folder')
+      setNewFolder(null)
+      await load(path)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setMaking(false)
+    }
+  }
   const upload = async (files: File[]) => {
     if (!files.length) return
     setUploading(files.length)
@@ -163,6 +181,9 @@ export function FileBrowser({ root }: { root: string }) {
             e.target.value = ''
           }}
         />
+        <button className="icon-btn small ghost" onClick={() => setNewFolder((v) => (v === null ? '' : null))} data-tip="New folder here" aria-label="New folder" aria-expanded={newFolder !== null}>
+          <LuFolderPlus />
+        </button>
         <button className="icon-btn small ghost" onClick={() => uploadInput.current?.click()} disabled={uploading > 0} data-tip={uploading ? `Adding ${uploading}…` : 'Upload files here'} aria-label="Upload files">
           {uploading ? <LuRefreshCw className="spin" /> : <LuUpload />}
         </button>
@@ -170,6 +191,34 @@ export function FileBrowser({ root }: { root: string }) {
           <LuRefreshCw className={loading ? 'spin' : ''} />
         </button>
       </div>
+      {newFolder !== null && (
+        <div className="fb__new">
+          <LuFolder className="fb__new-icon" />
+          <input
+            autoFocus
+            value={newFolder}
+            maxLength={120}
+            placeholder="Folder name"
+            onChange={(e) => {
+              setNewFolder(e.target.value)
+              setError(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void makeFolder()
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                setNewFolder(null)
+              }
+            }}
+          />
+          <button className="icon-btn small ghost" onClick={() => void makeFolder()} disabled={!newFolder.trim() || making} data-tip="Create" aria-label="Create the folder">
+            {making ? <LuRefreshCw className="spin" /> : <LuCheck />}
+          </button>
+          <button className="icon-btn small ghost" onClick={() => setNewFolder(null)} data-tip="Cancel" aria-label="Cancel">
+            <LuX />
+          </button>
+        </div>
+      )}
       {picked.size > 0 && (
         <div className="fb__picked">
           <span>

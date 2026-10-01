@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, useMemo } from 'react'
-import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuX } from 'react-icons/lu'
+import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX } from 'react-icons/lu'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import type { ChatItem, LiveMode } from '@after-office/shared'
 import { mentionedPaths, modelChoiceOf, MODELS } from '@after-office/shared'
@@ -153,6 +153,8 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
   // the project and tags sent with each message (optional, kept per agent): the row shows while open or set
   const context = useChatContext(agent.id)
   const [contextOpen, setContextOpen] = useState(false)
+  // phones: the row only while opened (the + button shows a dot when something is picked); elsewhere also while set
+  const ctxShown = contextOpen || (context.active && !mobile)
   const fileInput = useRef<HTMLInputElement>(null)
   // the message box grows with what's typed, up to its max-height (CSS), then scrolls
   const box = useRef<HTMLTextAreaElement>(null)
@@ -206,16 +208,18 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
     setError('')
     const at = Date.now()
     setOutgoing({ text: body, files: pending.items.filter((p) => p.state === 'done'), at })
+    // the box empties right away (typing a long message into the agent takes a moment); back if it couldn't be sent
+    setText('')
     stick.current = true
     try {
       await liveApi.prompt(agent.id, body, pending.ids, context.value)
       setSentAt(at)
-      setText('')
       pending.take()
       stick.current = true
       setTimeout(load, 600)
     } catch (e) {
       setOutgoing(null)
+      setText((cur) => (cur.trim() ? cur : body))
       setError(e instanceof Error ? e.message : 'Could not send')
     } finally {
       setSending(false)
@@ -548,7 +552,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
       {!error && notice && agent.status === 'waiting' && <div className="chat__notice">{notice}</div>}
       <PendingTray items={pending.items} onRemove={pending.remove} />
       {/* always there, folded away when closed: it slides open and shut (CSS grid rows) */}
-      <div className={`chat-ctx-wrap${contextOpen || context.active ? ' is-open' : ''}`} inert={!(contextOpen || context.active)}>
+      <div className={`chat-ctx-wrap${ctxShown ? ' is-open' : ''}`} inert={!ctxShown}>
         <div className="chat-ctx-wrap__inner">
           <ChatContextBar value={context.value} onChange={context.set} manager={agent.kind === 'manager'} />
         </div>
@@ -564,18 +568,31 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
             e.target.value = ''
           }}
         />
-        <button className="icon-btn ghost chat__attach" onClick={() => fileInput.current?.click()} disabled={offline || sending} {...tip('Attach files or pictures (or paste / drop them here)')}>
-          <LuPaperclip />
-        </button>
-        <button
-          className={`icon-btn ghost chat__attach chat__ctx-toggle${context.active ? ' is-on' : ''}`}
-          onClick={() => setContextOpen((v) => !v)}
-          disabled={offline}
-          aria-expanded={contextOpen || context.active}
-          {...tip(context.active ? 'Project and tags for this chat' : 'Pick a project or tags (optional)')}
-        >
-          <LuTag />
-        </button>
+        {mobile ? (
+          // phones: one + button, its menu has both (the message box keeps the width)
+          <ComposerMenu
+            disabled={offline}
+            contextActive={context.active}
+            contextOpen={contextOpen}
+            onAttach={() => fileInput.current?.click()}
+            onContext={() => setContextOpen((v) => !v)}
+          />
+        ) : (
+          <>
+            <button className="icon-btn ghost chat__attach" onClick={() => fileInput.current?.click()} disabled={offline || sending} {...tip('Attach files or pictures (or paste / drop them here)')}>
+              <LuPaperclip />
+            </button>
+            <button
+              className={`icon-btn ghost chat__attach chat__ctx-toggle${context.active ? ' is-on' : ''}`}
+              onClick={() => setContextOpen((v) => !v)}
+              disabled={offline}
+              aria-expanded={contextOpen || context.active}
+              {...tip(context.active ? 'Project and tags for this chat' : 'Pick a project or tags (optional)')}
+            >
+              <LuTag />
+            </button>
+          </>
+        )}
         <textarea
           ref={box}
           value={text}
@@ -607,6 +624,44 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
           onClose={() => setDetail(null)}
         />
       )}
+    </div>
+  )
+}
+
+/** Phones: attach and project / tags behind one + button, its menu opening upwards. */
+function ComposerMenu({ disabled, contextActive, contextOpen, onAttach, onContext }: { disabled: boolean; contextActive: boolean; contextOpen: boolean; onAttach: () => void; onContext: () => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
+  const pick = (fn: () => void) => () => {
+    setOpen(false)
+    fn()
+  }
+  return (
+    <div className="composer-menu" ref={ref}>
+      <button
+        className={`icon-btn ghost chat__attach composer-menu__btn${open ? ' is-open' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        aria-expanded={open}
+        aria-label="Attach, project and tags"
+      >
+        <LuPlus />
+        {contextActive && <i className="composer-menu__dot" />}
+      </button>
+      <div className={`composer-menu__pop${open ? ' is-open' : ''}`} role="menu" inert={!open}>
+        <button role="menuitem" onClick={pick(onAttach)}>
+          <LuPaperclip /> Attach files
+        </button>
+        <button role="menuitem" className={contextActive ? 'is-on' : ''} onClick={pick(onContext)}>
+          <LuTag /> {contextOpen ? 'Hide project & tags' : contextActive ? 'Project & tags (set)' : 'Project & tags'}
+        </button>
+      </div>
     </div>
   )
 }

@@ -47,7 +47,7 @@ const selectClassNames = {
 const tagStyles = { multiValue: (base: object, p: { data: TagOption }) => ({ ...base, ['--c' as string]: p.data.color }) }
 
 /** Pick a task's or report's tags; typing a new name creates the tag. */
-export function TagPicker({ value, onChange, size = 'md', inline = false }: { value: string[]; onChange: (ids: string[]) => void; size?: 'sm' | 'md'; inline?: boolean }) {
+export function TagPicker({ value, onChange, size = 'md', inline = false, menuPlacement = 'auto' }: { value: string[]; onChange: (ids: string[]) => void; size?: 'sm' | 'md'; inline?: boolean; menuPlacement?: 'auto' | 'top' }) {
   const tags = useDashboard((s) => s.tags)
   const putTag = useDashboard((s) => s.putTag)
   const options = tags.map(toOption)
@@ -70,7 +70,7 @@ export function TagPicker({ value, onChange, size = 'md', inline = false }: { va
       onChange={(list) => onChange(list.map((o) => o.value))}
       noOptionsMessage={() => 'Type a name to make a tag'}
       menuPortalTarget={document.body}
-      menuPlacement="auto"
+      menuPlacement={menuPlacement}
       classNames={selectClassNames}
       styles={tagStyles}
     />

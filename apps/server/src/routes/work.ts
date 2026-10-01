@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, Project, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
 import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, projectsRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
-import { addFolderFile, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
+import { addFolder, addFolderFile, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
 import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder } from '../work/projectFolders'
 import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDevice, sendPush } from '../push'
@@ -322,6 +322,12 @@ workRoutes.post('/workspaces/files', requireSameOrigin, async (c) => {
   if (Number(c.req.header('content-length') ?? 0) > UPLOAD_MAX) throw new AgentError(`${name} is bigger than ${UPLOAD_MAX / 1024 / 1024} MB`, 413)
   const data = new Uint8Array(await c.req.arrayBuffer())
   return c.json(addFolderFile(c.req.query('root') ?? '', c.req.query('path') ?? '', name, data))
+})
+// a new folder inside the folder on screen
+workRoutes.post('/workspaces/folders', async (c) => {
+  const b = await c.req.json<{ root?: unknown; path?: unknown; name?: unknown }>().catch(() => ({}) as { root?: unknown; path?: unknown; name?: unknown })
+  const str = (v: unknown) => (typeof v === 'string' ? v : '')
+  return c.json(addFolder(str(b.root), str(b.path), str(b.name)))
 })
 workRoutes.get('/workspaces/file', (c) => {
   const f = folderFile(c.req.query('root') ?? '', c.req.query('path') ?? '')

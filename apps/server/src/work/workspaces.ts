@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, lstatSync, openSync, readdirSync, readFileSync, realpathSync, writeSync } from 'node:fs'
+import { closeSync, constants, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeSync } from 'node:fs'
 import { zip, type ZipEntry } from './zip'
 import type { FolderEntry, FolderListing } from '@after-office/shared'
 import { IMAGE, MAX_BYTES } from '../agents/files'
@@ -12,7 +12,7 @@ import { git } from './git'
 
 // The Projects tab: what the agents are working on, read from their folders. An agent's folder that is a git repo
 // is one project; any other folder is a home for several, one per subfolder. Git runs with the agents' rights and
-// safe flags (work/git.ts). The only write: a file the owner uploads into a folder (addFolderFile).
+// safe flags (work/git.ts). The only writes: a file the owner uploads into a folder (addFolderFile), a new folder (addFolder).
 
 const MAX_PROJECTS = 40
 const SKIP = new Set(['node_modules', 'dist', 'build', 'venv', '__pycache__'])
@@ -269,6 +269,23 @@ export function addFolderFile(root: string, rel: string, name: string, data: Uin
     closeSync(fd)
   }
   return { name: file, size: data.byteLength }
+}
+
+/** A new, empty folder inside the folder on screen (the Files browser): a plain name, never over anything there. */
+export function addFolder(root: string, rel: string, name: string) {
+  if (rel.split('/').some((part) => part === '..' || part.startsWith('.'))) throw new AgentError('Invalid folder', 400)
+  const { real } = inside(root, rel)
+  if (!lstatSync(real).isDirectory()) throw new AgentError('Not a folder', 400)
+  const dir = name.trim()
+  if (!dir || dir.startsWith('.') || dir.length > 120 || /[/\\\0]/.test(dir)) throw new AgentError('Give the folder a plain name (no slashes, not starting with a dot)')
+  try {
+    // 0775: the agents (another user on the VPS) can add to it too
+    mkdirSync(join(real, dir), { mode: 0o775 })
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new AgentError(`${dir} is already there`, 409)
+    throw e
+  }
+  return { name: dir }
 }
 
 export function folderFile(root: string, rel: string) {

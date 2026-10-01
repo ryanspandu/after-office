@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { agentsRepo, projectsRepo, queueRepo, tasksRepo } from '../db'
 import { workRoutes } from '../routes/work'
 import { startTask, taskFolder } from './work'
-import { addFolderFile, recentCommits, workspaces } from './workspaces'
+import { addFolder, addFolderFile, recentCommits, workspaces } from './workspaces'
 
 // The Projects tab reads the agents' folders: a repo folder is one project; any other folder holds several.
 
@@ -164,6 +164,22 @@ describe('file manager', () => {
     expect(() => addFolderFile(root, 'out', 'x.md', bytes)).toThrow('Outside')
     expect(() => addFolderFile(AGENTS_DIR, '', 'x.md', bytes)).toThrow()
     agentsRepo.remove('up-a')
+  })
+
+  test('makes a new folder in the folder on screen: plain names, inside it only, never over anything', async () => {
+    const { AGENTS_DIR } = await import('../fsroots')
+    const root = join(AGENTS_DIR, 'nf-agent')
+    mkdirSync(join(root, 'docs'), { recursive: true })
+    agentsRepo.insert({ id: 'nf-a', name: 'NF', tmux_session: 'ao-nf', cwd: root, desk: 995, role: '', model: 'haiku', permission_mode: 'default', session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'worker' })
+    expect(addFolder(root, '', ' drafts ')).toEqual({ name: 'drafts' })
+    expect(statSync(join(root, 'drafts')).isDirectory()).toBe(true)
+    expect(addFolder(root, 'docs', 'old').name).toBe('old')
+    expect(statSync(join(root, 'docs', 'old')).isDirectory()).toBe(true)
+    expect(() => addFolder(root, '', 'drafts')).toThrow('already there')
+    expect(() => addFolder(root, '', '.hidden')).toThrow('plain name')
+    expect(() => addFolder(root, '', 'a/b')).toThrow('plain name')
+    expect(() => addFolder(root, '..', 'x')).toThrow('Invalid folder')
+    agentsRepo.remove('nf-a')
   })
 })
 
