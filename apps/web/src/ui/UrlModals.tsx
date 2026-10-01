@@ -4,6 +4,8 @@ import { useDashboard } from '../state/dashboard'
 import { useOffice } from '../state/store'
 import { getParam, setUrl, useUrl } from '../state/url'
 import { useWorkspaces } from '../state/workspaces'
+import { useMinimized } from '../state/minimized'
+import { MinimizedChips } from './MinimizedChips'
 import { AddAgentModal } from './AddAgentModal'
 import { ArchiveModal } from './ArchiveModal'
 import { useAutomationModal } from './AutomationModal'
@@ -36,7 +38,7 @@ export function UrlModals() {
       {p.archive && <ArchiveModal onClose={clear(['archive'])} />}
       {p.projects && <ProjectsModal onClose={clear(['projects'])} />}
       {p.reports && <ReportsModal onClose={clear(REPORTS_VIEW)} />}
-      {p.folder && <FolderFromUrl path={p.folder} />}
+      <FolderWindows current={p.folder} />
       {p.newproject && (
         <NewProjectModal onClose={clear(['newproject'])} onCreated={(folder) => setUrl({ newproject: null, folder: folder.path }, 'push')} />
       )}
@@ -55,8 +57,23 @@ export function UrlModals() {
   )
 }
 
+/** The folder on screen (?folder=) and the ones minimized: those stay mounted, hidden, so each comes back as it was. */
+function FolderWindows({ current }: { current?: string }) {
+  const minimized = useMinimized((s) => s.folders)
+  const paths = minimized.map((m) => m.path)
+  if (current && !paths.includes(current)) paths.push(current)
+  return (
+    <>
+      {paths.map((path) => (
+        <FolderFromUrl key={path} path={path} hidden={path !== current} />
+      ))}
+      <MinimizedChips current={current} />
+    </>
+  )
+}
+
 /** A folder of the Projects tab, found in the scan (read if it isn't loaded yet). */
-function FolderFromUrl({ path }: { path: string }) {
+function FolderFromUrl({ path, hidden }: { path: string; hidden: boolean }) {
   const data = useWorkspaces((s) => s.data)
   const load = useWorkspaces((s) => s.load)
   useEffect(() => {
@@ -76,7 +93,15 @@ function FolderFromUrl({ path }: { path: string }) {
     if (parent) open = { folder: { path, name: path.split('/').pop() ?? path, git: null, updatedAt: 0 }, agentIds: parent.agentIds }
   }
   if (!open) return null
-  return <ProjectFolderModal key={path} open={open} onClose={clear(['folder'])} />
+  return (
+    <ProjectFolderModal
+      key={path}
+      open={open}
+      hidden={hidden}
+      onClose={() => (useMinimized.getState().remove(path), setUrl({ folder: null }))}
+      onMinimize={(section) => (useMinimized.getState().add(path, section), setUrl({ folder: null }))}
+    />
+  )
 }
 
 const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']

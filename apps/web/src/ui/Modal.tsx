@@ -15,9 +15,13 @@ interface Props {
   className?: string
   /** buttons in the header, before the close button */
   actions?: ReactNode
+  /** put aside (minimized): kept mounted with everything in it, just not shown */
+  hidden?: boolean
+  /** false: a click outside it doesn't close it (only ✕ / Esc do) */
+  closeOnBackdrop?: boolean
 }
 
-export function Modal({ open, title, description, onClose, children, width = 460, className, actions }: Props) {
+export function Modal({ open, title, description, onClose, children, width = 460, className, actions, hidden, closeOnBackdrop = true }: Props) {
   const backdrop = useRef<HTMLDivElement | null>(null)
   const shownAt = useRef(0)
   const setBackdrop = useCallback((el: HTMLDivElement | null) => {
@@ -30,7 +34,7 @@ export function Modal({ open, title, description, onClose, children, width = 460
   useLayoutEffect(
     () => () => {
       const el = backdrop.current
-      if (!el?.isConnected || el.classList.contains('modal-backdrop--closing')) return
+      if (!el?.isConnected || el.classList.contains('modal-backdrop--closing') || el.classList.contains('modal-backdrop--hidden')) return
       // React's development double mount (StrictMode) removes it right after it appeared: nothing to animate
       if (performance.now() - shownAt.current < 100) return
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -45,17 +49,17 @@ export function Modal({ open, title, description, onClose, children, width = 460
     [],
   )
   useEffect(() => {
-    if (!open) return
+    if (!open || hidden) return
     // with modals stacked (a confirmation over a task), Esc closes only the one on top
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      const all = document.querySelectorAll('.modal-backdrop:not(.modal-backdrop--closing)')
+      const all = document.querySelectorAll('.modal-backdrop:not(.modal-backdrop--closing):not(.modal-backdrop--hidden)')
       if (backdrop.current && all[all.length - 1] !== backdrop.current) return
       onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, hidden, onClose])
 
   // the footer (buttons) is sticky at the bottom of the scrolling area: the scrollbar track stops above it
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -81,7 +85,7 @@ export function Modal({ open, title, description, onClose, children, width = 460
   const { mounted, closing } = usePresence(open, 180)
   if (!mounted) return null
   return createPortal(
-    <div ref={setBackdrop} className={`modal-backdrop${closing ? ' modal-backdrop--closing' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div ref={setBackdrop} className={`modal-backdrop${closing ? ' modal-backdrop--closing' : ''}${hidden ? ' modal-backdrop--hidden' : ''}`} aria-hidden={hidden || undefined} onMouseDown={(e) => closeOnBackdrop && e.target === e.currentTarget && onClose()}>
       <div ref={card} className={`modal${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} style={{ width: `min(${width}px, 100%)` }}>
         {/* phones: the grab handle of the bottom sheet (hidden on larger screens) */}
         <div className="modal__grab" aria-hidden="true" {...dragProps} />

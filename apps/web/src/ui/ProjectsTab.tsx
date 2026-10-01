@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { matchesSearch } from './SearchBox'
-import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen, LuCheck, LuX, LuListTodo, LuFileText, LuFile, LuRotateCcw, LuSquareTerminal, LuNotebookPen } from 'react-icons/lu'
+import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen, LuCheck, LuX, LuListTodo, LuFileText, LuFile, LuRotateCcw, LuSquareTerminal, LuNotebookPen, LuMinus } from 'react-icons/lu'
 import { DeleteProject } from './DeleteProject'
 import { ProjectReports } from './Reports'
 import { confirm } from './Confirm'
@@ -12,6 +12,7 @@ import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
 import { liveApi } from '../state/live'
 import { useWorkspaces } from '../state/workspaces'
+import { useMinimized } from '../state/minimized'
 import { useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { ago } from './FollowUps'
 import { Modal } from './Modal'
@@ -330,7 +331,18 @@ function GitLine({ folder: f, now, compact, block }: { folder: WorkspaceFolder; 
   )
 }
 
-export function ProjectFolderModal({ open: { folder: f, agentIds, orphan }, onClose }: { open: Open; onClose: () => void }) {
+/** `onMinimize`: puts the window aside (a chip brings it back); `hidden`: it's minimized, kept mounted but not shown. */
+export function ProjectFolderModal({
+  open: { folder: f, agentIds, orphan },
+  onClose,
+  onMinimize,
+  hidden,
+}: {
+  open: Open
+  onClose: () => void
+  onMinimize?: (section: Section) => void
+  hidden?: boolean
+}) {
   const agents = useOffice((s) => s.agents)
   const tasks = useDashboard((s) => s.tasks)
   const addProject = useDashboard((s) => s.addProject)
@@ -383,7 +395,12 @@ export function ProjectFolderModal({ open: { folder: f, agentIds, orphan }, onCl
     if (f.git) liveApi.commits(f.path).then(setCommits)
   }, [f.path, f.git])
   // the panel on the right: the files, or one of the folder's other sections (the sidebar)
-  const [section, setSection] = useState<Section>('files')
+  // back from a chip after a reload: on the section it was left on
+  const [section, setSection] = useState<Section>(() => {
+    const was = useMinimized.getState().folders.find((m) => m.path === f.path)?.section
+    return SECTIONS.includes(was as Section) ? (was as Section) : 'files'
+  })
+  useEffect(() => useMinimized.getState().setSection(f.path, section), [f.path, section])
   const trash = useTrash(f.path)
   const max = useModalMaximize(1120)
   const tilde = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, '~')
@@ -405,6 +422,9 @@ export function ProjectFolderModal({ open: { folder: f, agentIds, orphan }, onCl
       title={f.name}
       description={`${f.git ? 'Git repository' : 'Folder'} · ${tilde(f.path)}`}
       {...max.modalProps}
+      hidden={hidden}
+      // it can be minimized: a stray click beside it shouldn't close it
+      closeOnBackdrop={false}
       className={`${max.modalProps.className ?? ''} fd-modal`}
       actions={
         <>
@@ -416,6 +436,11 @@ export function ProjectFolderModal({ open: { folder: f, agentIds, orphan }, onCl
           >
             {copied ? <LuCheck /> : <LuCopy />}
           </button>
+          {onMinimize && (
+            <button className="icon-btn small ghost" data-tip="Minimize" aria-label="Minimize" onClick={() => onMinimize(section)}>
+              <LuMinus />
+            </button>
+          )}
           {max.modalProps.actions}
         </>
       }
@@ -697,7 +722,8 @@ function FolderName({ folder }: { folder: WorkspaceFolder }) {
   )
 }
 
-type Section = 'files' | 'terminal' | 'notes' | 'project' | 'tasks' | 'reports' | 'git' | 'trash'
+const SECTIONS = ['files', 'terminal', 'notes', 'project', 'tasks', 'reports', 'git', 'trash'] as const
+type Section = (typeof SECTIONS)[number]
 
 interface TrashItem {
   id: string
