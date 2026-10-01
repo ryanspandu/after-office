@@ -24,7 +24,7 @@ const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name)
 /** The chevron that opens a folder in place. */
 export function Chevron({ open, onClick, label }: { open: boolean; onClick: () => void; label: string }) {
   return (
-    <button className="ws__fold" aria-expanded={open} aria-label={open ? `Fold ${label}` : `Open ${label}`} data-tip={open ? 'Fold' : 'Show what’s inside'} onClick={onClick}>
+    <button className="ws__fold" aria-expanded={open} aria-label={open ? `Fold ${label}` : `Open ${label}`} onClick={onClick}>
       <LuChevronRight />
     </button>
   )
