@@ -241,7 +241,7 @@
 .fnotes__size:hover { background: var(--card-2); }
 .fnotes__swatch-wrap { position: relative; display: inline-flex; }
 .fnotes__btn.has-color { box-shadow: inset 0 -3px 0 var(--swatch); }
-.fnotes__palette { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; display: grid; grid-template-columns: repeat(5, 22px); gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2); }
+.fnotes__palette { position: fixed; z-index: 1000; display: grid; grid-template-columns: repeat(5, 22px); gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2); }
 .fnotes__chip { all: unset; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.3); }
 .fnotes__chip.is-on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
 .fnotes__chip--none { background: linear-gradient(135deg, transparent 45%, var(--danger) 45% 55%, transparent 55%), var(--card-2); }
@@ -321,3 +321,19 @@
 .fmin-menu__row .fmin__close { width: 34px; height: 34px; }
 @keyframes fmin-in { from { opacity: 0; translate: 0 8px; } }
 @media (prefers-reduced-motion: reduce) { .fmin { animation: none; } }
+
+/* ── folder window on phones: room for the keyboard (html.kb-open, state/visualViewport.ts) ── */
+@media (max-width: 768px) {
+  /* a panel taller than what's left scrolls instead of running under the buttons */
+  .fd__main { overflow-y: auto; }
+  /* the notes' toolbar: one row that scrolls sideways, so the text box keeps its height */
+  .fnotes__tools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .fnotes__tools::-webkit-scrollbar { display: none; }
+  .fnotes__group { flex: none; }
+  .fnotes__editor { min-height: 120px; }
+  .fnotes__editor .tiptap { padding: 12px 14px 12px 30px; }
+  .kb-open .fd__actions { display: none; }
+  .kb-open .fd { height: calc(var(--vvh, 100dvh) - 150px); }
+  .kb-open .fterm__icon, .kb-open .fterm__hint { display: none; }
+  .kb-open .fterm__empty { justify-content: flex-start; padding: 14px; }
+}

@@ -13,6 +13,7 @@ import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
 import { useOffice } from '../state/store'
 import { Field, Modal } from './Modal'
+import { DockSheet } from './DockSheet'
 import { Select } from './Select'
 import { FigurePicker } from './FigurePicker'
 import { useConnectors } from './agent/ConnectorsTab'
@@ -321,9 +322,9 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
 
   if (!sheet) return panel
   return (
-    <Modal open={sheet.open} onClose={sheet.onClose} title="Needs your attention" width={560}>
-      <div className="modal__body dock-sheet">{panel}</div>
-    </Modal>
+    <DockSheet open={sheet.open} onClose={sheet.onClose} title="Needs your attention">
+      {panel}
+    </DockSheet>
   )
 }
 

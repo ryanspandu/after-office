@@ -40,12 +40,25 @@ export function MaximizeButton({ full, onToggle }: { full: boolean; onToggle: ()
 
 /**
  * The same for a modal (file preview, report): its card grows to the whole window and back, width and height
- * animated. Put `bodyRef` on an element inside the modal; pass width / className / actions to <Modal>.
+ * animated. Put `bodyRef` on an element inside the modal; pass width / className / actions to <Modal>. Phones: the
+ * bottom sheet takes the whole screen. `remember`: a key to keep the choice in this browser (the dock's sheets).
  */
-export function useModalMaximize(width: number) {
+export function useModalMaximize(width: number, remember?: string) {
   const bodyRef = useRef<HTMLDivElement>(null)
-  const [full, setFull] = useState(false)
+  const [full, setFull] = useState(() => {
+    try {
+      return !!remember && localStorage.getItem(remember) === '1'
+    } catch {
+      return false
+    }
+  })
   const toggle = () => {
+    if (remember)
+      try {
+        localStorage.setItem(remember, full ? '0' : '1')
+      } catch {
+        /* this visit only */
+      }
     const card = bodyRef.current?.closest<HTMLElement>('.modal')
     const from = card?.getBoundingClientRect()
     flushSync(() => setFull((v) => !v))

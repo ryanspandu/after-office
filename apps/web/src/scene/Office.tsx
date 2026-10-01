@@ -140,7 +140,12 @@ function FitCamera({ layout }: { layout: Layout }) {
     const [cx, , cz] = center(layout)
     const span = b.maxX - b.minX + (b.maxZ - b.minZ)
     // isometric footprint: width ≈ span·cos45°, height ≈ span·sin45°·sin35° + wall height
-    camera.zoom = Math.max(4, Math.min(size.width / (span * 0.72), size.height / (span * 0.42 + 3)))
+    const byWidth = size.width / (span * 0.72)
+    const byHeight = size.height / (span * 0.42 + 3)
+    // a tall stage (a phone held upright): fitting the width leaves the office a small strip in the middle, so fill
+    // the height instead and let the sides run off (it pans)
+    const portrait = size.height > size.width * 1.2
+    camera.zoom = Math.max(4, portrait ? byHeight * 0.95 : Math.min(byWidth, byHeight))
     camera.position.set(cx + 22, 20, cz + 22)
     camera.lookAt(cx, 0, cz)
     camera.updateProjectionMatrix()

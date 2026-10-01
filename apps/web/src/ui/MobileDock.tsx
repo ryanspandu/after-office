@@ -7,7 +7,7 @@ import { AgentsCard } from './AgentsPanel'
 import { FollowUps, useAttentionCount } from './FollowUps'
 import { CronPanel, TaskPanel } from './LeftSidebar'
 import { useManager, useManagerPanel } from './ManagerPanel'
-import { Modal } from './Modal'
+import { DockSheet } from './DockSheet'
 import { ReportsPanel } from './Reports'
 import { tip } from './Tooltip'
 import { useLaunch } from '../pwa/launch'
@@ -72,26 +72,19 @@ export function MobileDock() {
       {/* always mounted: it keeps the tab-title count and the dock badge current */}
       <FollowUps sheet={{ open: sheet === 'attention', onClose: close }} />
 
-      <Modal open={sheet === 'cron'} onClose={close} title="Daily" width={560}>
-        <div className="modal__body dock-sheet">
-          <CronPanel />
-        </div>
-      </Modal>
-      <Modal open={sheet === 'tasks'} onClose={close} title="Tasks" width={560}>
-        <div className="modal__body dock-sheet">
-          <TaskPanel />
-        </div>
-      </Modal>
-      <Modal open={sheet === 'reports'} onClose={close} title="Reports" width={560}>
-        <div className="modal__body dock-sheet">
-          <ReportsPanel />
-        </div>
-      </Modal>
-      <Modal open={sheet === 'agents'} onClose={close} title="Agents" width={560}>
-        <div className="modal__body dock-sheet agents-modal">
-          <AgentsCard onNavigate={close} />
-        </div>
-      </Modal>
+      <DockSheet open={sheet === 'cron'} onClose={close} title="Daily" bodyClass="dock-sheet">
+        <CronPanel />
+      </DockSheet>
+      <DockSheet open={sheet === 'tasks'} onClose={close} title="Tasks" bodyClass="dock-sheet">
+        <TaskPanel />
+      </DockSheet>
+      <DockSheet open={sheet === 'reports'} onClose={close} title="Reports" bodyClass="dock-sheet">
+        <ReportsPanel />
+      </DockSheet>
+      <DockSheet open={sheet === 'agents'} onClose={close} title="Agents" bodyClass="dock-sheet agents-modal">
+        <AgentsCard onNavigate={close} />
+      </DockSheet>
     </>
   )
 }
+

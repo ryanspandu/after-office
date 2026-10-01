@@ -17,11 +17,11 @@ interface Props {
   actions?: ReactNode
   /** put aside (minimized): kept mounted with everything in it, just not shown */
   hidden?: boolean
-  /** false: a click outside it doesn't close it (only ✕ / Esc do) */
-  closeOnBackdrop?: boolean
+  /** a click outside it: closes it, unless this says otherwise (e.g. minimize) */
+  onBackdrop?: () => void
 }
 
-export function Modal({ open, title, description, onClose, children, width = 460, className, actions, hidden, closeOnBackdrop = true }: Props) {
+export function Modal({ open, title, description, onClose, children, width = 460, className, actions, hidden, onBackdrop }: Props) {
   const backdrop = useRef<HTMLDivElement | null>(null)
   const shownAt = useRef(0)
   const setBackdrop = useCallback((el: HTMLDivElement | null) => {
@@ -85,7 +85,7 @@ export function Modal({ open, title, description, onClose, children, width = 460
   const { mounted, closing } = usePresence(open, 180)
   if (!mounted) return null
   return createPortal(
-    <div ref={setBackdrop} className={`modal-backdrop${closing ? ' modal-backdrop--closing' : ''}${hidden ? ' modal-backdrop--hidden' : ''}`} aria-hidden={hidden || undefined} onMouseDown={(e) => closeOnBackdrop && e.target === e.currentTarget && onClose()}>
+    <div ref={setBackdrop} className={`modal-backdrop${closing ? ' modal-backdrop--closing' : ''}${hidden ? ' modal-backdrop--hidden' : ''}`} aria-hidden={hidden || undefined} onMouseDown={(e) => e.target === e.currentTarget && (onBackdrop ?? onClose)()}>
       <div ref={card} className={`modal${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} style={{ width: `min(${width}px, 100%)` }}>
         {/* phones: the grab handle of the bottom sheet (hidden on larger screens) */}
         <div className="modal__grab" aria-hidden="true" {...dragProps} />

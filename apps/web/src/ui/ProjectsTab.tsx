@@ -423,8 +423,8 @@ export function ProjectFolderModal({
       description={`${f.git ? 'Git repository' : 'Folder'} · ${tilde(f.path)}`}
       {...max.modalProps}
       hidden={hidden}
-      // it can be minimized: a stray click beside it shouldn't close it
-      closeOnBackdrop={false}
+      // a click beside it puts it aside (minimized) instead of closing it
+      onBackdrop={onMinimize ? () => onMinimize(section) : undefined}
       className={`${max.modalProps.className ?? ''} fd-modal`}
       actions={
         <>

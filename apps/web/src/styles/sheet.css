@@ -12,7 +12,13 @@
     animation: sheet-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
     touch-action: pan-y;
   }
-  .modal.modal--full { height: calc(var(--vvh, 100dvh) - max(24px, env(safe-area-inset-top))); }
+  /* maximized: the whole screen, edge to edge (the status bar's inset stays clear) */
+  .modal-backdrop:has(> .modal--full) { padding-top: 0; }
+  /* (doubled class: files.css, loaded later, sizes the desktop card) */
+  .modal.modal--full.modal--full {
+    height: var(--vvh, 100dvh); max-height: var(--vvh, 100dvh); border-radius: 0;
+    padding-top: env(safe-area-inset-top); box-sizing: border-box;
+  }
   .modal__grab {
     display: flex; justify-content: center; flex-shrink: 0; padding: 8px 0 2px; cursor: grab; touch-action: none;
   }
