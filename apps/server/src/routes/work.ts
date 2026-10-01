@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, Project, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
 import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, projectsRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
-import { addFolder, addFolderFile, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
+import { addFolder, addFolderFile, searchFolders, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
 import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder, renameProjectFolder } from '../work/projectFolders'
 import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDevice, sendPush } from '../push'
@@ -311,6 +311,8 @@ workRoutes.delete('/crons/:id/trigger', (c) => {
 
 // ── projects tab: the agents' folders ──
 workRoutes.get('/workspaces', async (c) => c.json(await workspaces(c.req.query('fresh') === '1')))
+// the folder picker's search: folders by name, however deep (a few levels)
+workRoutes.get('/workspaces/search', (c) => c.json(searchFolders((c.req.query('q') ?? '').slice(0, 100))))
 // file manager: read-only, inside a folder the Projects tab shows
 workRoutes.get('/workspaces/files', (c) => c.json(listFolder(c.req.query('root') ?? '', c.req.query('path') ?? '')))
 // a file the owner uploads into the folder on screen (raw bytes; x-file-name, ?root= the folder, ?path= inside it)

@@ -239,6 +239,40 @@ export function listFolder(root: string, rel = ''): FolderListing {
 }
 
 /** A file inside `root` for preview / download: a real file (no symlink), not too big. */
+/**
+ * Folders whose name has `q` in it, inside the projects folder and the agents' folders (the folder picker's search):
+ * up to a few levels deep, nothing hidden, no links followed, no dependency / build folders. At most 50.
+ */
+export function searchFolders(q: string, maxDepth = 5): { path: string; name: string; under: string }[] {
+  const needle = q.trim().toLowerCase()
+  if (needle.length < 1) return []
+  const roots = [PROJECTS_DIR, ...agentsRepo.all().map((a) => a.cwd)].filter((r, i, all) => existsSync(r) && all.indexOf(r) === i)
+  const out: { path: string; name: string; under: string }[] = []
+  const seen = new Set<string>()
+  const walk = (dir: string, depth: number, root: string) => {
+    if (out.length >= 50 || depth > maxDepth) return
+    let entries: import('node:fs').Dirent[]
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const d of entries) {
+      if (!d.isDirectory() || d.name.startsWith('.') || SKIP.has(d.name)) continue
+      const path = join(dir, d.name)
+      if (seen.has(path)) continue
+      seen.add(path)
+      if (d.name.toLowerCase().includes(needle)) {
+        out.push({ path, name: d.name, under: path.slice(0, path.length - d.name.length - 1) })
+        if (out.length >= 50) return
+      }
+      walk(path, depth + 1, root)
+    }
+  }
+  for (const root of roots) walk(root, 1, root)
+  return out
+}
+
 /** Largest file the owner can upload into a folder. */
 export const UPLOAD_MAX = 20 * 1024 * 1024
 

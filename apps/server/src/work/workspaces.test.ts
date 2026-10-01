@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { agentsRepo, projectsRepo, queueRepo, tasksRepo } from '../db'
 import { workRoutes } from '../routes/work'
 import { startTask, taskFolder } from './work'
-import { addFolder, addFolderFile, recentCommits, workspaces } from './workspaces'
+import { addFolder, addFolderFile, recentCommits, searchFolders, workspaces } from './workspaces'
 
 // The Projects tab reads the agents' folders: a repo folder is one project; any other folder holds several.
 
@@ -237,6 +237,20 @@ describe("a report's attachments", () => {
     expect(gone.status).toBe(404)
     expect(((await gone.json()) as { error: string }).error).toBe('This file no longer exists')
     reportsRepo.remove('rep-gone')
+  })
+})
+
+describe('searching folders', () => {
+  test('by name, however deep; nothing hidden or from node_modules', async () => {
+    const { PROJECTS_DIR } = await import('../fsroots')
+    mkdirSync(join(PROJECTS_DIR, 'sf-aftrn', 'driftless', 'src'), { recursive: true })
+    mkdirSync(join(PROJECTS_DIR, 'sf-aftrn', 'node_modules', 'driftless-x'), { recursive: true })
+    mkdirSync(join(PROJECTS_DIR, 'sf-aftrn', '.driftless-hidden'), { recursive: true })
+    const found = searchFolders('Driftless')
+    expect(found.map((f) => f.path)).toEqual([join(PROJECTS_DIR, 'sf-aftrn', 'driftless')])
+    expect(found[0].under).toBe(join(PROJECTS_DIR, 'sf-aftrn'))
+    expect(searchFolders('  ')).toEqual([])
+    rmSync(join(PROJECTS_DIR, 'sf-aftrn'), { recursive: true, force: true })
   })
 })
 

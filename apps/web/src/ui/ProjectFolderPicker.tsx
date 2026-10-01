@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { LuFolder } from 'react-icons/lu'
+import { LuFolder, LuLoader } from 'react-icons/lu'
+import { api } from '../state/auth'
+import { SearchBox } from './SearchBox'
 import { useWorkspaces } from '../state/workspaces'
 import { useOffice } from '../state/store'
 import { Modal } from './Modal'
@@ -13,6 +15,25 @@ export function ProjectFolderPicker({ onPick, onClose }: { onPick: PickDir; onCl
   const load = useWorkspaces((s) => s.load)
   const agents = useOffice((s) => s.agents)
   const [open, setOpen] = useState<Set<string>>(new Set())
+  // searching: folders by name, however deep (the server looks a few levels down)
+  const [q, setQ] = useState('')
+  const [found, setFound] = useState<{ path: string; name: string; under: string }[] | null>(null)
+  useEffect(() => {
+    const term = q.trim()
+    if (!term) return setFound(null)
+    let gone = false
+    const t = setTimeout(() => {
+      api(`/api/workspaces/search?${new URLSearchParams({ q: term })}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((list) => !gone && setFound(list))
+        .catch(() => !gone && setFound([]))
+    }, 250)
+    return () => {
+      gone = true
+      clearTimeout(t)
+    }
+  }, [q])
+  const tilde = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, '~')
   useEffect(() => void load(), [load])
   const toggle = (k: string) =>
     setOpen((cur) => {
@@ -34,7 +55,34 @@ export function ProjectFolderPicker({ onPick, onClose }: { onPick: PickDir; onCl
   return (
     <Modal open onClose={onClose} title="Choose a folder" description="Open a folder to go deeper; “Use” picks it as the project's folder." width={560}>
       <div className="modal__body folder-picker">
-        {!data ? (
+        <SearchBox value={q} onChange={setQ} placeholder="Search folders" className="folder-picker__search" />
+        {q.trim() ? (
+          found === null ? (
+            <div className="muted folder-picker__note">
+              <LuLoader className="spin" />
+            </div>
+          ) : !found.length ? (
+            <div className="muted folder-picker__note">No folder called “{q.trim()}”.</div>
+          ) : (
+            <ul className="tree">
+              {found.map((f) => (
+                <li key={f.path}>
+                  <div className="tree__row tree__dir" style={{ ['--depth' as string]: 0 }}>
+                    <span className="tree__spacer" />
+                    <span className="tree__open" data-tip={f.path}>
+                      <LuFolder className="tree__icon tree__icon--dir" />
+                      <span className="tree__name-wrap">
+                        <span className="tree__name truncate">{f.name}</span>
+                        <span className="muted folder-picker__hint truncate">{tilde(f.under)}</span>
+                      </span>
+                    </span>
+                    <UseButton onClick={() => pick(f.path, f.name)} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : !data ? (
           <div className="muted">Loading…</div>
         ) : !roots.length ? (
           <div className="empty">No folders yet.</div>
