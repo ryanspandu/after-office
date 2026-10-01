@@ -168,6 +168,15 @@ function NotesEditor({ path, initial, initialAt }: { path: string; initial: stri
             </>
           )}
         </span>
+        {/* phones, while typing (the editor takes the whole screen): put the keyboard away and go back */}
+        <button
+          type="button"
+          className="small fnotes__done"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => (editor?.commands.blur(), (document.activeElement as HTMLElement | null)?.blur())}
+        >
+          Done
+        </button>
       </div>
       {/* the toolbar sits right on top of the text box, as one piece */}
       <div className="fnotes__box">

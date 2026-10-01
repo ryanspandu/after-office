@@ -76,7 +76,7 @@ export function FolderTerminal({ root }: { root: string }) {
         label={`a shell in ${root.replace(/^\/(Users|home)\/[^/]+/, '~')}`}
         actions={
           <button className="small danger-text" onClick={() => void end()}>
-            <LuX /> End terminal
+            <LuX /> End<span className="hide-phone"> terminal</span>
           </button>
         }
       />

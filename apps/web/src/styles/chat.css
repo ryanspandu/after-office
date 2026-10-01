@@ -125,7 +125,11 @@
 .term__bar { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .term__hint { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
 .term__screen { flex: 1; min-height: 300px; border-radius: 12px; overflow: hidden; background: #111; padding: 8px; display: flex; }
-.term__host { flex: 1; min-width: 0; min-height: 0; position: relative; }
+.term__host { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
+/* the terminal wraps its lines: no sideways scrollbar (it showed as a dark bar along the bottom) */
+.term__host .xterm .scrollbar.horizontal { display: none !important; }
+/* the rows don't fill the box exactly: what's left under them matches the screen, not pure black */
+.term__host .xterm-viewport { background-color: #111 !important; }
 .term__host .xterm { position: absolute; inset: 0; }
 
 .facts { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px 12px; margin: 0; font-size: 13px; }
@@ -262,3 +266,24 @@ span.stab { padding: 0 4px 0 10px; }
 .chat-ctx__unpick { all: unset; display: grid; place-items: center; width: 20px; height: 20px; margin-right: 3px; border-radius: 50%; color: var(--muted); cursor: pointer; }
 .chat-ctx__unpick:hover { background: var(--card); color: var(--text); }
 @media (max-width: 768px) { .chat-ctx__project, .chat-ctx__pick { flex: 1; max-width: none; } }
+
+/* the terminal's bar on phones: one line (the path cut short), a compact End */
+.term__bar > .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.term__bar .live-dot { flex: none; }
+.term__bar > button { flex: none; white-space: nowrap; }
+@media (max-width: 768px) { .term__screen { min-height: 180px; padding: 6px; } }
+/* touch screens: the keys row and a command line under the terminal (ui/agent/TerminalTab.tsx) */
+.tkeys { display: flex; flex-direction: column; gap: 5px; flex: none; }
+.tkeys__row { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.tkeys__row::-webkit-scrollbar { display: none; }
+.tkeys__key {
+  all: unset; box-sizing: border-box; flex: 1 0 auto; min-width: 40px; height: 34px; padding: 0 8px; border-radius: 8px;
+  display: grid; place-items: center; font: 600 12px ui-monospace, Menlo, monospace; color: var(--text);
+  background: var(--card-2); border: 1px solid var(--line); cursor: pointer;
+}
+.tkeys__key:active { background: var(--accent-soft); }
+.tkeys__key.is-on { background: var(--hl); border-color: var(--hl); color: #fff; }
+.tkeys__row--sym .tkeys__key { min-width: 34px; font-size: 14px; }
+.tkeys__row .tkeys__key svg { font-size: 15px; }
+.tkeys__line { display: flex; gap: 6px; align-items: center; }
+.tkeys__line input { flex: 1; min-width: 0; height: 36px; font: 13px ui-monospace, Menlo, monospace; }

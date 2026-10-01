@@ -337,3 +337,21 @@
   .kb-open .fterm__icon, .kb-open .fterm__hint { display: none; }
   .kb-open .fterm__empty { justify-content: flex-start; padding: 14px; }
 }
+@media (max-width: 768px) { .hide-phone { display: none; } }
+
+/* ── notes on phones while typing: the window gives the editor the whole screen (header, sections and buttons step
+   aside), and it all comes back when the keyboard goes down (html.kb-open, state/visualViewport.ts) ── */
+.fnotes__done { display: none; }
+@media (max-width: 768px) {
+  .kb-open .modal-backdrop:has(.fnotes:focus-within) { padding-top: 0; }
+  .kb-open .modal:has(.fnotes:focus-within) {
+    height: var(--vvh, 100dvh) !important; max-height: var(--vvh, 100dvh) !important; border-radius: 0;
+    padding-top: env(safe-area-inset-top); box-sizing: border-box; animation: none;
+  }
+  .kb-open .modal:has(.fnotes:focus-within) :is(.modal__grab, .modal__head, .fd__nav, .fd__actions) { display: none; }
+  .kb-open .modal:has(.fnotes:focus-within) .modal__body { padding: 10px 12px; }
+  .kb-open .modal:has(.fnotes:focus-within) .fd { grid-template-rows: minmax(0, 1fr); height: calc(var(--vvh, 100dvh) - 20px - env(safe-area-inset-top)); padding-top: 0; gap: 0; }
+  .kb-open .fnotes:focus-within { gap: 8px; }
+  .kb-open .fnotes:focus-within .fnotes__done { display: inline-flex; }
+  .kb-open .fnotes:focus-within .fnotes__editor { min-height: 0; }
+}

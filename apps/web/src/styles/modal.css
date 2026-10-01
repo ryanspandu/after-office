@@ -17,7 +17,10 @@
 /* with a description under the title, line the close button up with the title line */
 .modal__head:has(> div > p) { align-items: flex-start; }
 .modal__head:has(> div > p) > .modal__actions { margin-top: -4px; }
-.modal__head > .icon-btn { flex-shrink: 0; }
+.modal__head > .icon-btn, .modal__actions { flex-shrink: 0; }
+/* a long title or path wraps instead of pushing the header's buttons off the edge */
+.modal__head > div { min-width: 0; }
+.modal__head p { overflow-wrap: anywhere; }
 .modal__head h3 { margin: 0; font-size: 14px; font-weight: 500; }
 .modal__head p { margin: 4px 0 0; }
 .modal__body { display: flex; flex-direction: column; gap: 14px; padding: 20px 20px 16px; }
