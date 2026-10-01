@@ -171,3 +171,33 @@
 @media (prefers-reduced-motion: reduce) { .chat__find--float { animation: none; } }
 .chat__float .chat__find--float .icon-btn { box-shadow: none; background: transparent; }
 .toolbar__search { flex: 1 1 180px; max-width: 280px; }
+
+/* the chat's optional project and tags (ui/agent/chatContext.tsx) */
+.chat-ctx-wrap { display: grid; grid-template-rows: 0fr; opacity: 0; transform: translateY(6px); margin-bottom: -10px; transition: grid-template-rows 0.22s ease, opacity 0.18s ease, transform 0.22s ease, margin-bottom 0.22s ease; }
+.chat-ctx-wrap.is-open { grid-template-rows: 1fr; opacity: 1; transform: none; margin-bottom: 0; }
+.chat-ctx-wrap__inner { min-height: 0; overflow: hidden; }
+.chat-ctx-wrap.is-open .chat-ctx-wrap__inner { overflow: visible; transition: overflow 0s 0.22s; }
+@media (prefers-reduced-motion: reduce) { .chat-ctx-wrap { transition: none; } }
+.chat-ctx { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 2px 0 2px 2px; }
+.chat-ctx__field { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.chat-ctx__field .rs { min-width: 170px; }
+.chat-ctx__field--tags .rs { min-width: 200px; }
+.chat-ctx__icon { color: var(--muted); font-size: 13px; flex-shrink: 0; }
+.chat-ctx__hint { font-size: 11.5px; }
+.chat__composer .chat__ctx-toggle.is-on { color: var(--hl); }
+.chat-ctx-chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-top: 4px; }
+.chat-ctx-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--card-2); color: var(--muted); }
+@media (max-width: 768px) {
+  .chat-ctx__field, .chat-ctx__field .rs { flex: 1 1 100%; min-width: 0; }
+  .chat-ctx__hint { flex: 1; min-width: 0; }
+}
+/* the tags beside the project: the same small pill as the project picker (grows only when the tags wrap) */
+.chat-ctx .rs--multi .rs__control { min-height: 24px !important; padding: 1px 3px 1px 9px; border-radius: 999px; font-size: 12px; }
+.chat-ctx .rs--multi .rs__value-container { align-content: center; }
+.chat-ctx .rs--multi .rs__multi-value { padding-top: 0; padding-bottom: 0; line-height: 1.4; font-size: 11.5px; }
+.chat-ctx .rs--multi .rs__dropdown-indicator { padding: 2px; }
+/* clearing the picks: a small pill at the row's right end */
+.chat-ctx__clear { all: unset; box-sizing: border-box; margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-2); color: var(--text); font-size: 12px; cursor: pointer; }
+.chat-ctx__clear:hover { border-color: var(--hl); color: var(--hl); }
+.chat-ctx__clear:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+.chat-ctx__clear svg { font-size: 12px; }

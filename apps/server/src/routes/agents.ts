@@ -4,9 +4,11 @@ import { noteOwnerMessage } from '../work/activity'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { FollowUpDecision, LiveMode } from '@after-office/shared'
-import { agentsRepo, usageRepo } from '../db'
+import { agentsRepo, projectsRepo, usageRepo } from '../db'
+import { existsSync } from 'node:fs'
+import { cleanChatContext, contextBlock, expectChatReport, withContext } from '../work/work'
 import { decide } from '../agents/ingest'
-import { AgentError, changeFolder, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeProjectDir, randomStyle } from '../agents/manager'
+import { AgentError, changeFolder, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeProjectDir, randomStyle, grantProjectDir } from '../agents/manager'
 import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime } from '../agents/registry'
 import { readChat } from '../agents/transcripts'
 import { requireSameOrigin, terminalSocket } from '../agents/term'
@@ -60,7 +62,9 @@ agentRoutes.delete('/agents/:id', async (c) => {
 })
 
 agentRoutes.post('/agents/:id/prompt', async (c) => {
-  const { text, uploads } = await c.req.json<{ text: string; uploads?: unknown }>()
+  const { text, uploads, projectId, tags } = await c.req.json<{ text: string; uploads?: unknown; projectId?: unknown; tags?: unknown }>()
+  // the project and tags picked above the message box (optional): a block after the owner's words (work/chatContext.ts)
+  const ctx = cleanChatContext(projectId, tags)
   // attached files (staged by /uploads): moved into the agent's folder now, listed at the end of the message
   const ids = Array.isArray(uploads) ? uploads.filter((f): f is string => typeof f === 'string').slice(0, MAX_UPLOADS) : []
   const row = ids.length ? agentsRepo.get(c.req.param('id')) : null
@@ -68,9 +72,20 @@ agentRoutes.post('/agents/:id/prompt', async (c) => {
   // offline: say so before moving anything (the files stay attached for another try)
   if (row && !(await tmux.hasSession(row.tmux_session))) throw new AgentError('The agent is offline', 409)
   const paths = row ? ids.map((id) => commitStaged(row, id).path) : []
+  const id = c.req.param('id')
+  const block = contextBlock(id, ctx)
+  const message = withAttachments(withContext(String(text ?? ''), block), paths)
+  const agent = agentsRepo.get(id)
+  if (block && agent && agent.kind !== 'manager') {
+    // a project outside its own folder: the agent may work there (no permission prompts)
+    const folder = ctx.projectId ? projectsRepo.get(ctx.projectId)?.folder : undefined
+    if (folder && existsSync(folder) && folder !== agent.cwd) await grantProjectDir(id, folder).catch((e) => console.warn(`[chat] could not add ${folder} for ${id}:`, e.message))
+    // its answer to this message is kept in Reports
+    expectChatReport(id, message, String(text ?? ''), ctx)
+  }
   // the Activity log: this turn is the owner's, from this device
-  noteOwnerMessage(c.req.param('id'), requestWho(c))
-  await sendPrompt(c.req.param('id'), withAttachments(String(text ?? ''), paths))
+  noteOwnerMessage(id, requestWho(c))
+  await sendPrompt(id, message)
   return c.json({ ok: true })
 })
 

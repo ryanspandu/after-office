@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, useMemo } from 'react'
-import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuX } from 'react-icons/lu'
+import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuX } from 'react-icons/lu'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import type { ChatItem, LiveMode } from '@after-office/shared'
 import { mentionedPaths, modelChoiceOf, MODELS } from '@after-office/shared'
@@ -15,6 +15,7 @@ import { FileLinksProvider } from '../fileLinks'
 import { OutgoingFiles, PendingTray, splitAttachments, usePendingFiles, type Pending } from './chatAttachments'
 import { tip } from '../Tooltip'
 import { OfflineBanner } from './OfflineBanner'
+import { ChatContextBar, ContextChips, splitContext, useChatContext } from './chatContext'
 
 // Chat with one agent. Messages come from its Claude Code transcript; what you send is typed into its tmux session.
 
@@ -149,6 +150,9 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
   }
 
   const pending = usePendingFiles(agent.id)
+  // the project and tags sent with each message (optional, kept per agent): the row shows while open or set
+  const context = useChatContext(agent.id)
+  const [contextOpen, setContextOpen] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   // the message box grows with what's typed, up to its max-height (CSS), then scrolls
   const box = useRef<HTMLTextAreaElement>(null)
@@ -159,10 +163,22 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
   useLayoutEffect(() => {
     const el = box.current
     if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`
-    // a scrollbar only once it's at its max-height and there's more
-    el.style.overflowY = el.scrollHeight > el.clientHeight + 1 ? 'auto' : 'hidden'
+    const fit = () => {
+      el.style.height = 'auto'
+      el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`
+      // a scrollbar only once it's at its max-height and there's more
+      el.style.overflowY = el.scrollHeight > el.clientHeight + 1 ? 'auto' : 'hidden'
+    }
+    fit()
+    // measured while the panel was still opening (narrow): measure again once its width settles
+    let width = el.clientWidth
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === width) return
+      width = el.clientWidth
+      fit()
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [text])
   const [dragging, setDragging] = useState(false)
   const attach = (files: File[]) => {
@@ -192,7 +208,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
     setOutgoing({ text: body, files: pending.items.filter((p) => p.state === 'done'), at })
     stick.current = true
     try {
-      await liveApi.prompt(agent.id, body, pending.ids)
+      await liveApi.prompt(agent.id, body, pending.ids, context.value)
       setSentAt(at)
       setText('')
       pending.take()
@@ -477,7 +493,8 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
         {items.map((i) => {
           if (i.kind === 'user') {
             // files the owner attached: previews under the bubble, like the agent's own files
-            const { text: said, paths } = splitAttachments(i.text)
+            const { text: withCtx, paths } = splitAttachments(i.text)
+            const { text: said, project, tags } = splitContext(withCtx)
             const files = paths.map((p) => ownerFiles.get(p)).filter((f) => !!f)
             return (
               <div key={i.id} data-mid={i.id} className={`msg-user${isNew(i.id)}`}>
@@ -487,6 +504,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
                   </div>
                 )}
                 {said && <div className={`msg msg--user${i.id === current ? ' msg--hit' : ''}`}>{said}</div>}
+                <ContextChips project={project} tags={tags} />
               </div>
             )
           }
@@ -529,6 +547,12 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
       {error && <div className="chat__error">{error}</div>}
       {!error && notice && agent.status === 'waiting' && <div className="chat__notice">{notice}</div>}
       <PendingTray items={pending.items} onRemove={pending.remove} />
+      {/* always there, folded away when closed: it slides open and shut (CSS grid rows) */}
+      <div className={`chat-ctx-wrap${contextOpen || context.active ? ' is-open' : ''}`} inert={!(contextOpen || context.active)}>
+        <div className="chat-ctx-wrap__inner">
+          <ChatContextBar value={context.value} onChange={context.set} manager={agent.kind === 'manager'} />
+        </div>
+      </div>
       <div className="chat__composer">
         <input
           ref={fileInput}
@@ -543,6 +567,15 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
         <button className="icon-btn ghost chat__attach" onClick={() => fileInput.current?.click()} disabled={offline || sending} {...tip('Attach files or pictures (or paste / drop them here)')}>
           <LuPaperclip />
         </button>
+        <button
+          className={`icon-btn ghost chat__attach chat__ctx-toggle${context.active ? ' is-on' : ''}`}
+          onClick={() => setContextOpen((v) => !v)}
+          disabled={offline}
+          aria-expanded={contextOpen || context.active}
+          {...tip(context.active ? 'Project and tags for this chat' : 'Pick a project or tags (optional)')}
+        >
+          <LuTag />
+        </button>
         <textarea
           ref={box}
           value={text}
@@ -556,7 +589,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
             attach(files)
           }}
           rows={1}
-          placeholder={offline ? 'The agent is offline' : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
+          placeholder={offline ? 'The agent is offline' : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
           disabled={offline}
         />
         <button className="icon-btn primary" onClick={send} disabled={!canSend} data-tip={pending.uploading ? 'Waiting for the upload…' : 'Send'} aria-label="Send">

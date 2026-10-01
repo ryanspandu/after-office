@@ -36,6 +36,8 @@ const KindIcon = ({ r }: { r: WorkReport }) =>
     <LuCrown className="report__icon report__icon--note" />
   ) : r.kind === 'cron' ? (
     <LuClock className="report__icon" />
+  ) : r.kind === 'chat' ? (
+    <LuMessageSquareText className="report__icon" />
   ) : (
     <LuListTodo className="report__icon" />
   )
@@ -412,7 +414,7 @@ export function ReportModal({ id, onClose }: { id: string; onClose: () => void }
     <Modal open onClose={onClose} title={r.title} {...max.modalProps}>
       <div className="modal__body report" ref={max.bodyRef}>
         <div className="report__meta">
-          <span className={`status-pill${r.ok ? '' : ' status-pill--bad'}`}>{r.ok ? (r.kind === 'cron' ? 'Daily run' : r.kind === 'note' ? 'From the manager' : 'Task') : 'Failed'}</span>
+          <span className={`status-pill${r.ok ? '' : ' status-pill--bad'}`}>{r.ok ? (r.kind === 'cron' ? 'Daily run' : r.kind === 'note' ? 'From the manager' : r.kind === 'chat' ? 'From the chat' : 'Task') : 'Failed'}</span>
           <span>{agent?.name ?? 'Removed agent'}</span>
           <span>·</span>
           <span>{new Date(r.finishedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</span>

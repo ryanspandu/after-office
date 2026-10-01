@@ -279,7 +279,9 @@ export const liveApi = {
     return r.ok ? r.json() : { folder: '', deletable: false, entries: 0 }
   },
   /** `uploads`: ids of files attached (staged) for this message; the server moves them into the agent's folder */
-  prompt: (id: string, text: string, uploads: string[] = []) => call(`/api/agents/${id}/prompt`, { text, ...(uploads.length ? { uploads } : {}) }),
+  /** `ctx`: the project and tags picked above the message box (optional) */
+  prompt: (id: string, text: string, uploads: string[] = [], ctx?: { projectId: string; tags: string[] }) =>
+    call(`/api/agents/${id}/prompt`, { text, ...(uploads.length ? { uploads } : {}), ...(ctx?.projectId ? { projectId: ctx.projectId } : {}), ...(ctx?.tags.length ? { tags: ctx.tags } : {}) }),
   /** Attach a file in the chat: staged on the server until the message is sent (then it goes into the agent's folder). */
   upload: async (id: string, file: File): Promise<StagedUpload> => {
     // raw bytes + the name in a header (the server's one exception to JSON-only writes, see auth.ts)

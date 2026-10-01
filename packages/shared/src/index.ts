@@ -250,7 +250,8 @@ export interface TaskArchivePage {
 export interface WorkReport {
   id: string
   /** task / cron run: an agent's final message; note: something the manager wanted you to see */
-  kind: 'task' | 'cron' | 'note'
+  /** `chat`: an agent's answer to the owner's chat message sent with a project or tags (refId: the agent) */
+  kind: 'task' | 'cron' | 'note' | 'chat'
   /** Task or cron job id */
   refId: string
   title: string

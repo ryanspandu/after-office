@@ -225,6 +225,8 @@ export async function sendTest() {
 const name = (agentId: string) => agentsRepo.get(agentId)?.name ?? 'An agent'
 
 function onReport(r: WorkReport) {
+  // a chat answer the owner asked to keep: they're in that chat, no push for it
+  if (r.kind === 'chat') return
   if (r.kind === 'note') return void notify('managerNote', `${name(r.agentId)}: ${r.title}`, r.text)
   // with a quality gate, the notification comes when the check is done (work.ts runGate)
   if (r.kind === 'task' && tasksRepo.get(r.refId)?.checkState === 'running') return

@@ -19,6 +19,7 @@ import { restoreApprovals } from './managerTasks'
 import { tickCrons } from './crons'
 import { endBossMode } from './bossMode'
 import { publicAccess, watchPublicAccess } from './publicAccess'
+import { chatReport, putChatReport, type ChatContext } from './chatContext'
 import { dropProjectSessions } from './dropSessions'
 
 
@@ -102,8 +103,30 @@ export const active = new Map<string, Active>()
 const replyTo = new Map<string, string>()
 export const expectReply = (agentId: string, managerId: string) => void replyTo.set(agentId, managerId)
 
+/**
+ * The owner's chat message with a project or tags (to an agent other than the manager): its answer is kept as a report
+ * (work/chatContext.ts). Waits for that message's UserPromptSubmit, then for the turn's end.
+ */
+interface ChatTurn {
+  head: string
+  asked: string
+  ctx: ChatContext
+  startedAt: number
+  submitted?: boolean
+  files?: Set<string>
+}
+const chatTurns = new Map<string, ChatTurn>()
+export function expectChatReport(agentId: string, sent: string, asked: string, ctx: ChatContext) {
+  chatTurns.set(agentId, { head: promptHead(sent), asked, ctx, startedAt: Date.now() })
+}
+
 /** A file the agent wrote (PostToolUse of Write/Edit): attached to the report of the work it's doing. */
 export function noteFileWritten(agentId: string, path: string) {
+  const c = chatTurns.get(agentId)
+  if (c?.submitted && !active.has(agentId)) {
+    c.files ??= new Set()
+    if (c.files.size < 100) c.files.add(path)
+  }
   const a = active.get(agentId)
   if (!a) return
   a.files ??= new Set()
@@ -220,8 +243,17 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
   active.delete(agentId)
   const manager = replyTo.get(agentId)
   replyTo.delete(agentId)
+  // the answer to the owner's chat message with a project / tags: kept in Reports
+  const chat = !a && chatTurns.get(agentId)?.submitted ? chatTurns.get(agentId) : undefined
+  if (chat) {
+    chatTurns.delete(agentId)
+    const row = agentsRepo.get(agentId)
+    const files = row ? agentFiles(row, [...(chat.files ?? []), ...mentionedPaths(finalMessage ?? '')]) : []
+    putChatReport(chatReport(agentId, chat.asked, chat.ctx, finalMessage, !failed, chat.startedAt, files))
+    publishWork('reports')
+  }
   // after a server restart the in-memory link is gone: fall back to the agent's task in progress
-  const t = a?.taskId ? tasksRepo.get(a.taskId) : a ? null : tasksRepo.active().find((x) => x.agentId === agentId && x.status === 'in_progress')
+  const t = a?.taskId ? tasksRepo.get(a.taskId) : a || chat ? null : tasksRepo.active().find((x) => x.agentId === agentId && x.status === 'in_progress')
   const ref = a ?? (t ? { taskId: t.id, title: t.title, startedAt: t.startedAt ?? Date.now() } : null)
   const cmd = t && t.status === 'in_progress' && !failed ? checkFor(t) : undefined
   if (t && cmd) {
@@ -253,6 +285,12 @@ export function onPromptSubmitted(agentId: string, prompt?: string) {
   if (agentsRepo.get(agentId)?.kind === 'manager') {
     readingAgentOutput.set(agentId, !!prompt && prompt.includes('<<<REPORT'))
     reportedTasks.set(agentId, prompt ? reportedTaskIds(prompt) : new Set())
+  }
+  // the owner's chat message whose answer goes to Reports: seen now; another message after it means they moved on
+  const c = chatTurns.get(agentId)
+  if (c && prompt) {
+    if (promptHead(unwrapPaste(prompt)) === c.head) c.submitted = true
+    else if (c.submitted && !/^\s*<task-notification>/.test(prompt)) chatTurns.delete(agentId)
   }
   const a = active.get(agentId)
   if (!a) return
@@ -659,3 +697,4 @@ export * from './bossMode'
 export * from './publicAccess'
 export * from './managerCrons'
 export * from './dropSessions'
+export * from './chatContext'
