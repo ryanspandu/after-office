@@ -70,7 +70,8 @@
 @media (max-width: 768px) {
   .tasks-modal .toolbar__break { display: none; }
   /* tags on a row of their own, then Projects · Archive · Show done across the whole width */
-  .tasks-modal .toolbar__filter--tags { grid-column: 1 / -1; }
+  /* a cell of the filter grid like the others (beside the project filter) */
+  .tasks-modal .toolbar__filter--tags .tag-filter, .tasks-modal .toolbar__filter--tags .rs { width: 100%; min-width: 0; max-width: none; }
   .tasks-modal .toolbar__actions { grid-column: 1 / -1; margin-left: 0; justify-self: stretch; justify-content: flex-end; flex-wrap: wrap; }
   .tasks-modal .toolbar__actions .check { margin-left: auto; }
 }

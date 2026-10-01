@@ -78,9 +78,9 @@ describe('project folders', () => {
     expect(a.folder).toBe(join(PROJECTS_DIR, 'seo-research'))
     const b = (await (await put('proj-seo2', { name: 'SEO research', createFolder: true })).json()) as { folder: string }
     expect(b.folder).toBe(join(PROJECTS_DIR, 'seo-research-2'))
-    // renaming keeps its folder
+    // one name for a project with a folder: the folder's (a different name sent is not kept)
     await put('proj-seo', { name: 'SEO', folder: a.folder })
-    expect(projectsRepo.get('proj-seo')).toMatchObject({ name: 'SEO', folder: a.folder })
+    expect(projectsRepo.get('proj-seo')).toMatchObject({ name: 'seo-research', folder: a.folder })
     // and it's listed in the Projects tab, under the projects folder
     const shared = (await workspaces(true)).find((w) => w.shared)!
     expect(shared.path).toBe(PROJECTS_DIR)
@@ -247,10 +247,24 @@ describe('searching folders', () => {
     mkdirSync(join(PROJECTS_DIR, 'sf-aftrn', 'node_modules', 'driftless-x'), { recursive: true })
     mkdirSync(join(PROJECTS_DIR, 'sf-aftrn', '.driftless-hidden'), { recursive: true })
     const found = searchFolders('Driftless')
-    expect(found.map((f) => f.path)).toEqual([join(PROJECTS_DIR, 'sf-aftrn', 'driftless')])
-    expect(found[0].under).toBe(join(PROJECTS_DIR, 'sf-aftrn'))
+    const mine = found.find((f) => f.path === join(PROJECTS_DIR, 'sf-aftrn', 'driftless'))
+    expect(mine?.under).toBe(join(PROJECTS_DIR, 'sf-aftrn'))
+    expect(found.some((f) => f.path.includes('node_modules') || f.name.startsWith('.'))).toBe(false)
     expect(searchFolders('  ')).toEqual([])
     rmSync(join(PROJECTS_DIR, 'sf-aftrn'), { recursive: true, force: true })
+  })
+})
+
+describe('one name for a project and its folder', () => {
+  test('a project with a folder takes its name (once, at start); one without a folder keeps its own', async () => {
+    const { syncProjectNames } = await import('./projectFolders')
+    projectsRepo.put({ id: 'sync-a', name: 'project b', color: '#f07a1d', folder: '/x/y/testproject' })
+    projectsRepo.put({ id: 'sync-b', name: 'Loose idea', color: '#f07a1d' })
+    expect(syncProjectNames()).toBeGreaterThanOrEqual(1)
+    expect(projectsRepo.get('sync-a')!.name).toBe('testproject')
+    expect(projectsRepo.get('sync-b')!.name).toBe('Loose idea')
+    projectsRepo.remove('sync-a')
+    projectsRepo.remove('sync-b')
   })
 })
 

@@ -88,8 +88,9 @@ function ProjectRow({ project: p, count, open, onToggle }: { project: Project; c
       {open && (
         <div className="projects__edit">
           <div className="projects__row">
-            <Field label="Name">
-              <input value={p.name} maxLength={60} onChange={(e) => set({ name: e.target.value })} />
+            <Field label="Name" hint={p.folder ? 'Named after its folder: rename the folder (Projects tab) to rename it.' : undefined}>
+              {/* a project with a folder has one name, its folder's */}
+              <input value={p.name} maxLength={60} readOnly={!!p.folder} onChange={(e) => set({ name: e.target.value })} />
             </Field>
             {/* not a <label>: it would forward clicks to the first swatch */}
             <div className="field">

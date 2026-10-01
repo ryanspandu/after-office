@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { agentsRepo, extraDirsOf, projectsRepo, tasksRepo } from '../db'
+import { basename, dirname, join } from 'node:path'
+import { agentsRepo, extraDirsOf, folderNotesRepo, projectsRepo, tasksRepo } from '../db'
 import { AgentError } from '../agents/errors'
 import { revokeProjectDir } from '../agents/manager'
 import { runAsAgent } from '../agents/asagent'
@@ -56,8 +56,23 @@ export function renameProjectFolder(folder: string, name: string) {
   const busy = tasksRepo.active().some((t) => t.status === 'in_progress' && linked.some((p) => p.id === t.projectId))
   if (busy) throw new AgentError('One of its tasks is being worked on right now: rename it once that is done', 409)
   renameSync(old, next)
+  folderNotesRepo.move(old, next)
   for (const p of linked) projectsRepo.put({ ...p, folder: next, name: base })
   return { folder: next }
+}
+
+/** Once (at start): a project with a folder is called like its folder (one name for both, as the dashboard shows it). */
+export function syncProjectNames() {
+  let changed = 0
+  for (const p of projectsRepo.all()) {
+    if (!p.folder) continue
+    const name = basename(p.folder)
+    if (name && p.name !== name) {
+      projectsRepo.put({ ...p, name })
+      changed++
+    }
+  }
+  return changed
 }
 
 /** How many files and folders are in it (shown before deleting), up to a limit. */

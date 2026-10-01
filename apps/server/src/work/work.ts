@@ -21,6 +21,7 @@ import { endBossMode } from './bossMode'
 import { publicAccess, watchPublicAccess } from './publicAccess'
 import { chatReport, putChatReport, type ChatContext } from './chatContext'
 import { dropProjectSessions } from './dropSessions'
+import { syncProjectNames } from './projectFolders'
 
 
 // Tasks, cron jobs and the prompt queue. Handing work to an agent is just typing a prompt into its session; if the
@@ -704,6 +705,7 @@ function watchStuck(now: number) {
 
 export function startWorkJobs() {
   dropProjectSessions()
+  syncProjectNames()
   restoreApprovals()
   void import('./hires').then((m) => m.restoreHires())
   void import('./managerCrons').then((m) => m.restoreCronChanges())

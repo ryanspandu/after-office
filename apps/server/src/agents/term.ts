@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono'
 import { upgradeWebSocket } from 'hono/bun'
+import type { WSEvents } from 'hono/ws'
 import { agentsRepo, sideSessionsRepo } from '../db'
 import { agentEnv } from './env'
 import { sameOrigin } from '../auth'
@@ -26,6 +27,23 @@ export const requireSameOrigin: MiddlewareHandler = async (c, next) => {
   return next()
 }
 
+/** Same-origin only (a folder's terminal: no agent in the address). */
+export const requireSameOriginOnly: MiddlewareHandler = async (c, next) => {
+  const origin = c.req.header('origin')
+  const host = c.req.header('x-forwarded-host') ?? c.req.header('host')
+  let ok = false
+  try {
+    ok = !!origin && sameOrigin(origin, host)
+  } catch {
+    // "null" or garbage
+  }
+  if (!ok) return c.json({ error: 'Bad origin' }, 403)
+  return next()
+}
+
+/** The browser side of a folder's shell (work/shells.ts): only one that is running (it's opened with the code). */
+export const shellSocket = upgradeWebSocket((c) => bridge(c.get('shellTarget' as never) as string))
+
 type Msg = { t: 'in'; d: string } | { t: 'resize'; cols: number; rows: number }
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.floor(Number(n) || lo)))
@@ -34,7 +52,11 @@ export const terminalSocket = upgradeWebSocket((c) => {
   const row = agentsRepo.get(c.req.param('id') ?? '')!
   // ?session=s2: one of its side sessions (an unknown or closed one: its main session)
   const side = /^s\d{1,4}$/.test(c.req.query('session') ?? '') ? sideSessionsRepo.get(row.id, c.req.query('session')!) : null
-  const target = side && !side.closed_at ? side.tmux_session : row.tmux_session
+  return bridge(side && !side.closed_at ? side.tmux_session : row.tmux_session)
+})
+
+/** A browser terminal attached to the tmux session `target` (an agent's, or a folder's shell: work/shells.ts). */
+export function bridge(target: string): WSEvents {
   let term: InstanceType<typeof Bun.Terminal> | null = null
   let proc: ReturnType<typeof Bun.spawn> | null = null
 
@@ -78,4 +100,4 @@ export const terminalSocket = upgradeWebSocket((c) => {
       void (proc?.exited ?? Promise.resolve()).then(() => tmux.resetSize(target))
     },
   }
-})
+}

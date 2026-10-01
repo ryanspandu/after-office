@@ -127,3 +127,18 @@ button.task-group__head:focus-visible { outline: 2px solid var(--hl); outline-of
   .tasks-modal .toolbar--folded .toolbar__filter,
   .tasks-modal .toolbar--folded .toolbar__actions { display: none; }
 }
+
+/* a board card moves by its grip (top right), so the rest of it opens it and scrolls the board (phones) */
+.card-task--grip { position: relative; }
+.card-task--grip .card-task__top { padding-right: 26px; justify-content: flex-start; flex-wrap: wrap; }
+.card-task__grip { all: unset; box-sizing: border-box; position: absolute; top: 8px; right: 6px; z-index: 1; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; color: var(--muted); cursor: grab; touch-action: none; }
+.card-task__grip:hover { background: var(--card-2); color: var(--text); }
+.card-task__grip:active { cursor: grabbing; }
+.card-task__grip:focus-visible { outline: 2px solid var(--hl); }
+.card-task--overlay .card-task__grip { cursor: grabbing; color: var(--text); }
+.prio-high { margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.card-task--grip { touch-action: manipulation; }
+.card-task--grip .card-task__main { cursor: pointer; }
+/* the list's pages */
+.task-pager { display: flex; align-items: center; gap: 6px; padding: 8px 4px 0; font-size: 12.5px; }
+.task-pager__page { font-variant-numeric: tabular-nums; min-width: 44px; text-align: center; }

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { matchesSearch } from './SearchBox'
-import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen, LuCheck, LuX } from 'react-icons/lu'
+import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen, LuCheck, LuX, LuListTodo, LuFileText, LuFile, LuRotateCcw, LuSquareTerminal, LuNotebookPen } from 'react-icons/lu'
 import { DeleteProject } from './DeleteProject'
 import { ProjectReports } from './Reports'
 import { confirm } from './Confirm'
@@ -15,9 +15,17 @@ import { useWorkspaces } from '../state/workspaces'
 import { useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { ago } from './FollowUps'
 import { Modal } from './Modal'
+import { useModalMaximize } from './Maximize'
+import { FolderTerminal } from './FolderTerminal'
+// the notes' rich text editor loads only when Notes is opened
+const FolderNotes = lazy(() => import('./FolderNotes'))
+import { formatSize } from './Attachments'
 import { STATUS_BY_ID } from './taskMeta'
 import { Previews } from './Previews'
 import { Chevron, FolderTree, TreeContext, type ProjectAt } from './FolderTree'
+import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 // Projects tab: what the agents are working on, straight from their folders, in two lists. "Projects": the folders in
 // the office's own projects folder (~/after-office/project, where new projects get a folder). "Agents": each agent's
@@ -45,6 +53,9 @@ export type Open = { folder: WorkspaceFolder; agentIds: string[]; orphan?: boole
 
 export function ProjectsTab({ q = '' }: { q?: string }) {
   const ws = useWorkspaceData()
+  const [order, saveOrder] = useFolderOrder()
+  // a mouse drags after moving a little (a click still opens); a finger after holding a moment (a swipe still scrolls)
+  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }))
   const agents = useOffice((s) => s.agents)
   const now = useNow(60_000).getTime()
   // a folder's details and the new-project form open in the address bar (ui/UrlModals.tsx)
@@ -110,7 +121,17 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
   const orphans = ws.data.filter((w) => w.orphan).length
   // the office's projects folder: its subfolders are the Projects list
   const home = ws.data.find((w) => w.shared)
-  const homeProjects = (home?.projects ?? []).filter((p) => matchesSearch(q, p.name, p.path))
+  // in the owner's order (dragged), new folders after the ordered ones
+  const rank = (path: string) => {
+    const i = order.indexOf(path)
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i
+  }
+  const homeProjects = (home?.projects ?? []).filter((p) => matchesSearch(q, p.name, p.path)).sort((a, b) => rank(a.path) - rank(b.path))
+  const moveFolder = (from: string, to: string | null) => {
+    if (!to || from === to) return
+    const all = homeProjects.map((p) => p.path)
+    saveOrder(arrayMove(all, all.indexOf(from), all.indexOf(to)))
+  }
   // a search keeps the agent folders that match, or that hold a project that does (only those projects then)
   const shown = (showOrphans ? ws.data : ws.data.filter((w) => !w.orphan))
     .filter((w) => !w.shared)
@@ -176,17 +197,27 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
           {!homeProjects.length ? (
             <div className="empty">{q.trim() ? 'No projects match.' : 'No projects yet. New projects get their folder in the projects folder.'}</div>
           ) : (
-            <ul className="ws__projects ws__projects--flat">
-              {homeProjects.map((p) => (
-                <li key={p.path} className="tree-root">
-                  <div className="tree-root__row">
-                    <Chevron open={unfolded.has(p.path)} onClick={() => toggleFold(p.path)} label={p.name} />
-                    <FolderRow folder={p} now={now} onOpen={() => setOpen({ folder: p, agentIds: home?.agentIds ?? [] })} />
-                  </div>
-                  {unfolded.has(p.path) && <FolderTree root={p.path} depth={1} />}
-                </li>
-              ))}
-            </ul>
+            // drag a folder to put it elsewhere in the list (not while searching: only some are shown)
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => moveFolder(String(e.active.id), e.over ? String(e.over.id) : null)}>
+              <SortableContext items={homeProjects.map((p) => p.path)} strategy={verticalListSortingStrategy} disabled={!!q.trim()}>
+                <ul className="ws__projects ws__projects--flat">
+                  {homeProjects.map((p) => (
+                    <SortableFolder
+                      key={p.path}
+                      id={p.path}
+                      row={
+                        <>
+                          <Chevron open={unfolded.has(p.path)} onClick={() => toggleFold(p.path)} label={p.name} />
+                          <FolderRow folder={p} now={now} onOpen={() => setOpen({ folder: p, agentIds: home?.agentIds ?? [] })} />
+                        </>
+                      }
+                    >
+                      {unfolded.has(p.path) && <FolderTree root={p.path} depth={1} onOpenDir={(path) => openUrl({ folder: path })} />}
+                    </SortableFolder>
+                  ))}
+                </ul>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       ) : (
@@ -209,7 +240,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
               <button
                 className="ws__head"
                 onClick={() => setOpen({ folder: w, agentIds: w.agentIds, orphan: w.orphan })}
-                data-tip={w.orphan ? `${w.path} · its agent was removed` : w.path}
+                data-tip={w.orphan ? 'Its agent was removed' : undefined}
               >
                 {w.git ? <LuFolderGit2 className="ws__icon" /> : <LuFolder className="ws__icon" />}
                 <span className="ws__name truncate">{w.shared ? 'Projects folder' : w.name}</span>
@@ -220,7 +251,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
               </div>
               {w.isProject && <GitLine folder={w} now={now} block />}
               {!open ? null : !searching ? (
-                <FolderTree root={w.path} depth={1} projectAt={projectAt} />
+                <FolderTree root={w.path} depth={1} projectAt={projectAt} onOpenDir={(path) => openUrl({ folder: path })} />
               ) : w.projects.length ? (
                 <ul className="ws__projects">
                   {w.projects.map((p) => (
@@ -242,7 +273,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
 /** One project folder in a list: its name, the dashboard project it's linked to, its git state. */
 function FolderRow({ folder: p, now, onOpen }: { folder: WorkspaceFolder; now: number; onOpen: () => void }) {
   return (
-    <button className="ws-row" onClick={onOpen} data-tip={p.path}>
+    <button className="ws-row" onClick={onOpen}>
       {p.git ? <LuFolderGit2 className="ws-row__icon" /> : <LuFolder className="ws-row__icon" />}
       <span className="ws-row__body">
         <span className="ws-row__name">
@@ -256,18 +287,11 @@ function FolderRow({ folder: p, now, onOpen }: { folder: WorkspaceFolder; now: n
 }
 
 /** The dashboard project a folder is linked to (colour + name), or a hint that it can be set up. */
-function LinkedTag({ projectId, folderName }: { projectId?: string | null; folderName?: string }) {
+function LinkedTag({ projectId }: { projectId?: string | null; folderName?: string }) {
   const project = useDashboard((s) => s.projects.find((p) => p.id === projectId))
   if (!project) return <span className="ws__tag">project</span>
-  const tip = `Project “${project.name}”${project.check ? ' · has a quality check' : ''}`
-  // named like its folder: just its colour (the name is already there)
-  if (folderName && project.name === folderName) return <span className="chip__dot ws__dot-tag" style={{ background: project.color }} data-tip={tip} />
-  return (
-    <span className="ws__tag ws__tag--linked" data-tip={tip}>
-      <span className="chip__dot" style={{ background: project.color }} />
-      {project.name}
-    </span>
-  )
+  // a project of the dashboard (brief, check, tasks): its colour
+  return <span className="chip__dot ws__dot-tag" style={{ background: project.color }} />
 }
 
 function Avatars({ agents }: { agents: OfficeAgent[] }) {
@@ -358,151 +382,186 @@ export function ProjectFolderModal({ open: { folder: f, agentIds, orphan }, onCl
   useEffect(() => {
     if (f.git) liveApi.commits(f.path).then(setCommits)
   }, [f.path, f.git])
+  // the panel on the right: the files, or one of the folder's other sections (the sidebar)
+  const [section, setSection] = useState<Section>('files')
+  const trash = useTrash(f.path)
+  const max = useModalMaximize(1120)
+  const tilde = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, '~')
+  const nav: { id: Section; label: string; icon: React.ReactNode; count?: number; show?: boolean }[] = [
+    { id: 'files', label: 'Files', icon: <LuFolderOpen /> },
+    { id: 'notes', label: 'Notes', icon: <LuNotebookPen /> },
+    { id: 'terminal', label: 'Terminal', icon: <LuSquareTerminal /> },
+    { id: 'project', label: project ? 'Project settings' : 'Set up as project', icon: <LuSettings2 /> },
+    { id: 'tasks', label: 'Open tasks', icon: <LuListTodo />, count: related.length },
+    { id: 'reports', label: 'Reports', icon: <LuFileText />, show: !!project },
+    { id: 'git', label: 'Git', icon: <LuGitBranch />, show: !!f.git },
+    { id: 'trash', label: 'Trash', icon: <LuTrash2 />, count: trash.items?.length },
+  ]
 
   return (
-    <Modal open onClose={onClose} title={f.name} description={f.git ? 'Git repository' : 'Folder'} width={620}>
-      <div className="modal__body ws-detail">
-        {renamable && <FolderName folder={f} />}
-        <div className="ws-detail__path">
-          <code className="truncate">{f.path}</code>
+    <Modal
+      open
+      onClose={onClose}
+      title={f.name}
+      description={`${f.git ? 'Git repository' : 'Folder'} · ${tilde(f.path)}`}
+      {...max.modalProps}
+      className={`${max.modalProps.className ?? ''} fd-modal`}
+      actions={
+        <>
           <button
             className="icon-btn small ghost"
             data-tip={copied ? 'Copied' : 'Copy path'}
             aria-label="Copy path"
             onClick={() => void navigator.clipboard?.writeText(f.path).then(() => (setCopied(true), setTimeout(() => setCopied(false), 1200)))}
           >
-            <LuCopy />
+            {copied ? <LuCheck /> : <LuCopy />}
           </button>
-        </div>
-
-        <div className="field">
-          <span className="field__label">Agents here</span>
-          <div className="ws-detail__agents">
-            {!people.length && <span className="muted">{orphan ? 'None: its agent was removed. The files are still here.' : 'None.'}</span>}
+          {max.modalProps.actions}
+        </>
+      }
+    >
+      <div className="modal__body fd" ref={max.bodyRef}>
+        <aside className="fd__side">
+          <nav className="fd__nav" aria-label="Folder">
+            {nav
+              .filter((n) => n.show !== false)
+              .map((n) => (
+                <button key={n.id} className={`fd__navbtn${section === n.id ? ' is-on' : ''}`} onClick={() => setSection(n.id)} aria-current={section === n.id}>
+                  {n.icon}
+                  <span className="truncate">{n.label}</span>
+                  {!!n.count && <span className="fd__count">{n.count}</span>}
+                </button>
+              ))}
+          </nav>
+          <div className="fd__agents">
+            <span className="fd__label">Agents here</span>
+            {!people.length && <span className="muted fd__none">{orphan ? 'None: its agent was removed.' : 'None.'}</span>}
             {people.map((a) => (
-              <span key={a.id} className="chip">
+              <span key={a.id} className="fd__agent">
                 <span className="chip__dot" style={{ background: a.look.shirt }} />
-                {a.name}
-                <span className="muted">· {a.status}</span>
+                <span className="truncate">{a.name}</span>
+                <span className="muted">{a.status}</span>
               </span>
             ))}
           </div>
-        </div>
-
-        <div className="field">
-          <span className="field__label">Files</span>
-          <FileBrowser root={f.path} />
-        </div>
-
-        {f.git && (
-          <div className="field">
-            <span className="field__label">
-              Git <GitLine folder={f} now={now} compact />
-            </span>
-            {!commits ? (
-              <span className="muted">Loading…</span>
-            ) : !commits.length ? (
-              <span className="muted">No commits yet.</span>
-            ) : (
-              <ul className="ws-commits">
-                {commits.map((c) => (
-                  <li key={c.hash}>
-                    <LuGitCommitHorizontal className="muted" />
-                    <code>{c.hash}</code>
-                    <span className="truncate">{c.subject}</span>
-                    <span className="muted ws-commits__meta">
-                      {c.author} · {ago(now - c.at)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        <div className="field ws-project">
-          <span className="field__label">Project settings</span>
-          {project ? (
-            <>
-              <p className="field__hint ws-project__hint">Its tasks work in this folder, get the brief below, and run the check when they finish.</p>
-              <label className="field">
-                <span className="field__label">Brief</span>
-                <textarea
-                  rows={3}
-                  maxLength={5000}
-                  value={project.brief ?? ''}
-                  onChange={(e) => updateProject(project.id, { brief: e.target.value || undefined })}
-                  placeholder="Goal, stack, conventions. Added to every task in this project."
-                />
-              </label>
-              <label className="field">
-                <span className="field__label">Quality check</span>
-                <input
-                  className="mono"
-                  maxLength={1000}
-                  value={project.check ?? ''}
-                  onChange={(e) => updateProject(project.id, { check: e.target.value || undefined })}
-                  placeholder="e.g. pnpm lint && pnpm test (runs in this folder, as the agents' user)"
-                />
-              </label>
-            </>
-          ) : (
-            <div className="ws-project__setup">
-              <span className="field__hint">Not a project in the dashboard yet. Set it up to give its tasks a brief and a quality check.</span>
-              <button className="small" onClick={ensureProject}>
-                <LuSettings2 /> Set up as project
+          <div className="fd__actions">
+            <button className="primary" onClick={() => openUrl({ newtask: '1', nt_agent: people[0]?.id ?? null, nt_project: ensureProject() })}>
+              <LuPlus /> New task here
+            </button>
+            {orphan && (
+              <button className="ghost danger-text" onClick={() => void removeFolder()}>
+                <LuTrash2 /> Delete folder
               </button>
+            )}
+            {/* deleting the project: apart from the settings (asks first; the folder only if ticked) */}
+            {project && <DeleteProject labelled project={project} taskCount={tasks.filter((t) => t.projectId === project.id).length} onDeleted={onClose} />}
+          </div>
+        </aside>
+
+        <section className="fd__main">
+          {section === 'files' && <FileBrowser root={f.path} fill onTrashed={trash.reload} />}
+          {section === 'terminal' && <FolderTerminal root={f.path} />}
+          {section === 'notes' && (
+            <Suspense fallback={<div className="fd__panel muted">Loading…</div>}>
+              <FolderNotes path={f.path} />
+            </Suspense>
+          )}
+
+          {section === 'project' && (
+            <div className="fd__panel">
+              {renamable && <FolderName folder={f} />}
+              {project ? (
+                <>
+                  <p className="field__hint ws-project__hint">Its tasks work in this folder, get the brief below, and run the check when they finish.</p>
+                  <label className="field">
+                    <span className="field__label">Brief</span>
+                    <textarea
+                      rows={6}
+                      maxLength={5000}
+                      value={project.brief ?? ''}
+                      onChange={(e) => updateProject(project.id, { brief: e.target.value || undefined })}
+                      placeholder="Goal, stack, conventions. Added to every task in this project."
+                    />
+                  </label>
+                  <label className="field">
+                    <span className="field__label">Quality check</span>
+                    <input
+                      className="mono"
+                      maxLength={1000}
+                      value={project.check ?? ''}
+                      onChange={(e) => updateProject(project.id, { check: e.target.value || undefined })}
+                      placeholder="e.g. pnpm lint && pnpm test (runs in this folder, as the agents' user)"
+                    />
+                  </label>
+                </>
+              ) : (
+                <div className="ws-project__setup">
+                  <span className="field__hint">Not a project in the dashboard yet. Set it up to give its tasks a brief and a quality check.</span>
+                  <button className="small" onClick={ensureProject}>
+                    <LuSettings2 /> Set up as project
+                  </button>
+                </div>
+              )}
             </div>
           )}
-        </div>
 
-        {project && (
-          <div className="field">
-            <span className="field__label">Reports</span>
-            <ProjectReports projectId={project.id} />
-          </div>
-        )}
-
-        <div className="field">
-          <span className="field__label">Open tasks</span>
-          {!related.length ? (
-            <span className="muted">None for the agents here.</span>
-          ) : (
-            <ul className="team-list">
-              {related.map((t) => (
-                <li key={t.id}>
-                  <button className="team-row" onClick={() => openUrl({ task: t.id })}>
-                    <span className="status-pill" style={{ ['--c' as string]: STATUS_BY_ID[t.status].color }}>
-                      {STATUS_BY_ID[t.status].label}
-                    </span>
-                    <span className="team-row__body">
-                      <span className="team-row__title truncate">{t.title}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+          {section === 'tasks' && (
+            <div className="fd__panel">
+              {!related.length ? (
+                <span className="muted">No open tasks for the agents here.</span>
+              ) : (
+                <ul className="team-list">
+                  {related.map((t) => (
+                    <li key={t.id}>
+                      <button className="team-row" onClick={() => openUrl({ task: t.id })}>
+                        <span className="status-pill" style={{ ['--c' as string]: STATUS_BY_ID[t.status].color }}>
+                          {STATUS_BY_ID[t.status].label}
+                        </span>
+                        <span className="team-row__body">
+                          <span className="team-row__title truncate">{t.title}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
-        </div>
 
-        <footer className="modal__foot">
-          {orphan && (
-            <button className="ghost danger-text" onClick={() => void removeFolder()}>
-              <LuTrash2 /> Delete folder
-            </button>
+          {section === 'reports' && project && (
+            <div className="fd__panel">
+              <ProjectReports projectId={project.id} />
+            </div>
           )}
-          {/* deleting the project: down here, apart from the settings (asks first; the folder only if ticked) */}
-          {project && <DeleteProject labelled project={project} taskCount={tasks.filter((t) => t.projectId === project.id).length} onDeleted={onClose} />}
-          <span className="grow" />
-          <button
-            className="primary"
-            onClick={() => {
-              openUrl({ newtask: '1', nt_agent: people[0]?.id ?? null, nt_project: ensureProject() })
-            }}
-          >
-            <LuPlus /> New task here
-          </button>
-        </footer>
+
+          {section === 'git' && f.git && (
+            <div className="fd__panel">
+              <span className="field__label">
+                <GitLine folder={f} now={now} compact />
+              </span>
+              {!commits ? (
+                <span className="muted">Loading…</span>
+              ) : !commits.length ? (
+                <span className="muted">No commits yet.</span>
+              ) : (
+                <ul className="ws-commits">
+                  {commits.map((c) => (
+                    <li key={c.hash}>
+                      <LuGitCommitHorizontal className="muted" />
+                      <code>{c.hash}</code>
+                      <span className="truncate">{c.subject}</span>
+                      <span className="muted ws-commits__meta">
+                        {c.author} · {ago(now - c.at)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {section === 'trash' && <TrashPanel trash={trash} now={now} tilde={tilde} under={f.path} />}
+        </section>
       </div>
     </Modal>
   )
@@ -635,5 +694,125 @@ function FolderName({ folder }: { folder: WorkspaceFolder }) {
       </span>
       {(changed || error) && <span className={`field__hint${error ? ' danger-text' : ''}`}>{error ?? 'Renames the folder itself (letters, numbers and dashes); the project keeps its brief, check and tasks.'}</span>}
     </label>
+  )
+}
+
+type Section = 'files' | 'terminal' | 'notes' | 'project' | 'tasks' | 'reports' | 'git' | 'trash'
+
+interface TrashItem {
+  id: string
+  name: string
+  original: string
+  dir: boolean
+  size: number
+  deletedAt: number
+}
+
+/** What went to the trash from inside a folder (the office's trash, ~/after-office/.trash). */
+function useTrash(under: string) {
+  const [items, setItems] = useState<TrashItem[] | null>(null)
+  const reload = useCallback(() => {
+    void api(`/api/trash?${new URLSearchParams({ under })}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setItems)
+      .catch(() => setItems([]))
+  }, [under])
+  useEffect(reload, [reload])
+  return { items, reload }
+}
+
+/** The folder's trash: restore an item where it was, delete it for good, or empty it. */
+function TrashPanel({ trash, now, tilde, under }: { trash: ReturnType<typeof useTrash>; now: number; tilde: (p: string) => string; under: string }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const act = async (id: string, fn: () => Promise<Response>) => {
+    setBusy(id)
+    setError(null)
+    try {
+      const r = await fn()
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? 'Failed')
+      trash.reload()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+  const forget = async (i: TrashItem) => {
+    if (!(await confirm({ title: `Delete “${i.name}” for good?`, message: 'It can’t be restored after this.', confirmLabel: 'Delete for good' }))) return
+    await act(i.id, () => api(`/api/trash/${i.id}`, { method: 'DELETE' }))
+  }
+  const empty = async () => {
+    const n = trash.items?.length ?? 0
+    if (!(await confirm({ title: `Empty the trash of this folder?`, message: `${n} item${n === 1 ? '' : 's'} deleted for good. This can’t be undone.`, confirmLabel: 'Empty trash' }))) return
+    await act('all', () => api(`/api/trash?${new URLSearchParams({ under })}`, { method: 'DELETE' }))
+  }
+  return (
+    <div className="fd__panel">
+      <div className="fd__trash-head">
+        <span className="field__hint">Deleted from this folder. Kept in ~/after-office/.trash (never inside the project) until you empty it.</span>
+        <span className="grow" />
+        {!!trash.items?.length && (
+          <button className="small danger-text" onClick={() => void empty()} disabled={busy === 'all'}>
+            <LuTrash2 /> Empty trash
+          </button>
+        )}
+      </div>
+      {error && <div className="row__error">{error}</div>}
+      {!trash.items ? (
+        <span className="muted">Loading…</span>
+      ) : !trash.items.length ? (
+        <span className="muted">The trash is empty.</span>
+      ) : (
+        <ul className="fd__trash">
+          {trash.items.map((i) => (
+            <li key={i.id}>
+              {i.dir ? <LuFolder className="fb__folder" /> : <LuFile className="muted" />}
+              <span className="fd__trash-body">
+                <span className="truncate">{i.name}</span>
+                <span className="muted truncate" data-tip={i.original}>
+                  {tilde(i.original.slice(0, i.original.length - i.name.length - 1))} · {formatSize(i.size)} · {ago(now - i.deletedAt)}
+                </span>
+              </span>
+              <button className="small" onClick={() => void act(i.id, () => api(`/api/trash/${i.id}/restore`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }))} disabled={busy === i.id}>
+                <LuRotateCcw /> Restore
+              </button>
+              <button className="icon-btn small ghost danger-text" onClick={() => void forget(i)} disabled={busy === i.id} aria-label={`Delete ${i.name} for good`} data-tip="Delete for good">
+                <LuX />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** The owner's order of the projects folder's folders (kept on the server: the same on every device). */
+function useFolderOrder(): [string[], (paths: string[]) => void] {
+  const [order, setOrder] = useState<string[]>([])
+  useEffect(() => {
+    void api('/api/workspaces/order')
+      .then((r) => (r.ok ? r.json() : { paths: [] }))
+      .then((r: { paths: string[] }) => setOrder(r.paths))
+      .catch(() => {})
+  }, [])
+  const save = (paths: string[]) => {
+    setOrder(paths)
+    void api('/api/workspaces/order', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ paths }) }).catch(() => {})
+  }
+  return [order, save]
+}
+
+/** One folder of the list, dragged by its row (not by what's open under it) to another place in the list. */
+function SortableFolder({ id, row, children }: { id: string; row: React.ReactNode; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <li ref={setNodeRef} className={`tree-root${isDragging ? ' is-dragging' : ''}`} style={{ transform: CSS.Transform.toString(transform), transition }}>
+      <div className="tree-root__row" {...attributes} {...listeners}>
+        {row}
+      </div>
+      {children}
+    </li>
   )
 }

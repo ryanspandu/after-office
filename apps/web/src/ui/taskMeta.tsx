@@ -79,7 +79,8 @@ export function ProjectSelect({ value, onChange, size = 'md', menuPlacement = 'a
 
   const projectOptions: ProjectOption[] = [
     { value: '', label: 'No project' },
-    ...projects.map((p) => ({ value: p.id, label: p.name, hint: p.folder ? base(p.folder) : undefined })),
+    // one name: a project with a folder is called like its folder
+    ...projects.map((p) => ({ value: p.id, label: p.folder ? base(p.folder) : p.name })),
   ]
   const folderOptions: ProjectOption[] = [
     ...projectFolders(workspaces)
@@ -116,7 +117,8 @@ export function ProjectSelect({ value, onChange, size = 'md', menuPlacement = 'a
       options={groups}
       onMenuOpen={() => live && void loadWorkspaces()}
       onChange={(o) => o && pick(o.value)}
-      onCreateOption={(name) => onChange(addProject(name.trim()))}
+      // a new project gets its folder in the projects folder (named like it)
+      onCreateOption={(name) => onChange(addProject(name.trim(), {}, { createFolder: true }))}
       formatCreateLabel={(name) => `Create project “${name}”`}
       formatOptionLabel={(o, meta) =>
         meta.context === 'menu' && (o.hint || o.folder) ? (

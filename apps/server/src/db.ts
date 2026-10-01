@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS crons (
   data        TEXT NOT NULL,        -- CronJob JSON
   updated_at  INTEGER NOT NULL
 );
+-- the owner's own notes on a folder (the folder details' Notes): kept here, never written into the folder
+CREATE TABLE IF NOT EXISTS folder_notes (
+  path        TEXT PRIMARY KEY,     -- the folder's real path
+  text        TEXT NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
 -- an agent's side sessions: extra Claude Code processes in its folder, opened by the owner to chat in parallel
 CREATE TABLE IF NOT EXISTS side_sessions (
   agent_id     TEXT NOT NULL,
@@ -333,8 +339,17 @@ export const ARCHIVE_DAYS = Math.max(1, Number(process.env.OFFICE_ARCHIVE_DAYS) 
 const archiveCutoff = () => Date.now() - ARCHIVE_DAYS * 86_400_000
 const ARCHIVED = `json_extract(data, '$.status') = 'done' AND updated_at < ?1`
 
+const taskDocs = docRepo<OfficeTask>('tasks')
+// tasks from before createdAt existed: their last save stands in for it (the best there is)
+db.exec(`UPDATE tasks SET data = json_set(data, '$.createdAt', updated_at) WHERE json_extract(data, '$.createdAt') IS NULL`)
 export const tasksRepo = {
-  ...docRepo<OfficeTask>('tasks'),
+  ...taskDocs,
+  /** Saved with when it was made (kept from the first save, whatever the caller sends). */
+  put: (task: OfficeTask) => {
+    const prev = task.createdAt ? null : db.query<{ data: string; updated_at: number }, [string]>('SELECT data, updated_at FROM tasks WHERE id = ?').get(task.id)
+    const createdAt = task.createdAt ?? (prev ? ((JSON.parse(prev.data) as OfficeTask).createdAt ?? prev.updated_at) : Date.now())
+    return taskDocs.put({ ...task, createdAt })
+  },
   /** Everything the dashboards work with: all tasks except the archived ones. */
   active: () =>
     db
@@ -483,6 +498,18 @@ export interface QueuedPrompt {
   task_id: string | null
   cron_id: string | null
   created_at: number
+}
+
+export const folderNotesRepo = {
+  get: (path: string) => db.query<{ text: string; updated_at: number }, [string]>('SELECT text, updated_at FROM folder_notes WHERE path = ?').get(path) ?? null,
+  /** Empty text removes the note. */
+  set: (path: string, text: string) => {
+    if (!text.trim()) return void db.query('DELETE FROM folder_notes WHERE path = ?').run(path)
+    db.query('INSERT INTO folder_notes (path, text, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(path) DO UPDATE SET text = ?2, updated_at = ?3').run(path, text, Date.now())
+  },
+  /** A folder renamed or moved: its notes (and those of the folders in it) follow. */
+  move: (from: string, to: string) =>
+    db.query('UPDATE folder_notes SET path = ?2 || substr(path, length(?1) + 1) WHERE path = ?1 OR path LIKE ?1 || \'/%\'').run(from, to),
 }
 
 export interface SideSessionRow {

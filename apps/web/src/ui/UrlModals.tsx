@@ -70,6 +70,11 @@ function FolderFromUrl({ path }: { path: string }) {
     if (sub) open = { folder: sub, agentIds: w.agentIds }
     if (open) break
   }
+  // a folder deeper inside one of them (opened from the tree): its details too, with the agents of the folder it's in
+  if (!open) {
+    const parent = data.find((w) => path.startsWith(`${w.path}/`))
+    if (parent) open = { folder: { path, name: path.split('/').pop() ?? path, git: null, updatedAt: 0 }, agentIds: parent.agentIds }
+  }
   if (!open) return null
   return <ProjectFolderModal key={path} open={open} onClose={clear(['folder'])} />
 }

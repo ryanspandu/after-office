@@ -10,7 +10,24 @@ import { LuPlugZap, LuRotateCw } from 'react-icons/lu'
 type State = 'connecting' | 'open' | 'closed'
 
 /** `session`: one of its side sessions (s2, s3…; unset: its main session). */
-export function TerminalTab({ agentId, offline, session }: { agentId: string; offline: boolean; session?: string }) {
+/** `url`: another terminal to attach to (a folder's shell: /api/workspaces/shell/term?root=…) instead of the agent's. */
+export function TerminalTab({
+  agentId,
+  offline,
+  session,
+  url,
+  label = 'keys go straight to Claude Code',
+  actions,
+}: {
+  agentId: string
+  offline: boolean
+  session?: string
+  url?: string
+  /** what it's attached to, after "Attached" */
+  label?: string
+  /** buttons at the end of its bar */
+  actions?: React.ReactNode
+}) {
   const host = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<State>('connecting')
   const [attempt, setAttempt] = useState(0)
@@ -31,7 +48,7 @@ export function TerminalTab({ agentId, offline, session }: { agentId: string; of
     fit.fit()
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/api/agents/${agentId}/term${session ? `?session=${session}` : ''}`)
+    const ws = new WebSocket(`${proto}://${location.host}${url ?? `/api/agents/${agentId}/term${session ? `?session=${session}` : ''}`}`)
     ws.binaryType = 'arraybuffer'
     const send = (m: object) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(m))
     ws.onopen = () => {
@@ -59,7 +76,7 @@ export function TerminalTab({ agentId, offline, session }: { agentId: string; of
       ws.close()
       term.dispose()
     }
-  }, [agentId, offline, attempt, session])
+  }, [agentId, offline, attempt, session, url])
 
   if (offline) return <div className="empty">The agent is offline. It restarts automatically, or use Restart in Overview.</div>
 
@@ -67,7 +84,7 @@ export function TerminalTab({ agentId, offline, session }: { agentId: string; of
     <div className="term">
       <div className="term__bar">
         <span className={`live-dot${state === 'open' ? ' live-dot--on' : ''}`} />
-        <span className="muted">{state === 'open' ? 'Attached to tmux · keys go straight to Claude Code' : state === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
+        <span className="muted">{state === 'open' ? `Attached · ${label}` : state === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
         {state === 'closed' && (
           <button className="small" onClick={() => (setState('connecting'), setAttempt((n) => n + 1))}>
             <LuRotateCw /> Reconnect
@@ -75,8 +92,9 @@ export function TerminalTab({ agentId, offline, session }: { agentId: string; of
         )}
         <span className="grow" />
         <span className="muted term__hint">
-          <LuPlugZap /> Closing this tab only detaches; the session keeps running
+          <LuPlugZap /> Closing this only detaches; it keeps running
         </span>
+        {actions}
       </div>
       {/* padding lives on the frame; xterm measures the inner box, so fit() doesn't count the padding as rows */}
       <div className="term__screen">

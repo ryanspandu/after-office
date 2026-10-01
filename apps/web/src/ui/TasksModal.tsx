@@ -12,7 +12,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { LuArchive, LuCalendar, LuChevronDown, LuFolderKanban, LuKanban, LuList, LuPlus, LuSearch, LuSlidersHorizontal, LuX } from 'react-icons/lu'
+import { LuArchive, LuCalendar, LuFolderKanban, LuKanban, LuList, LuPlus, LuSearch, LuSlidersHorizontal, LuX, LuGripVertical, LuChevronLeft, LuChevronRight } from 'react-icons/lu'
 import type { OfficeTask, TaskStatus } from '@after-office/shared'
 import { useClock, useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
@@ -72,11 +72,14 @@ export function TasksModal({ onClose }: { onClose: () => void }) {
   const [agentFilter, setAgentFilter] = useState('*')
   const [projectFilter, setProjectFilter] = useState('*')
   const [tagFilter, setTagFilter] = useState('*')
+  // the list: one status only (done tasks show when picked, whatever "Show done" says), and a page of it
+  const [statusFilter, setStatusFilter] = useState<'*' | TaskStatus>('*')
+  const [page, setPage] = useState(0)
   const tags = useDashboard((s) => s.tags)
   const [showDone, setShowDone] = useState(true)
   // phones: grouping, filters and the other actions fold away behind a button in the search box
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const activeFilters = [agentFilter !== '*', projectFilter !== '*', tagFilter !== '*' && tags.some((t) => t.id === tagFilter), !showDone].filter(Boolean).length
+  const activeFilters = [statusFilter !== '*', agentFilter !== '*', projectFilter !== '*', tagFilter !== '*' && tags.some((t) => t.id === tagFilter), !showDone].filter(Boolean).length
   // search: title, description, agent and project names; kept in the address bar (?tasks=1&tq=…)
   const tq = useParam('tq') ?? ''
   const [search, setSearch] = useState(tq)
@@ -108,7 +111,8 @@ export function TasksModal({ onClose }: { onClose: () => void }) {
   }, [prefs.groupBy, agents, projects])
 
   const visible = tasks
-    .filter((t) => showDone || t.status !== 'done')
+    .filter((t) => showDone || t.status !== 'done' || statusFilter === 'done')
+    .filter((t) => prefs.view !== 'list' || statusFilter === '*' || t.status === statusFilter)
     .filter((t) => (agentFilter === '*' ? true : agentFilter === '' ? !t.agentId : t.agentId === agentFilter))
     .filter((t) => (projectFilter === '*' ? true : projectFilter === '' ? !t.projectId : t.projectId === projectFilter))
     .filter((t) => (tagFilter === '*' || !tags.some((x) => x.id === tagFilter) ? true : !!t.tags?.includes(tagFilter)))
@@ -122,8 +126,13 @@ export function TasksModal({ onClose }: { onClose: () => void }) {
     .sort((a, b) => a.deadline - b.deadline || PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority])
 
   const byGroup = (key: string) => visible.filter((t) => keyOf(t, prefs.groupBy) === key)
-  // for agent/project grouping, hide empty groups in the list view to keep it scannable
-  const shownGroups = prefs.view === 'list' && prefs.groupBy !== 'status' ? groups.filter((g) => byGroup(g.key).length) : groups
+  // the list: one list, the newest task first (a task just made locally: now)
+  const newestFirst = [...visible].sort((a, b) => (b.createdAt ?? Date.now()) - (a.createdAt ?? Date.now()))
+  // pages of the list; a change of filter or search goes back to the first page
+  const pages = Math.max(1, Math.ceil(newestFirst.length / PAGE_SIZE))
+  const pageNow = Math.min(page, pages - 1)
+  const filterKey = `${statusFilter}|${agentFilter}|${projectFilter}|${tagFilter}|${needle}|${showDone}`
+  useEffect(() => setPage(0), [filterKey])
 
   return (
     <Modal open onClose={onClose} title="Tasks" description={`${tasks.length} tasks · ${tasks.filter((t) => t.status !== 'done').length} open`} width={1180}>
@@ -164,6 +173,8 @@ export function TasksModal({ onClose }: { onClose: () => void }) {
           </button>
           {/* the view, search and New task on top; grouping, filters and the other actions below */}
           <span className="toolbar__break" aria-hidden />
+          {/* grouping is the board's columns; the list is one list, newest first */}
+          {prefs.view === 'board' && (
           <div className="toolbar__field">
             <span className="muted">Group by</span>
             <Select
@@ -178,6 +189,18 @@ export function TasksModal({ onClose }: { onClose: () => void }) {
               onChange={(groupBy) => setPref({ groupBy })}
             />
           </div>
+          )}
+          {prefs.view === 'list' && (
+            <div className="toolbar__filter">
+              <Select
+                ariaLabel="Filter by status"
+                size="sm"
+                value={statusFilter}
+                options={[{ value: '*' as const, label: 'All statuses' }, ...STATUSES.map((s) => ({ value: s.value, label: s.label }))]}
+                onChange={(v) => setStatusFilter(v as '*' | TaskStatus)}
+              />
+            </div>
+          )}
           <div className="toolbar__filter">
             <Select
               ariaLabel="Filter by agent"
@@ -226,7 +249,24 @@ export function TasksModal({ onClose }: { onClose: () => void }) {
         {prefs.view === 'list' ? (
           <>
             {needle && !visible.length && <div className="empty">No tasks match “{search.trim()}”.</div>}
-            <ListView groups={shownGroups} tasksFor={byGroup} onOpen={setOpenId} />
+            <ListView tasks={newestFirst.slice(pageNow * PAGE_SIZE, (pageNow + 1) * PAGE_SIZE)} onOpen={setOpenId} />
+            {pages > 1 && (
+              <div className="task-pager">
+                <span className="muted">
+                  {pageNow * PAGE_SIZE + 1}–{Math.min(newestFirst.length, (pageNow + 1) * PAGE_SIZE)} of {newestFirst.length}
+                </span>
+                <span className="grow" />
+                <button className="icon-btn small ghost" onClick={() => setPage(pageNow - 1)} disabled={pageNow === 0} aria-label="Previous page">
+                  <LuChevronLeft />
+                </button>
+                <span className="task-pager__page">
+                  {pageNow + 1} / {pages}
+                </span>
+                <button className="icon-btn small ghost" onClick={() => setPage(pageNow + 1)} disabled={pageNow >= pages - 1} aria-label="Next page">
+                  <LuChevronRight />
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <BoardView
@@ -244,30 +284,10 @@ export function TasksModal({ onClose }: { onClose: () => void }) {
 
 // ── List ─────────────────────────────────────────────────────────────
 
-const COLLAPSED_KEY = 'ao-task-groups-collapsed'
-const loadCollapsed = (): Set<string> => {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]') as string[])
-  } catch {
-    return new Set()
-  }
-}
+/** Tasks per page of the list. */
+const PAGE_SIZE = 25
 
-function ListView({ groups, tasksFor, onOpen }: { groups: Group[]; tasksFor: (key: string) => OfficeTask[]; onOpen: (id: string) => void }) {
-  // each group (To do, In progress, an agent, a project…) folds away; all open by default, remembered in this browser
-  const [collapsed, setCollapsed] = useState(loadCollapsed)
-  const toggle = (key: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      try {
-        localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]))
-      } catch {
-        /* this visit only */
-      }
-      return next
-    })
+function ListView({ tasks, onOpen }: { tasks: OfficeTask[]; onOpen: (id: string) => void }) {
   return (
     <div className="task-list">
       <div className="task-table__head">
@@ -280,28 +300,10 @@ function ListView({ groups, tasksFor, onOpen }: { groups: Group[]; tasksFor: (ke
         <span>Agent</span>
         <span />
       </div>
-      {groups.map((g) => {
-        const rows = tasksFor(g.key)
-        const shut = collapsed.has(g.key)
-        return (
-          <section key={g.key} className={`task-group${shut ? ' is-collapsed' : ''}`}>
-            <button type="button" className="task-group__head" onClick={() => toggle(g.key)} aria-expanded={!shut}>
-              <LuChevronDown className={`task-group__chev${shut ? ' is-shut' : ''}`} />
-              <span className="chip__dot" style={{ background: g.color }} />
-              {g.label}
-              <span className="muted">{rows.length}</span>
-            </button>
-            <div className="task-group__body">
-              <div>
-                {rows.map((t) => (
-                  <TaskRow key={t.id} task={t} onOpen={() => onOpen(t.id)} />
-                ))}
-                {!rows.length && <div className="task-group__empty">No tasks</div>}
-              </div>
-            </div>
-          </section>
-        )
-      })}
+      {tasks.map((t) => (
+        <TaskRow key={t.id} task={t} onOpen={() => onOpen(t.id)} />
+      ))}
+      {!tasks.length && <div className="task-group__empty">No tasks</div>}
     </div>
   )
 }
@@ -366,8 +368,8 @@ function BoardView({
 }) {
   const tasks = useDashboard((s) => s.tasks)
   const [dragging, setDragging] = useState<string | null>(null)
-  // small distance so a click still opens the card instead of starting a drag
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  // cards move by their grip only (the rest of the card opens it and scrolls the board): a short move starts the drag
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   const onStart = (e: DragStartEvent) => setDragging(String(e.active.id))
   const onEnd = (e: DragEndEvent) => {
@@ -412,13 +414,14 @@ function Column({ group, tasks, onAdd, onOpen }: { group: Group; tasks: OfficeTa
 function DraggableCard({ task, onOpen }: { task: OfficeTask; onOpen: () => void }) {
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id: task.id })
   return (
-    <div ref={setNodeRef} {...attributes} {...listeners} style={{ opacity: isDragging ? 0.35 : 1 }}>
-      <Card task={task} onOpen={onOpen} />
+    <div ref={setNodeRef} style={{ opacity: isDragging ? 0.35 : 1 }}>
+      <Card task={task} onOpen={onOpen} grip={{ ...attributes, ...listeners }} />
     </div>
   )
 }
 
-function Card({ task: t, overlay, onOpen }: { task: OfficeTask; overlay?: boolean; onOpen?: () => void }) {
+/** `grip`: what makes the card's grip button drag it (the board); the overlay while dragging shows the grip too. */
+function Card({ task: t, overlay, onOpen, grip }: { task: OfficeTask; overlay?: boolean; onOpen?: () => void; grip?: Record<string, unknown> }) {
   const agent = useOffice((s) => s.agents.find((a) => a.id === t.agentId))
   const now = useNow(60_000).getTime()
   const done = t.status === 'done'
@@ -427,12 +430,18 @@ function Card({ task: t, overlay, onOpen }: { task: OfficeTask; overlay?: boolea
   const date = dateTime(t.deadline, timezone)
 
   return (
-    <article className={`card-task${done ? ' card-task--done' : ''}${overlay ? ' card-task--overlay' : ''}`}>
+    <article className={`card-task card-task--grip${done ? ' card-task--done' : ''}${overlay ? ' card-task--overlay' : ''}`}>
+      {(grip || overlay) && (
+        <button type="button" className="card-task__grip" aria-label={`Move “${t.title}”`} {...grip}>
+          <LuGripVertical />
+        </button>
+      )}
       <button className="card-task__main" onClick={onOpen}>
         <div className="card-task__top">
           <ProjectTag projectId={t.projectId} />
           <TagChips ids={t.tags} />
-          <span className={`prio prio--${t.priority}`} data-tip={`${t.priority} priority`} />
+          {/* only a high priority is worth a mark (medium is the default, low needs none) */}
+          {t.priority === 'high' && <span className="prio-high">High</span>}
         </div>
         <div className="card-task__title">
           <BlockedBadge task={t} />

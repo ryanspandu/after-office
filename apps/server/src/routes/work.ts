@@ -1,8 +1,9 @@
+import { basename } from 'node:path'
 import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, Project, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
-import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, projectsRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
+import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, folderNotesRepo, projectsRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
-import { addFolder, addFolderFile, searchFolders, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
+import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
 import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder, renameProjectFolder } from '../work/projectFolders'
 import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDevice, sendPush } from '../push'
@@ -14,7 +15,9 @@ import { listPreviews, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
 import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
-import { requireSameOrigin } from '../agents/term'
+import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
+import { endShell, openShell, shellRunning, shellTarget } from '../work/shells'
+import { emptyTrash, listTrash, purgeTrash, restoreTrash, trashEntries } from '../work/trash'
 
 // /api routes for tasks, projects, cron jobs and settings (live mode). Every change is pushed to all dashboards.
 
@@ -111,7 +114,8 @@ workRoutes.put('/projects/:id', async (c) => {
       : prev && !('folder' in b)
         ? prev.folder
         : undefined
-  projectsRepo.put({ id, name, color, brief: opt(b.brief, 5000, 'Brief'), check: opt(b.check, 1000, 'Check command'), folder })
+  // one name for a project with a folder: the folder's (renaming the folder renames the project, work/projectFolders.ts)
+  projectsRepo.put({ id, name: folder ? basename(folder) : name, color, brief: opt(b.brief, 5000, 'Brief'), check: opt(b.check, 1000, 'Check command'), folder })
   publishWork('projects')
   return c.json({ ok: true, folder: folder ?? null })
 })
@@ -311,6 +315,21 @@ workRoutes.delete('/crons/:id/trigger', (c) => {
 
 // ── projects tab: the agents' folders ──
 workRoutes.get('/workspaces', async (c) => c.json(await workspaces(c.req.query('fresh') === '1')))
+// the Projects tab's order of the projects folder's folders (dragged by the owner): the same on every device
+const FOLDER_ORDER = 'folderOrder'
+workRoutes.get('/workspaces/order', (c) => {
+  try {
+    return c.json({ paths: JSON.parse(settingsRepo.get(FOLDER_ORDER) ?? '[]') as string[] })
+  } catch {
+    return c.json({ paths: [] })
+  }
+})
+workRoutes.put('/workspaces/order', async (c) => {
+  const b = await c.req.json<{ paths?: unknown }>().catch(() => ({}) as { paths?: unknown })
+  const paths = Array.isArray(b.paths) ? [...new Set(b.paths.filter((p): p is string => typeof p === 'string' && p.length < 1000))].slice(0, 500) : []
+  settingsRepo.set(FOLDER_ORDER, JSON.stringify(paths))
+  return c.json({ paths })
+})
 // the folder picker's search: folders by name, however deep (a few levels)
 workRoutes.get('/workspaces/search', (c) => c.json(searchFolders((c.req.query('q') ?? '').slice(0, 100))))
 // file manager: read-only, inside a folder the Projects tab shows
@@ -326,6 +345,61 @@ workRoutes.post('/workspaces/files', requireSameOrigin, async (c) => {
   if (Number(c.req.header('content-length') ?? 0) > UPLOAD_MAX) throw new AgentError(`${name} is bigger than ${UPLOAD_MAX / 1024 / 1024} MB`, 413)
   const data = new Uint8Array(await c.req.arrayBuffer())
   return c.json(addFolderFile(c.req.query('root') ?? '', c.req.query('path') ?? '', name, data))
+})
+// the file manager: rename a file or folder, move some to the office's trash (work/trash.ts)
+workRoutes.post('/workspaces/entry/rename', async (c) => {
+  const b = await c.req.json<{ root?: unknown; path?: unknown; name?: unknown }>().catch(() => ({}) as { root?: unknown; path?: unknown; name?: unknown })
+  const str = (v: unknown) => (typeof v === 'string' ? v : '')
+  return c.json(renameEntry(str(b.root), str(b.path), str(b.name)))
+})
+workRoutes.post('/workspaces/trash', async (c) => {
+  const b = await c.req.json<{ root?: unknown; paths?: unknown }>().catch(() => ({}) as { root?: unknown; paths?: unknown })
+  const paths = Array.isArray(b.paths) ? b.paths.filter((p): p is string => typeof p === 'string') : []
+  return c.json({ items: trashEntries(typeof b.root === 'string' ? b.root : '', paths) })
+})
+// ?under=<folder>: only what came from inside it
+workRoutes.get('/trash', (c) => c.json(listTrash(c.req.query('under') || undefined)))
+workRoutes.post('/trash/:id/restore', (c) => c.json(restoreTrash(c.req.param('id'))))
+workRoutes.delete('/trash/:id', (c) => {
+  purgeTrash(c.req.param('id'))
+  return c.json({ ok: true })
+})
+workRoutes.delete('/trash', (c) => c.json(emptyTrash(c.req.query('under') || undefined)))
+// a terminal in a folder (work/shells.ts): opening one asks for the authenticator code typed just now (it's a shell on
+// the server); reattaching to the one that's running, or ending it, doesn't
+workRoutes.get('/workspaces/shell', async (c) => c.json({ running: await shellRunning(c.req.query('root') ?? '') }))
+workRoutes.post('/workspaces/shell', async (c) => {
+  const body = await c.req.json<{ root?: unknown; code?: unknown }>().catch(() => null)
+  const root = typeof body?.root === 'string' ? body.root : ''
+  if (!(await shellRunning(root))) {
+    const refused = requireFreshCode(c, body?.code)
+    if (refused) return refused
+  }
+  return c.json(await openShell(root))
+})
+workRoutes.delete('/workspaces/shell', async (c) => c.json(await endShell(c.req.query('root') ?? '')))
+workRoutes.get(
+  '/workspaces/shell/term',
+  requireSameOriginOnly,
+  async (c, next) => {
+    c.set('shellTarget' as never, (await shellTarget(c.req.query('root') ?? '')) as never)
+    return next()
+  },
+  shellSocket,
+)
+// the owner's notes on a folder (in the database, never in the folder)
+const NOTES_MAX = 200_000
+workRoutes.get('/workspaces/notes', (c) => {
+  const note = folderNotesRepo.get(folderOf(c.req.query('path') ?? ''))
+  return c.json({ text: note?.text ?? '', updatedAt: note?.updated_at ?? null })
+})
+workRoutes.put('/workspaces/notes', async (c) => {
+  const b = await c.req.json<{ path?: unknown; text?: unknown }>().catch(() => ({}) as { path?: unknown; text?: unknown })
+  if (typeof b.text !== 'string') throw bad('Notes are text')
+  if (b.text.length > NOTES_MAX) throw bad(`Notes are limited to ${NOTES_MAX / 1000}k characters`)
+  folderNotesRepo.set(folderOf(typeof b.path === 'string' ? b.path : ''), b.text)
+  // emptied: the note is gone, so no time
+  return c.json({ ok: true, updatedAt: b.text.trim() ? Date.now() : null })
 })
 // a new folder inside the folder on screen
 // a folder in the projects folder gets a new name (its dashboard project follows)

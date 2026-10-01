@@ -1,11 +1,11 @@
-import { closeSync, constants, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeSync } from 'node:fs'
+import { closeSync, constants, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, writeSync } from 'node:fs'
 import { zip, type ZipEntry } from './zip'
 import type { FolderEntry, FolderListing } from '@after-office/shared'
 import { IMAGE, MAX_BYTES } from '../agents/files'
 import { deleteAgentFolder } from './projectFolders'
-import { basename, extname, join, sep } from 'node:path'
+import { basename, dirname, extname, join, sep } from 'node:path'
 import type { GitCommit, GitInfo, Workspace, WorkspaceFolder } from '@after-office/shared'
-import { agentsRepo, extraDirsOf, projectsRepo } from '../db'
+import { agentsRepo, extraDirsOf, folderNotesRepo, projectsRepo } from '../db'
 import { AgentError } from '../agents/errors'
 import { AGENTS_DIR, PROJECTS_DIR } from '../fsroots'
 import { git } from './git'
@@ -160,10 +160,17 @@ function allowed(path: string) {
   } catch {
     throw new AgentError('No such folder', 404)
   }
-  for (const root of [PROJECTS_DIR, ...orphanFolders()]) {
-    if (real === root) return real
-    if (real.startsWith(root + sep) && !real.slice(root.length + 1).includes(sep) && !lstatSync(path).isSymbolicLink()) return real
+  // a folder at any depth inside the projects folder, a folder without an agent, or an agent's folder (its real path:
+  // a link that leads out of them is refused), and nothing hidden (.git…) on the way
+  const inRoot = (root: string) => {
+    if (real === root) return true
+    if (!real.startsWith(root + sep)) return false
+    return !real
+      .slice(root.length + 1)
+      .split(sep)
+      .some((part) => part.startsWith('.'))
   }
+  for (const root of [PROJECTS_DIR, ...orphanFolders()]) if (inRoot(root)) return real
   for (const a of agentsRepo.all()) {
     let root: string
     try {
@@ -171,11 +178,13 @@ function allowed(path: string) {
     } catch {
       continue
     }
-    if (real === root) return real
-    if (real.startsWith(root + sep) && !real.slice(root.length + 1).includes(sep) && !lstatSync(path).isSymbolicLink()) return real
+    if (inRoot(root)) return real
   }
   throw new AgentError('Not an agent folder', 403)
 }
+
+/** The folder (one the Projects tab may show: the projects folder's, an agent's or a folder without an agent), real path. */
+export const folderOf = (path: string) => allowed(path)
 
 export async function recentCommits(path: string, limit = 10): Promise<GitCommit[]> {
   const real = allowed(path)
@@ -271,6 +280,44 @@ export function searchFolders(q: string, maxDepth = 5): { path: string; name: st
   }
   for (const root of roots) walk(root, 1, root)
   return out
+}
+
+/**
+ * A file or folder `rel` inside the allowed folder `root`, without following it (a link is the link itself): its parent
+ * must really be inside `root`, nothing hidden on the way, and not `root` itself.
+ */
+export function entryIn(root: string, rel: string) {
+  const parts = rel.split('/').filter(Boolean)
+  if (!parts.length || rel.includes('\0') || parts.some((p) => p === '..' || p === '.' || p.startsWith('.'))) throw new AgentError('Invalid path', 400)
+  const base = allowed(root)
+  let parent: string
+  try {
+    parent = realpathSync(join(base, ...parts.slice(0, -1)))
+  } catch {
+    throw new AgentError('No such file or folder', 404)
+  }
+  if (parent !== base && !parent.startsWith(base + sep)) throw new AgentError('Outside this folder', 403)
+  const abs = join(parent, parts[parts.length - 1])
+  let st: import('node:fs').Stats
+  try {
+    st = lstatSync(abs)
+  } catch {
+    throw new AgentError('No such file or folder', 404)
+  }
+  return { base, abs, st, rel: parts.join('/') }
+}
+
+/** Rename a file or folder in place (same folder, a plain new name, never over something that's there). */
+export function renameEntry(root: string, rel: string, name: string) {
+  const { abs } = entryIn(root, rel)
+  const next = name.trim()
+  if (!next || next.startsWith('.') || next.length > 200 || /[/\\\0]/.test(next)) throw new AgentError('Give it a plain name (no slashes, not starting with a dot)')
+  const to = join(dirname(abs), next)
+  if (to === abs) return { name: next }
+  if (existsSync(to)) throw new AgentError(`${next} is already there`, 409)
+  renameSync(abs, to)
+  folderNotesRepo.move(abs, to)
+  return { name: next }
 }
 
 /** Largest file the owner can upload into a folder. */

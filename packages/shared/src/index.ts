@@ -367,6 +367,8 @@ export interface Project {
 export interface OfficeTask {
   /** who asked for it (the activity log's "why"): the owner from a device, or the manager and what started its turn */
   origin?: ActivityOrigin
+  /** when it was made (ms; set by the server) */
+  createdAt?: number
   id: string
   title: string
   agentId: string | null

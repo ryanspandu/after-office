@@ -34,7 +34,8 @@ export function Chevron({ open, onClick, label }: { open: boolean; onClick: () =
 export type PickDir = (absolutePath: string, name: string) => void
 
 /** What's inside `rel` of the folder `root`, read when shown. */
-export function FolderTree({ root, rel = '', depth, projectAt, pick }: { root: string; rel?: string; depth: number; projectAt?: ProjectAt; pick?: PickDir }) {
+/** `onOpenDir`: a subfolder's name opens its details (like a top-level folder's); unset, it opens / folds in place. */
+export function FolderTree({ root, rel = '', depth, projectAt, pick, onOpenDir }: { root: string; rel?: string; depth: number; projectAt?: ProjectAt; pick?: PickDir; onOpenDir?: (path: string) => void }) {
   const [listing, setListing] = useState<FolderListing | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ path: string; size: number } | null>(null)
@@ -63,7 +64,7 @@ export function FolderTree({ root, rel = '', depth, projectAt, pick }: { root: s
     <ul className="tree">
       {entries.map((e) => {
         const path = join(rel, e.name)
-        if (e.dir && !e.link) return <TreeDir key={e.name} root={root} rel={path} name={e.name} depth={depth} projectAt={projectAt} pick={pick} />
+        if (e.dir && !e.link) return <TreeDir key={e.name} root={root} rel={path} name={e.name} depth={depth} projectAt={projectAt} pick={pick} onOpenDir={onOpenDir} />
         const previewable = !e.dir && canPreview({ path: e.name, size: e.size })
         return (
           <li key={e.name}>
@@ -71,7 +72,6 @@ export function FolderTree({ root, rel = '', depth, projectAt, pick }: { root: s
               className={`tree__row tree__file${e.link ? ' is-link' : ''}`}
               style={pad}
               disabled={e.link}
-              data-tip={e.link ? 'A link to somewhere else: not opened here' : previewable ? 'Preview' : 'Download'}
               onClick={() => (previewable ? setPreview({ path, size: e.size }) : saveUrl(fileUrl(root, path), e.name))}
             >
               <span className="tree__spacer" />
@@ -92,7 +92,7 @@ export function FolderTree({ root, rel = '', depth, projectAt, pick }: { root: s
   )
 }
 
-function TreeDir({ root, rel, name, depth, projectAt, pick }: { root: string; rel: string; name: string; depth: number; projectAt?: ProjectAt; pick?: PickDir }) {
+function TreeDir({ root, rel, name, depth, projectAt, pick, onOpenDir }: { root: string; rel: string; name: string; depth: number; projectAt?: ProjectAt; pick?: PickDir; onOpenDir?: (path: string) => void }) {
   const tree = useContext(TreeContext)
   const key = `${root}/${rel}`
   const open = tree.isOpen(key)
@@ -101,7 +101,7 @@ function TreeDir({ root, rel, name, depth, projectAt, pick }: { root: string; re
     <li>
       <div className="tree__row tree__dir" style={{ ['--depth' as string]: depth }}>
         <Chevron open={open} onClick={() => tree.toggle(key)} label={name} />
-        <button className="tree__open" onClick={() => (project ? project.open() : tree.toggle(key))} data-tip={project ? 'Details' : undefined}>
+        <button className="tree__open" onClick={() => (project ? project.open() : onOpenDir ? onOpenDir(`${root}/${rel}`) : tree.toggle(key))}>
           <LuFolder className="tree__icon tree__icon--dir" />
           <span className="tree__name-wrap">
             <span className="tree__name-line">
@@ -113,7 +113,7 @@ function TreeDir({ root, rel, name, depth, projectAt, pick }: { root: string; re
         </button>
         {pick && <UseButton onClick={() => pick(`${root}/${rel}`, name)} />}
       </div>
-      {open && <FolderTree root={root} rel={rel} depth={depth + 1} projectAt={projectAt} pick={pick} />}
+      {open && <FolderTree root={root} rel={rel} depth={depth + 1} projectAt={projectAt} pick={pick} onOpenDir={onOpenDir} />}
     </li>
   )
 }
