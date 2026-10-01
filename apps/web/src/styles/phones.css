@@ -41,3 +41,9 @@
   .modal__head:has(> div > p) > .modal__actions { margin-top: -9px; }
   .modal__head h3 { font-size: 15px; }
 }
+/* a dock sheet at full size: its lists use the whole height (no cap); the sheet scrolls past them */
+.modal--full .dock-sheet { flex: 1; }
+.modal--full .dock-sheet .list,
+.modal--full .dock-sheet > .card .list,
+.modal--full.modal .agents-modal .agents-card .list { max-height: none; }
+.modal--full .dock-sheet .followups { max-height: none; }
