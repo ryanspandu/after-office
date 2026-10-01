@@ -19,9 +19,11 @@ interface Props {
   hidden?: boolean
   /** a click outside it: closes it, unless this says otherwise (e.g. minimize) */
   onBackdrop?: () => void
+  /** at full size (maximized): back to the usual size; on phones a short pull down on the sheet does it */
+  onShrink?: () => void
 }
 
-export function Modal({ open, title, description, onClose, children, width = 460, className, actions, hidden, onBackdrop }: Props) {
+export function Modal({ open, title, description, onClose, children, width = 460, className, actions, hidden, onBackdrop, onShrink }: Props) {
   const backdrop = useRef<HTMLDivElement | null>(null)
   const shownAt = useRef(0)
   const setBackdrop = useCallback((el: HTMLDivElement | null) => {
@@ -79,7 +81,7 @@ export function Modal({ open, title, description, onClose, children, width = 460
   })
 
   // phones: a bottom sheet (styles/sheet.css), closed by dragging its handle or header down
-  const { ref: card, dragProps } = useSheetDrag<HTMLDivElement>(onClose)
+  const { ref: card, dragProps } = useSheetDrag<HTMLDivElement>(onClose, undefined, onShrink)
 
   // stays mounted briefly after closing so it can animate out
   const { mounted, closing } = usePresence(open, 180)
