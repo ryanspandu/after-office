@@ -1,5 +1,8 @@
 import type { Context } from 'hono'
 import { readSessionFromCookie, SESSION_COOKIE_NAMES } from '../auth'
+import { AgentError } from '../agents/errors'
+import { runAsAgent } from '../agents/asagent'
+import { AGENTS_DIR } from '../fsroots'
 
 // Previews: the apps agents run while they work (a dev server on a preview port, 3000–3009 by default), opened from
 // the dashboard. On your own machine the link is simply http://localhost:<port>. On a server they come through a
@@ -70,6 +73,39 @@ export async function listPreviews(c: Context): Promise<Preview[]> {
   const host = process.env.OFFICE_PUBLIC_URL ? base.hostname : (c.req.header('x-forwarded-host') ?? c.req.header('host') ?? 'localhost').split(':')[0]
   const shown = (port: number) => (process.env.OFFICE_PUBLIC_URL ? port + PUBLIC_OFFSET : port)
   return Promise.all(open.map(async (port) => ({ port, url: `${proto}//${host}:${shown(port)}/`, title: await pageTitle(port) })))
+}
+
+/**
+ * Stop the app on a preview port: the processes listening on it get SIGTERM (then SIGKILL if it's still up after a few
+ * seconds). Found and stopped with the agents' rights (runAsAgent): on a server that is the agents' own Unix user, so
+ * only an agent's app can be stopped this way, never the dashboard, Caddy or anything else on the machine.
+ */
+export async function stopPreview(port: number): Promise<{ stopped: boolean }> {
+  if (!previewPorts().includes(port)) throw new AgentError('Not a preview port', 400)
+  if (!(await listening(port))) return { stopped: true }
+  const pids = (await listenerPids(port)).filter((pid) => pid !== process.pid && pid !== process.ppid)
+  if (!pids.length) throw new AgentError(`Nothing the agents run is listening on ${port}: it may belong to another user`, 409)
+  await runAsAgent(['kill', '-TERM', ...pids.map(String)], { cwd: AGENTS_DIR, timeoutMs: 5000 })
+  for (let i = 0; i < 12; i++) {
+    await Bun.sleep(250)
+    if (!(await listening(port))) return { stopped: true }
+  }
+  // still up (ignores SIGTERM, or a new listener took over): the hard way
+  const left = (await listenerPids(port)).filter((pid) => pid !== process.pid && pid !== process.ppid)
+  if (left.length) await runAsAgent(['kill', '-KILL', ...left.map(String)], { cwd: AGENTS_DIR, timeoutMs: 5000 })
+  await Bun.sleep(400)
+  return { stopped: !(await listening(port)) }
+}
+
+/** The processes (that the agents' user can see) listening on a TCP port: lsof, else fuser, else ss. */
+async function listenerPids(port: number): Promise<number[]> {
+  const script = [
+    `if command -v lsof >/dev/null 2>&1; then lsof -t -nP -iTCP:${port} -sTCP:LISTEN 2>/dev/null`,
+    `elif command -v fuser >/dev/null 2>&1; then fuser -n tcp ${port} 2>/dev/null`,
+    `else ss -ltnpH "sport = :${port}" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2; fi`,
+  ].join('; ')
+  const r = await runAsAgent(['sh', '-c', script], { cwd: AGENTS_DIR, timeoutMs: 5000 })
+  return [...new Set((r.out.match(/\d+/g) ?? []).map(Number).filter((n) => n > 1))]
 }
 
 /** A Cookie header without the dashboard's session cookie. */

@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import ReactSelect from 'react-select'
+import { ProjectFolderPicker } from './ProjectFolderPicker'
 import { LuCircleCheck, LuCircleX, LuFolder, LuHourglass, LuLoader, LuLock } from 'react-icons/lu'
 import { projectFolders, useWorkspaces } from '../state/workspaces'
 import CreatableSelect from 'react-select/creatable'
@@ -60,6 +62,7 @@ export function StatusSelect({ value, onChange, size }: { value: TaskStatus; onC
 
 /** Project picker; typing a new name creates the project. */
 type ProjectOption = Option<string> & { hint?: string; folder?: boolean }
+const BROWSE = '__browse'
 
 /**
  * Pick a project, or one of the folders the agents work in (which becomes a project linked to that folder), or
@@ -78,23 +81,32 @@ export function ProjectSelect({ value, onChange, size = 'md', menuPlacement = 'a
     { value: '', label: 'No project' },
     ...projects.map((p) => ({ value: p.id, label: p.name, hint: p.folder ? base(p.folder) : undefined })),
   ]
-  const folderOptions: ProjectOption[] = projectFolders(workspaces)
-    .filter((f) => !f.projectId && !linked.has(f.path))
-    .map((f) => ({ value: `folder:${f.path}`, label: f.name, hint: f.path, folder: true }))
+  const folderOptions: ProjectOption[] = [
+    ...projectFolders(workspaces)
+      .filter((f) => !f.projectId && !linked.has(f.path))
+      .map((f) => ({ value: `folder:${f.path}`, label: f.name, hint: f.path, folder: true })),
+    // any folder, however deep (a folder inside one of these): picked from a tree
+    ...(live ? [{ value: BROWSE, label: 'Browse folders…', hint: 'a folder inside one of these', folder: true }] : []),
+  ]
   const groups = folderOptions.length
     ? [
         { label: 'Projects', options: projectOptions },
         { label: 'Folders your agents work in', options: folderOptions },
       ]
     : projectOptions
+  const [browsing, setBrowsing] = useState(false)
 
+  // a folder: the project already linked to it, or a new one named after it
+  const useFolder = (folder: string) => onChange(projects.find((p) => p.folder === folder)?.id ?? addProject(base(folder), { folder }))
   const pick = (v: string) => {
+    if (v === BROWSE) return setBrowsing(true)
     if (!v.startsWith('folder:')) return onChange(v)
-    const folder = v.slice('folder:'.length)
-    onChange(addProject(base(folder), { folder }))
+    useFolder(v.slice('folder:'.length))
   }
 
   return (
+    <>
+    {browsing && <ProjectFolderPicker onPick={(path) => useFolder(path)} onClose={() => setBrowsing(false)} />}
     <CreatableSelect<ProjectOption, false>
       unstyled
       aria-label="Project"
@@ -125,6 +137,7 @@ export function ProjectSelect({ value, onChange, size = 'md', menuPlacement = 'a
         option: (s) => [s.isSelected && 'rs__option--selected', s.isFocused && 'rs__option--focused'].filter(Boolean).join(' '),
       }}
     />
+    </>
   )
 }
 

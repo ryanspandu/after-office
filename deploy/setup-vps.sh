@@ -103,7 +103,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 
 echo "==> packages"
 apt-get update
-apt-get install -y tmux git curl rsync unzip acl ufw ca-certificates gnupg unattended-upgrades \
+apt-get install -y tmux git curl rsync unzip acl ufw ca-certificates gnupg unattended-upgrades lsof psmisc \
   debian-keyring debian-archive-keyring apt-transport-https
 if { [ "$TAILSCALE" = 0 ] || [ -n "$DOMAIN" ]; } && ! command -v caddy >/dev/null; then
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg

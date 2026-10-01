@@ -10,7 +10,7 @@ import { channelStatus, removeChannel, saveChannel, sendTest, type ChannelName }
 import { publish } from '../agents/registry'
 import { updateSettings } from '../work/settings'
 import { cleanTagIds, deleteTag, putTag } from '../work/tags'
-import { listPreviews } from '../work/previews'
+import { listPreviews, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
 import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
@@ -263,6 +263,8 @@ workRoutes.put('/reports/:id/tags', async (c) => {
 
 // the apps agents are running on preview ports (Projects → Previews)
 workRoutes.get('/previews', async (c) => c.json(await listPreviews(c)))
+// stop an app an agent left running on a preview port
+workRoutes.post('/previews/:port/stop', async (c) => c.json(await stopPreview(Number(c.req.param('port')))))
 
 // tags: the owner's labels for tasks and reports
 workRoutes.put('/tags/:id', async (c) => {
