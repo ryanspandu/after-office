@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { matchesSearch } from './SearchBox'
-import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen } from 'react-icons/lu'
+import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen, LuCheck, LuX } from 'react-icons/lu'
 import { DeleteProject } from './DeleteProject'
 import { ProjectReports } from './Reports'
 import { confirm } from './Confirm'
 import { api } from '../state/auth'
 import { FileBrowser } from './FileBrowser'
-import { openUrl } from '../state/url'
+import { openUrl, setUrl } from '../state/url'
 import type { GitCommit, Workspace, WorkspaceFolder } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
@@ -17,6 +17,7 @@ import { ago } from './FollowUps'
 import { Modal } from './Modal'
 import { STATUS_BY_ID } from './taskMeta'
 import { Previews } from './Previews'
+import { Chevron, FolderTree, TreeContext, type ProjectAt } from './FolderTree'
 
 // Projects tab: what the agents are working on, straight from their folders, in two lists. "Projects": the folders in
 // the office's own projects folder (~/after-office/project, where new projects get a folder). "Agents": each agent's
@@ -129,8 +130,9 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
       : `${count} project${count === 1 ? '' : 's'} in ${agentFolders} agent folder${agentFolders === 1 ? '' : 's'}${
           !showOrphans && orphans ? ` (${orphans} without an agent hidden)` : ''
         }`
+  const tree = { isOpen: (k: string) => unfolded.has(k), toggle: toggleFold }
   return (
-    <>
+    <TreeContext.Provider value={tree}>
       <Previews />
       <div className="seg ws-tabs" role="tablist">
         <button role="tab" aria-selected={view === 'projects'} className={view === 'projects' ? 'active' : ''} onClick={() => pickView('projects')}>
@@ -176,8 +178,12 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
           ) : (
             <ul className="ws__projects ws__projects--flat">
               {homeProjects.map((p) => (
-                <li key={p.path}>
-                  <FolderRow folder={p} now={now} onOpen={() => setOpen({ folder: p, agentIds: home?.agentIds ?? [] })} />
+                <li key={p.path} className="tree-root">
+                  <div className="tree-root__row">
+                    <Chevron open={unfolded.has(p.path)} onClick={() => toggleFold(p.path)} label={p.name} />
+                    <FolderRow folder={p} now={now} onOpen={() => setOpen({ folder: p, agentIds: home?.agentIds ?? [] })} />
+                  </div>
+                  {unfolded.has(p.path) && <FolderTree root={p.path} depth={1} />}
                 </li>
               ))}
             </ul>
@@ -188,27 +194,18 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
         {!shown.length && <div className="empty">{q.trim() ? 'No folders match.' : 'No agent folders.'}</div>}
         {shown.map((w) => {
           const people = w.agentIds.map((id) => agents.find((a) => a.id === id)).filter(Boolean) as OfficeAgent[]
-          const foldable = !w.isProject && w.projects.length > 0
-          const open = !foldable || !!q.trim() || unfolded.has(w.path)
+          // every folder opens in place (its files and subfolders); a search shows the matching projects instead
+          const searching = !!q.trim() && !w.isProject
+          const open = searching || unfolded.has(w.path)
+          // its project subfolders: their tag and git line in the tree, their name opens their details
+          const projectAt: ProjectAt = (abs) => {
+            const p = w.projects.find((x) => x.path === abs || x.path.replace(/^\/private/, '') === abs.replace(/^\/private/, ''))
+            return p ? { tag: <LinkedTag projectId={p.projectId} folderName={p.name} />, sub: <GitLine folder={p} now={now} compact />, open: () => setOpen({ folder: p, agentIds: w.agentIds }) } : undefined
+          }
           return (
             <section key={w.path} className={`ws${w.orphan ? ' ws--orphan' : ''}`}>
               <div className="ws__top">
-              {foldable ? (
-                <button
-                  className="ws__fold"
-                  aria-expanded={open}
-                  aria-label={open ? `Fold ${w.name}` : `Show the projects in ${w.name}`}
-                  data-tip={open ? 'Fold' : `${w.projects.length} project${w.projects.length === 1 ? '' : 's'}`}
-                  onClick={() => toggleFold(w.path)}
-                >
-                  <LuChevronRight />
-                </button>
-              ) : (
-                // nothing inside to show: a dot where the chevron would be
-                <span className="ws__fold ws__fold--none" aria-hidden>
-                  <i className="ws__dot" />
-                </span>
-              )}
+              <Chevron open={open} onClick={() => toggleFold(w.path)} label={w.name} />
               <button
                 className="ws__head"
                 onClick={() => setOpen({ folder: w, agentIds: w.agentIds, orphan: w.orphan })}
@@ -216,14 +213,15 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
               >
                 {w.git ? <LuFolderGit2 className="ws__icon" /> : <LuFolder className="ws__icon" />}
                 <span className="ws__name truncate">{w.shared ? 'Projects folder' : w.name}</span>
-                {w.isProject && <LinkedTag projectId={w.projectId} />}
-                {foldable && !open && <span className="ws__count muted">{w.projects.length}</span>}
+                {w.isProject && <LinkedTag projectId={w.projectId} folderName={w.name} />}
+                {!w.isProject && !open && w.projects.length > 0 && <span className="ws__count muted" data-tip={`${w.projects.length} project${w.projects.length === 1 ? '' : 's'}`}>{w.projects.length}</span>}
                 {w.orphan ? <span className="ws__tag ws__tag--orphan">no agent</span> : <Avatars agents={people} />}
               </button>
               </div>
-              {w.isProject ? (
-                <GitLine folder={w} now={now} block />
-              ) : !open ? null : w.projects.length ? (
+              {w.isProject && <GitLine folder={w} now={now} block />}
+              {!open ? null : !searching ? (
+                <FolderTree root={w.path} depth={1} projectAt={projectAt} />
+              ) : w.projects.length ? (
                 <ul className="ws__projects">
                   {w.projects.map((p) => (
                     <li key={p.path}>
@@ -237,7 +235,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
         })}
       </div>
       )}
-    </>
+    </TreeContext.Provider>
   )
 }
 
@@ -249,7 +247,7 @@ function FolderRow({ folder: p, now, onOpen }: { folder: WorkspaceFolder; now: n
       <span className="ws-row__body">
         <span className="ws-row__name">
           <span className="truncate">{p.name}</span>
-          <LinkedTag projectId={p.projectId} />
+          <LinkedTag projectId={p.projectId} folderName={p.name} />
         </span>
         <GitLine folder={p} now={now} compact />
       </span>
@@ -258,11 +256,14 @@ function FolderRow({ folder: p, now, onOpen }: { folder: WorkspaceFolder; now: n
 }
 
 /** The dashboard project a folder is linked to (colour + name), or a hint that it can be set up. */
-function LinkedTag({ projectId }: { projectId?: string | null }) {
+function LinkedTag({ projectId, folderName }: { projectId?: string | null; folderName?: string }) {
   const project = useDashboard((s) => s.projects.find((p) => p.id === projectId))
   if (!project) return <span className="ws__tag">project</span>
+  const tip = `Project “${project.name}”${project.check ? ' · has a quality check' : ''}`
+  // named like its folder: just its colour (the name is already there)
+  if (folderName && project.name === folderName) return <span className="chip__dot ws__dot-tag" style={{ background: project.color }} data-tip={tip} />
   return (
-    <span className="ws__tag ws__tag--linked" data-tip={`Project “${project.name}”${project.check ? ' · has a quality check' : ''}`}>
+    <span className="ws__tag ws__tag--linked" data-tip={tip}>
       <span className="chip__dot" style={{ background: project.color }} />
       {project.name}
     </span>
@@ -313,6 +314,9 @@ export function ProjectFolderModal({ open: { folder: f, agentIds, orphan }, onCl
   // the project linked to this folder: from the scan, or one set up here a moment ago
   const project = useDashboard((s) => s.projects.find((p) => p.id === f.projectId || (p.folder && p.folder === f.path)))
   const reload = useWorkspaces((s) => s.load)
+  // a folder in the projects folder can be renamed here (an agent's folder is named after its agent)
+  const home = useWorkspaces((s) => s.data?.find((w) => w.shared))
+  const renamable = !!home && f.path.startsWith(`${home.path}/`) && !f.path.slice(home.path.length + 1).includes('/')
   const ensureProject = () => {
     if (project) return project.id
     const id = addProject(f.name, { folder: f.path })
@@ -358,6 +362,7 @@ export function ProjectFolderModal({ open: { folder: f, agentIds, orphan }, onCl
   return (
     <Modal open onClose={onClose} title={f.name} description={f.git ? 'Git repository' : 'Folder'} width={620}>
       <div className="modal__body ws-detail">
+        {renamable && <FolderName folder={f} />}
         <div className="ws-detail__path">
           <code className="truncate">{f.path}</code>
           <button
@@ -419,14 +424,7 @@ export function ProjectFolderModal({ open: { folder: f, agentIds, orphan }, onCl
           <span className="field__label">Project settings</span>
           {project ? (
             <>
-              <p className="field__hint">Its tasks work in this folder, get the brief below, and run the check when they finish.</p>
-              <div className="ws-project__name">
-                <label className="field grow">
-                  <span className="field__label">Name</span>
-                  <input value={project.name} maxLength={60} onChange={(e) => updateProject(project.id, { name: e.target.value })} />
-                </label>
-                <DeleteProject project={project} taskCount={tasks.filter((t) => t.projectId === project.id).length} onDeleted={onClose} />
-              </div>
+              <p className="field__hint ws-project__hint">Its tasks work in this folder, get the brief below, and run the check when they finish.</p>
               <label className="field">
                 <span className="field__label">Brief</span>
                 <textarea
@@ -493,6 +491,9 @@ export function ProjectFolderModal({ open: { folder: f, agentIds, orphan }, onCl
               <LuTrash2 /> Delete folder
             </button>
           )}
+          {/* deleting the project: down here, apart from the settings (asks first; the folder only if ticked) */}
+          {project && <DeleteProject labelled project={project} taskCount={tasks.filter((t) => t.projectId === project.id).length} onDeleted={onClose} />}
+          <span className="grow" />
           <button
             className="primary"
             onClick={() => {
@@ -567,5 +568,72 @@ export function NewProjectModal({ onClose, onCreated }: { onClose: () => void; o
         </footer>
       </form>
     </Modal>
+  )
+}
+
+/** The name of a folder in the projects folder: renaming it renames the folder (its project follows). */
+function FolderName({ folder }: { folder: WorkspaceFolder }) {
+  const reload = useWorkspaces((s) => s.load)
+  const [name, setName] = useState(folder.name)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => setName(folder.name), [folder.name])
+  const changed = name.trim() !== '' && name.trim() !== folder.name
+  const save = async () => {
+    if (!changed || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await api('/api/workspaces/rename', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: folder.path, name: name.trim() }) })
+      const body = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(body?.error ?? 'Could not rename it')
+      await reload(true)
+      // the details follow the folder to its new place
+      setUrl({ folder: body.folder })
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <label className="field grow">
+      <span className="field__label">Folder name</span>
+      <span className="ws-rename">
+        <input
+          value={name}
+          maxLength={40}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void save()
+            if (e.key === 'Escape' && changed) {
+              e.stopPropagation()
+              setName(folder.name)
+            }
+          }}
+        />
+        {changed && (
+          <>
+            <button type="button" className="icon-btn small ghost" onClick={() => void save()} disabled={busy} data-tip="Rename" aria-label="Rename the folder">
+              {busy ? <LuRefreshCw className="spin" /> : <LuCheck />}
+            </button>
+            <button
+              type="button"
+              className="icon-btn small ghost"
+              onClick={() => {
+                setName(folder.name)
+                setError(null)
+              }}
+              disabled={busy}
+              data-tip="Cancel"
+              aria-label="Keep the old name"
+            >
+              <LuX />
+            </button>
+          </>
+        )}
+      </span>
+      {(changed || error) && <span className={`field__hint${error ? ' danger-text' : ''}`}>{error ?? 'Renames the folder itself (letters, numbers and dashes); the project keeps its brief, check and tasks.'}</span>}
+    </label>
   )
 }

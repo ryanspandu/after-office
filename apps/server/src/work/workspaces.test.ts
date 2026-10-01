@@ -240,6 +240,26 @@ describe("a report's attachments", () => {
   })
 })
 
+describe('renaming a project folder', () => {
+  test('only folders in the projects folder; the linked project follows; never over another folder', async () => {
+    const { PROJECTS_DIR } = await import('../fsroots')
+    const { renameProjectFolder } = await import('./projectFolders')
+    mkdirSync(join(PROJECTS_DIR, 'rn-old'), { recursive: true })
+    mkdirSync(join(PROJECTS_DIR, 'rn-taken'), { recursive: true })
+    projectsRepo.put({ id: 'rn-p', name: 'rn-old', color: '#f07a1d', folder: join(PROJECTS_DIR, 'rn-old') })
+    expect(() => renameProjectFolder(join(PROJECTS_DIR, 'rn-old'), 'rn-taken')).toThrow('already a folder')
+    expect(() => renameProjectFolder(join(PROJECTS_DIR, 'rn-old'), '!!!')).toThrow('Give it a name')
+    expect(() => renameProjectFolder(home, 'x')).toThrow('Only folders in the projects folder')
+    const r = renameProjectFolder(join(PROJECTS_DIR, 'rn-old'), 'Static Bloom')
+    expect(r.folder).toBe(join(PROJECTS_DIR, 'static-bloom'))
+    expect(statSync(r.folder).isDirectory()).toBe(true)
+    expect(projectsRepo.get('rn-p')).toMatchObject({ name: 'static-bloom', folder: r.folder })
+    projectsRepo.remove('rn-p')
+    rmSync(r.folder, { recursive: true, force: true })
+    rmSync(join(PROJECTS_DIR, 'rn-taken'), { recursive: true, force: true })
+  })
+})
+
 describe('folders without an agent', () => {
   test('listed as orphans, browsable, deletable; agent and project folders are not', async () => {
     const { AGENTS_DIR, PROJECTS_DIR } = await import('../fsroots')

@@ -9,7 +9,7 @@ import { ago } from './FollowUps'
 // A read-only file manager for a folder in the Projects tab: browse its folders, preview text / Markdown files,
 // open pictures, download the rest. The server keeps it inside that folder (no "..", no symlinks, no hidden files).
 
-const fileUrl = (root: string, path: string, inline = false) =>
+export const fileUrl = (root: string, path: string, inline = false) =>
   `/api/workspaces/file?${new URLSearchParams({ root, path, ...(inline ? { inline: '1' } : {}) })}`
 
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name)

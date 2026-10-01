@@ -11,7 +11,8 @@ import { confirmWith } from './Confirm'
 
 const tilde = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, '~')
 
-export function DeleteProject({ project: p, taskCount, onDeleted }: { project: Project; taskCount: number; onDeleted?: () => void }) {
+/** `labelled`: a "Delete project" button (a modal's footer) instead of the bare icon (a list row). */
+export function DeleteProject({ project: p, taskCount, onDeleted, labelled }: { project: Project; taskCount: number; onDeleted?: () => void; labelled?: boolean }) {
   const live = useOffice((s) => s.source === 'live')
   const removeProject = useDashboard((s) => s.removeProject)
 
@@ -48,6 +49,12 @@ export function DeleteProject({ project: p, taskCount, onDeleted }: { project: P
     onDeleted?.()
   }
 
+  if (labelled)
+    return (
+      <button className="ghost danger-text" data-tip={taskCount ? 'Its tasks stay, without a project' : undefined} onClick={ask}>
+        <LuTrash2 /> Delete project
+      </button>
+    )
   return (
     <button className="icon-btn small ghost" data-tip={taskCount ? 'Delete project (its tasks stay, without a project)' : 'Delete project'} aria-label="Delete project" onClick={ask}>
       <LuTrash2 />

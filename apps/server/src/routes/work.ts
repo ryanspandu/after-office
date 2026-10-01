@@ -4,7 +4,7 @@ import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRe
 import { diffSince } from '../work/git'
 import { addFolder, addFolderFile, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
-import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder } from '../work/projectFolders'
+import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder, renameProjectFolder } from '../work/projectFolders'
 import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDevice, sendPush } from '../push'
 import { channelStatus, removeChannel, saveChannel, sendTest, type ChannelName } from '../notify'
 import { publish } from '../agents/registry'
@@ -324,6 +324,13 @@ workRoutes.post('/workspaces/files', requireSameOrigin, async (c) => {
   return c.json(addFolderFile(c.req.query('root') ?? '', c.req.query('path') ?? '', name, data))
 })
 // a new folder inside the folder on screen
+// a folder in the projects folder gets a new name (its dashboard project follows)
+workRoutes.post('/workspaces/rename', async (c) => {
+  const b = await c.req.json<{ path?: unknown; name?: unknown }>().catch(() => ({}) as { path?: unknown; name?: unknown })
+  const r = renameProjectFolder(typeof b.path === 'string' ? b.path : '', typeof b.name === 'string' ? b.name : '')
+  publishWork('projects')
+  return c.json(r)
+})
 workRoutes.post('/workspaces/folders', async (c) => {
   const b = await c.req.json<{ root?: unknown; path?: unknown; name?: unknown }>().catch(() => ({}) as { root?: unknown; path?: unknown; name?: unknown })
   const str = (v: unknown) => (typeof v === 'string' ? v : '')

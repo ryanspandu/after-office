@@ -1,6 +1,6 @@
-import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { agentsRepo, extraDirsOf } from '../db'
+import { agentsRepo, extraDirsOf, projectsRepo, tasksRepo } from '../db'
 import { AgentError } from '../agents/errors'
 import { revokeProjectDir } from '../agents/manager'
 import { runAsAgent } from '../agents/asagent'
@@ -38,6 +38,26 @@ export function isOwnProjectFolder(folder: string | undefined) {
   } catch {
     return false
   }
+}
+
+/**
+ * Rename a folder in the projects folder (the Projects tab): the dashboard project linked to it follows (its folder,
+ * and its name: the folder's). Not while one of its tasks is being worked on (the agent would lose its place).
+ */
+export function renameProjectFolder(folder: string, name: string) {
+  if (!isOwnProjectFolder(folder)) throw new AgentError('Only folders in the projects folder can be renamed here', 403)
+  const old = realpathSync(folder)
+  const base = slug(name)
+  if (!base) throw new AgentError('Give it a name (letters, numbers, dashes)')
+  const next = join(PROJECTS_DIR, base)
+  if (next === old) return { folder: old }
+  if (existsSync(next)) throw new AgentError(`There is already a folder called ${base}`, 409)
+  const linked = projectsRepo.all().filter((p) => p.folder && (p.folder === folder || p.folder === old))
+  const busy = tasksRepo.active().some((t) => t.status === 'in_progress' && linked.some((p) => p.id === t.projectId))
+  if (busy) throw new AgentError('One of its tasks is being worked on right now: rename it once that is done', 409)
+  renameSync(old, next)
+  for (const p of linked) projectsRepo.put({ ...p, folder: next, name: base })
+  return { folder: next }
 }
 
 /** How many files and folders are in it (shown before deleting), up to a limit. */
