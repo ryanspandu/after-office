@@ -4,8 +4,8 @@ import { useDashboard } from '../../state/dashboard'
 import { ProjectFolderPicker } from '../ProjectFolderPicker'
 import { TagPicker } from '../tags'
 
-// The chat's optional folder and tags (above the message box). They stay picked for that agent (this browser) until
-// cleared. The server adds them to the message as a block (apps/server/src/work/chatContext.ts): the manager uses them
+// The chat's optional folder and tags (above the message box). They stay picked for that chat (one agent's session, in
+// this browser) until changed or cleared: each session keeps its own. The server adds them to the message as a block (apps/server/src/work/chatContext.ts): the manager uses them
 // for the work it hands out; any other agent works in that folder, and its answer is kept in Reports with them.
 
 export interface ChatContext {
@@ -13,12 +13,13 @@ export interface ChatContext {
   tags: string[]
 }
 const EMPTY: ChatContext = { folder: '', tags: [] }
-const key = (agentId: string) => `ao-chat-ctx:${agentId}`
+/** Per chat: the main session keeps the key it always had, a side session (s2, s3…) one of its own. */
+const key = (chat: string) => `ao-chat-ctx:${chat}`
 const base = (p: string) => p.split('/').filter(Boolean).pop() ?? p
 
-function load(agentId: string): ChatContext {
+function load(chat: string): ChatContext {
   try {
-    const v = JSON.parse(localStorage.getItem(key(agentId)) ?? 'null')
+    const v = JSON.parse(localStorage.getItem(key(chat)) ?? 'null')
     // (a saved project from before folders: dropped)
     return v && Array.isArray(v.tags) ? { folder: typeof v.folder === 'string' ? v.folder : '', tags: v.tags.filter((t: unknown) => typeof t === 'string') } : EMPTY
   } catch {
@@ -26,19 +27,20 @@ function load(agentId: string): ChatContext {
   }
 }
 
-/** The agent's picks; tags that no longer exist are left out. */
-export function useChatContext(agentId: string) {
-  const [state, setState] = useState(() => ({ agentId, ctx: load(agentId) }))
-  // the same chat showing another agent (the drawer switched): that agent's picks
-  const ctx = state.agentId === agentId ? state.ctx : load(agentId)
-  const setCtx = (next: ChatContext) => setState({ agentId, ctx: next })
+/** This chat's picks (an agent's main session, or one of its side sessions); tags that no longer exist are left out. */
+export function useChatContext(agentId: string, session = '') {
+  const chat = session ? `${agentId}:${session}` : agentId
+  const [state, setState] = useState(() => ({ chat, ctx: load(chat) }))
+  // the same view showing another chat (another agent, another session): that chat's picks
+  const ctx = state.chat === chat ? state.ctx : load(chat)
+  const setCtx = (next: ChatContext) => setState({ chat, ctx: next })
   const tags = useDashboard((s) => s.tags)
   const value: ChatContext = { folder: ctx.folder, tags: ctx.tags.filter((id) => tags.some((t) => t.id === id)) }
   const set = (next: ChatContext) => {
     setCtx(next)
     try {
-      if (next.folder || next.tags.length) localStorage.setItem(key(agentId), JSON.stringify(next))
-      else localStorage.removeItem(key(agentId))
+      if (next.folder || next.tags.length) localStorage.setItem(key(chat), JSON.stringify(next))
+      else localStorage.removeItem(key(chat))
     } catch {
       // private mode / storage off: it just doesn't stay
     }

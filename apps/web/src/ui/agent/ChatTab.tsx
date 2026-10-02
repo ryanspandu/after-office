@@ -179,7 +179,8 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
 
   const pending = usePendingFiles(agent.id)
   // the folder and tags sent with each message (optional, kept per agent): the row shows while open or set
-  const context = useChatContext(agent.id)
+  // each session keeps its own folder and tags
+  const context = useChatContext(agent.id, session)
   const [contextOpen, setContextOpen] = useState(false)
   // phones: the row only while opened (the + button shows a dot when something is picked); elsewhere also while set
   const ctxShown = contextOpen || (context.active && !mobile)
