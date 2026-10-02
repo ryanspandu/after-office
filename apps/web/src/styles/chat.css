@@ -48,8 +48,9 @@
   width: 100%; justify-content: flex-start; gap: 8px; border: none; background: none; border-radius: 10px;
   padding: 6px 10px; font-size: 13px; font-weight: 400; min-width: 0;
 }
-.tool__head b { font-weight: 600; flex-shrink: 1; min-width: 0; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tool__head .mono { color: var(--muted); min-width: 0; }
+.tool__head b { font-weight: 600; flex: 0 0 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the tool's name stays whole (a long command gives way, cut short with "…"), only a very long name is cut */
+.tool__head .mono { color: var(--muted); flex: 1 1 0; min-width: 0; }
 .tool__chev { transition: transform 0.15s; flex-shrink: 0; }
 .tool__chev.open { transform: rotate(90deg); }
 .tool__body { padding: 0 10px 8px; }
