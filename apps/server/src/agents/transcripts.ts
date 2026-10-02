@@ -61,18 +61,21 @@ export const unwrapPaste = (t: string) =>
   t.replace(/<pasted_content\b[^>]*>\n?/g, '').replace(/\n?<\/pasted_content\b[^>]*>/g, '').trim()
 
 // On the hardened server the dashboard reads the agents' transcripts through an ACL (setup-vps.sh). Claude Code
-// sometimes writes one with mode 0600, and a file's group bits cap its ACL (the "mask"), so the dashboard can't read
-// it: that agent's chat stays empty and its tokens aren't counted. The agents' user opens the folder up again
-// (g+rX lifts the mask); the next poll reads it.
-// Only that agent's folder of transcripts (and the projects folder itself): the whole tree of every agent's history
-// can be large enough to run past the time limit before it reaches the one that's locked.
+// writes new ones (a new agent, a new session) with mode 0700 / 0600, and a file's group bits cap its ACL (the
+// "mask"), so the dashboard can't read it: that chat stays empty and its tokens aren't counted. The agents' user
+// widens the mask again, on that agent's folder of transcripts only; the next poll reads it.
+// Not with chmod: the folders carry the setgid bit (projects/ is 2750, new folders inherit it) and the agents' service
+// runs with RestrictSUIDSGID, which refuses any chmod of a setgid folder ("Operation not permitted"). setfacl changes
+// the mask without touching the mode's special bits.
 const unlocking = new Map<string, number>()
 function unlock(path: string) {
   if (!ISOLATED || Date.now() - (unlocking.get(path) ?? 0) < 30_000) return
   unlocking.set(path, Date.now())
   const dir = dirname(path)
   if (dirname(dir) !== CLAUDE_PROJECTS_DIR) return // not one of the agents' transcript folders
-  void runAsAgent(['sh', '-c', 'chmod g+rX "$1" && chmod -R g+rX "$2"', 'unlock', CLAUDE_PROJECTS_DIR, dir], { cwd: CLAUDE_PROJECTS_DIR, timeoutMs: 30_000, mergeStderr: true })
+  // (no setfacl: at least the files, which have no setgid bit)
+  const script = 'setfacl -R -m m::rX "$1" || find "$1" -type f -exec chmod g+r {} +'
+  void runAsAgent(['sh', '-c', script, 'unlock', dir], { cwd: CLAUDE_PROJECTS_DIR, timeoutMs: 30_000, mergeStderr: true })
     .then((r) => {
       if (r.code !== 0) console.warn(`[transcripts] could not open ${dir} to the dashboard (exit ${r.code}${r.timedOut ? ', timed out' : ''}): ${r.out.trim().slice(0, 300)}`)
       else console.log(`[transcripts] opened ${dir} to the dashboard`)
