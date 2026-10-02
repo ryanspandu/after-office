@@ -10,7 +10,6 @@ import { liveApi, useLive } from '../state/live'
 import { useOffice } from '../state/store'
 import { chime, useReplyAlerts } from '../state/replyAlerts'
 import { Modal } from './Modal'
-import { Select } from './Select'
 
 // Office automation: push notifications to your phone, and the quota brake that holds automatic work (auto-start,
 // cron, the manager's new tasks) when the Claude plan is nearly used up. Channels hold secrets, so they are set in
@@ -32,12 +31,33 @@ const EVENTS: { id: NotifyEvent; label: string; hint: string }[] = [
 ]
 
 /** Navbar button (desktop). Shows a dot while the quota brake holds work. */
-const PARALLEL_OPTIONS = [
-  { value: '0', label: 'Off' },
-  { value: '1', label: '1' },
-  { value: '2', label: '2' },
-  { value: '3', label: '3' },
-]
+/** How many at most per agent: typed freely, saved when it's a whole number in range. */
+function ParallelLimit({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [text, setText] = useState(String(value))
+  const commit = () => {
+    const n = Math.round(Number(text))
+    if (Number.isFinite(n) && n >= 1 && n <= MAX_PARALLEL) onChange(n)
+    else setText(String(value))
+  }
+  return (
+    <span className="parallel-limit" onClick={(e) => e.preventDefault()}>
+      At most
+      <input
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={MAX_PARALLEL}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+        aria-label="Parallel sessions per agent"
+      />
+      per agent (1–{MAX_PARALLEL})
+    </span>
+  )
+}
+const MAX_PARALLEL = 10
 
 export function AutomationButton() {
   const live = useOffice((s) => s.source === 'live')
@@ -238,22 +258,25 @@ export function AutomationModal() {
               </span>
             </span>
           </label>
-          <div className="switch-row switch-row--select">
-            <Select
-              size="sm"
-              ariaLabel="Parallel sessions per agent"
-              value={String(settings.parallelSessions ?? 0)}
-              options={PARALLEL_OPTIONS}
-              onChange={(v) => save({ parallelSessions: Number(v) })}
-            />
+          <label className="switch-row">
+            <span className="toggle">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={settings.parallelSessions > 0}
+                onChange={(ev) => save({ parallelSessions: ev.target.checked ? 2 : 0 })}
+              />
+              <span />
+            </span>
             <span>
-              <span className="switch-row__label">Parallel sessions per agent</span>
+              <span className="switch-row__label">Parallel sessions</span>
               <span className="field__hint">
-                When the agent is busy, the manager can start an urgent task in a separate session of theirs (in another folder than the one they're
+                When an agent is busy, the manager can start an urgent task in a separate session of theirs (in another folder than the one they're
                 working in) instead of queueing it. It closes when the task is done. Each session uses plan usage of its own.
               </span>
+              {settings.parallelSessions > 0 && <ParallelLimit value={settings.parallelSessions} onChange={(n) => save({ parallelSessions: n })} />}
             </span>
-          </div>
+          </label>
         </section>
         <section className="automation__section">
           <h4>Security</h4>

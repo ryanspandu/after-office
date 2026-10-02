@@ -15,7 +15,7 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
 }
 
 /** Most parallel sessions per agent the owner can allow. */
-export const MAX_PARALLEL_SESSIONS = 3
+export const MAX_PARALLEL_SESSIONS = 10
 const cleanParallel = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(MAX_PARALLEL_SESSIONS, Math.max(0, Math.round(v))) : undefined)
 
 const KEY = 'office'
