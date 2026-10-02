@@ -53,20 +53,45 @@ export function tapToType() {
     },
     true,
   )
-  // tapped again while selected: the keyboard (blur + focus inside the tap, so the phone shows it)
+  /** The keyboard, now: blur + focus inside the tap (that's what makes a phone show it). The page never sees that
+   *  blur and focus (a select would close its menu, a field would save on blur). */
+  const keyboard = (el: Field) => {
+    typing.add(el)
+    restore(el)
+    toggling = true
+    el.blur()
+    el.focus()
+    toggling = false
+  }
+  const waiting = (el: Field | null): el is Field => !!el && document.activeElement === el && el.dataset[KEPT] !== undefined && !justFocused.has(el)
+  for (const type of ['focusin', 'focusout'])
+    window.addEventListener(type, (e) => toggling && e.stopImmediatePropagation(), true)
+
+  // tapped again while selected: the keyboard
   document.addEventListener(
     'click',
     (e) => {
       const el = textField(e.target)
-      if (!el || document.activeElement !== el || el.dataset[KEPT] === undefined || justFocused.has(el)) return
-      typing.add(el)
-      restore(el)
-      toggling = true
-      el.blur()
-      el.focus()
-      toggling = false
+      if (waiting(el)) keyboard(el)
     },
     true,
+  )
+  // a select you can search (react-select): its touch ends the tap itself (no click follows), and a tap anywhere on
+  // it counts, not only on its small text field. With its options open they stay open while the keyboard comes up.
+  document.addEventListener(
+    'touchend',
+    (e) => {
+      const control = (e.target as Element | null)?.closest?.('.rs__control')
+      const el = textField(control?.querySelector('input') ?? null)
+      if (!control || !waiting(el)) return
+      const open = el.getAttribute('aria-expanded') === 'true'
+      keyboard(el)
+      if (open) {
+        e.stopPropagation()
+        e.preventDefault()
+      }
+    },
+    { capture: true, passive: false },
   )
   // the click of the tap that focused it isn't the second tap
   const justFocused = new WeakSet<Field>()

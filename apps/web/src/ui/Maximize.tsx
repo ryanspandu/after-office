@@ -64,9 +64,12 @@ export function useModalMaximize(width: number, remember?: string) {
     flushSync(() => setFull((v) => !v))
     if (!card || !from || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const to = card.getBoundingClientRect()
+    // phones: pulled up by hand, it grows on from where the finger let go (useSheetDrag)
+    const pulled = Number(card.dataset.fromHeight)
+    const fromHeight = pulled || from.height
     card.animate(
       [
-        { width: `${from.width}px`, height: `${from.height}px` },
+        { width: `${from.width}px`, height: `${fromHeight}px`, ...(pulled ? { borderTopLeftRadius: card.dataset.fromRadius || '0px', borderTopRightRadius: card.dataset.fromRadius || '0px' } : {}) },
         { width: `${to.width}px`, height: `${to.height}px` },
       ],
       { duration: 260, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
