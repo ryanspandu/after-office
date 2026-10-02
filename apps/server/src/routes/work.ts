@@ -19,6 +19,7 @@ import { cleanFolder } from '../work/folders'
 import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
+import { requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
 import { endShell, openShell, shellRunning, shellTarget } from '../work/shells'
 import { emptyTrash, listTrash, purgeTrash, restoreTrash, trashEntries } from '../work/trash'
 
@@ -347,22 +348,33 @@ workRoutes.delete('/trash/:id', (c) => {
   return c.json({ ok: true })
 })
 workRoutes.delete('/trash', (c) => c.json(emptyTrash(c.req.query('under') || undefined)))
-// a terminal in a folder (work/shells.ts): opening one asks for the authenticator code typed just now (it's a shell on
-// the server); reattaching to the one that's running, or ending it, doesn't
+// terminals (an agent's, a folder's shell) open with the authenticator code typed just now, for this browser session
+// and a while after (agents/termLock.ts)
+workRoutes.get('/terminal', (c) => c.json({ until: terminalsOpenUntil(c) }))
+workRoutes.post('/terminal/unlock', async (c) => {
+  const body = await c.req.json<{ code?: unknown }>().catch(() => null)
+  const refused = requireFreshCode(c, body?.code)
+  if (refused) return refused
+  return c.json({ until: unlockTerminals(c) })
+})
+// a terminal in a folder (work/shells.ts): opening (or reattaching) needs the terminals unlocked; ending it doesn't
 workRoutes.get('/workspaces/shell', async (c) => c.json({ running: await shellRunning(c.req.query('root') ?? '') }))
 workRoutes.post('/workspaces/shell', async (c) => {
   const body = await c.req.json<{ root?: unknown; code?: unknown }>().catch(() => null)
   const root = typeof body?.root === 'string' ? body.root : ''
-  if (!(await shellRunning(root))) {
-    const refused = requireFreshCode(c, body?.code)
+  // the code with it: unlocks first
+  if (body?.code !== undefined) {
+    const refused = requireFreshCode(c, body.code)
     if (refused) return refused
-  }
+    unlockTerminals(c)
+  } else if (!terminalsOpenUntil(c)) return c.json({ error: 'Enter the code from your authenticator app to open a terminal', locked: true }, 403)
   return c.json(await openShell(root))
 })
 workRoutes.delete('/workspaces/shell', async (c) => c.json(await endShell(c.req.query('root') ?? '')))
 workRoutes.get(
   '/workspaces/shell/term',
   requireSameOriginOnly,
+  requireUnlockedTerminal,
   async (c, next) => {
     c.set('shellTarget' as never, (await shellTarget(c.req.query('root') ?? '')) as never)
     return next()

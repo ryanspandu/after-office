@@ -9,6 +9,7 @@ import { liveApi } from '../state/live'
 import { useOffice, type OfficeAgent, avatarStyle, makeLook } from '../state/store'
 import { ChatTab, MODEL_OPTIONS, modelAlias } from './agent/ChatTab'
 import { TerminalTab } from './agent/TerminalTab'
+import { TerminalLock } from './TerminalLock'
 import { MODE_LABEL } from './AgentsPanel'
 import { FolderPicker } from './FolderPicker'
 import { Field } from './Modal'
@@ -205,12 +206,17 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
           {tab === 'chat' && <ChatTab agent={agent} />}
           {tab === 'terminal' && (
             // the session picked in the Chat tab (?session=s2), else the main one
-            <TerminalTab
-              key={termSession ?? ''}
-              agentId={agent.id}
-              session={termSession}
-              offline={termSession ? false : (agent.mainStatus ?? agent.status) === 'offline'}
-            />
+            <TerminalLock hint="Keys typed here go straight into this agent's Claude Code session.">
+              {(onRefused) => (
+                <TerminalTab
+                  key={termSession ?? ''}
+                  agentId={agent.id}
+                  session={termSession}
+                  offline={termSession ? false : (agent.mainStatus ?? agent.status) === 'offline'}
+                  onRefused={onRefused}
+                />
+              )}
+            </TerminalLock>
           )}
           {tab === 'folder' && !agent.cwd && <div className="empty">No folder known for this agent yet.</div>}
           {tab === 'folder' && agent.cwd && (

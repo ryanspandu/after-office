@@ -18,6 +18,7 @@ export function TerminalTab({
   url,
   label = 'keys go straight to Claude Code',
   actions,
+  onRefused,
 }: {
   agentId: string
   offline: boolean
@@ -27,6 +28,8 @@ export function TerminalTab({
   label?: string
   /** buttons at the end of its bar */
   actions?: React.ReactNode
+  /** the server turned the connection away before it opened (the terminals are locked again) */
+  onRefused?: () => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<State>('connecting')
@@ -64,7 +67,12 @@ export function TerminalTab({
       term.focus()
     }
     ws.onmessage = (e) => term.write(typeof e.data === 'string' ? e.data : new Uint8Array(e.data))
-    ws.onclose = () => setState('closed')
+    let opened = false
+    ws.addEventListener('open', () => (opened = true))
+    ws.onclose = () => {
+      setState('closed')
+      if (!opened) onRefused?.()
+    }
     const withCtrl = (d: string) => {
       if (!ctrlRef.current || !/^[a-z@[\\\]^_ ]$/i.test(d)) return d
       setCtrl(false)

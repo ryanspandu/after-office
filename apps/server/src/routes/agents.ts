@@ -13,6 +13,7 @@ import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSi
 import type { Runtime } from '../agents/state'
 import { readChat } from '../agents/transcripts'
 import { requireSameOrigin, terminalSocket } from '../agents/term'
+import { requireUnlockedTerminal } from '../agents/termLock'
 import { readProfile, writeProfile, type ProfileDoc } from '../agents/profile'
 import { accountSkill, accountSkillList } from '../agents/accountSkills'
 import { agentFile, agentFiles, fileResponse } from '../agents/files'
@@ -323,7 +324,8 @@ agentRoutes.post('/agents/:id/style', (c) => {
 })
 agentRoutes.put('/agents/:id/profile', async (c) => c.json(writeProfile(c.req.param('id'), await c.req.json<ProfileDoc>())))
 
-agentRoutes.get('/agents/:id/term', requireSameOrigin, terminalSocket)
+// the terminal: keys straight into its session, so only once the terminals are unlocked with the code (agents/termLock.ts)
+agentRoutes.get('/agents/:id/term', requireSameOrigin, requireUnlockedTerminal, terminalSocket)
 
 agentRoutes.get('/agents/:id/chat', (c) => {
   const row = agentsRepo.get(c.req.param('id'))
