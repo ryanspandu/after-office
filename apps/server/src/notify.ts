@@ -230,6 +230,8 @@ function onReport(r: WorkReport) {
   if (r.kind === 'note') return void notify('managerNote', `${name(r.agentId)}: ${r.title}`, r.text)
   // with a quality gate, the notification comes when the check is done (work.ts runGate)
   if (r.kind === 'task' && tasksRepo.get(r.refId)?.checkState === 'running') return
+  // the manager's task: the manager tells the owner (its note), not every step
+  if (r.kind === 'task' && agentsRepo.get(tasksRepo.get(r.refId)?.delegatedBy ?? '')?.kind === 'manager') return
   if (r.kind === 'task') return void notify('review', r.ok ? `${name(r.agentId)} finished "${r.title}"` : `${name(r.agentId)} did not finish "${r.title}"`, r.text)
   if (!r.ok) void notify('cronFailed', `Daily job "${r.title}" did not run`, r.text)
 }

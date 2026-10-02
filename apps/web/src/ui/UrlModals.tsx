@@ -26,7 +26,7 @@ import { TasksModal } from './TasksModal'
 // Every modal, shown from the address bar (state/url.ts). Stacking follows the order below: lists first, then what
 // is opened from them (a task, a report), then forms and settings on top.
 
-const REPORTS_VIEW = ['reports', 'q', 'range', 'from', 'to', 'page', 'per', 'folder', 'tag', 'by']
+const REPORTS_VIEW = ['reports', 'q', 'range', 'from', 'to', 'page', 'per', 'folder', 'tag', 'by', 'ri']
 const clear = (keys: string[]) => () => setUrl(Object.fromEntries(keys.map((k) => [k, null])))
 
 export function UrlModals() {

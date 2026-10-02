@@ -1,3 +1,4 @@
+import { jobForTask } from './jobs'
 import type { FollowUpDecision, LiveFollowUp, LiveMode, OfficeTask, TaskStatus } from '@after-office/shared'
 import { agentsRepo, commentsRepo, queueRepo, tasksRepo } from '../db'
 import { cleanFolder } from './folders'
@@ -28,6 +29,8 @@ export interface DelegateInput {
   tags?: string[]
   /** if the agent is busy, run it in a parallel session (when the owner allows it) */
   parallel?: boolean
+  /** the bigger piece of work it's a step of (a name; the same name is the same job) */
+  job?: string
 }
 
 /** Most prompts that may wait for one agent; stops a runaway manager from piling work on someone. */
@@ -58,6 +61,8 @@ export async function delegateTask(managerId: string, input: DelegateInput) {
   const after = [...new Set(input.after ?? [])]
   for (const id of after) if (!tasksRepo.get(id)) throw new AgentError(`No task ${id} to wait for; see list_tasks`, 404)
   if (after.length) task.blockedBy = after
+  const job = jobForTask(input.job, after)
+  if (job) task.job = job
   const paused = quotaPause()
   // waiting (for other tasks, or for plan usage to drop): the task starts on its own later (tickTasks)
   if (after.length || paused) task.autoStart = true

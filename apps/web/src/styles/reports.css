@@ -1,5 +1,5 @@
 /* ── reports (ui/Reports.tsx) ───────────────────────────────────────── */
-.side .card.card--reports:not(.card--grow) { max-height: 244px; min-height: 120px; flex-shrink: 0; }
+.side .card.card--reports:not(.card--grow) { max-height: 340px; min-height: 120px; flex-shrink: 0; }
 .side--left .card--grow { min-height: 220px; }
 .report-row { list-style: none; }
 .report-row + .report-row { border-top: 1px solid var(--line); }
@@ -107,3 +107,44 @@
   .pager .icon-btn { width: 26px; height: 26px; min-width: 0; padding: 0; flex-shrink: 0; }
   .pager__page { min-width: 34px; white-space: nowrap; }
 }
+/* one job: its reports as one item, opening into its steps (ui/Reports.tsx JobRow) */
+.report-row__job { display: inline-flex; align-items: center; gap: 3px; min-width: 0; max-width: 45%; padding: 0 6px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); font-size: 10.5px; line-height: 16px; color: var(--text); }
+.report-row__job svg { flex-shrink: 0; font-size: 10px; }
+.job-row__who { display: inline-flex; flex-shrink: 0; }
+.job-row__who .report-row__who + .report-row__who { margin-left: -4px; box-shadow: 0 0 0 1.5px var(--card); }
+.job-row__chev { flex-shrink: 0; margin-top: 3px; color: var(--muted); transition: transform 0.15s; }
+.job-row__chev.open { transform: rotate(90deg); }
+.job-row__steps { margin: 0 0 6px 22px; padding: 0 0 0 8px; border-left: 2px solid var(--line); }
+.job-row__steps .report-row__main { padding-top: 6px; padding-bottom: 6px; }
+/* the card reads at a glance: the verdict as a badge, title and words on up to two lines (not cut at one) */
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.report-row__title-line { align-items: flex-start; }
+.report-row__title.clamp2 { line-height: 1.3; }
+.report-row__text.clamp2 { line-height: 1.35; }
+.outcome { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; margin-top: 1px; padding: 0 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; line-height: 17px; white-space: nowrap; color: var(--muted); background: var(--card-2); }
+.outcome svg { font-size: 11px; }
+.outcome--done, .outcome--pass { color: #2fbf71; background: rgba(47, 191, 113, 0.13); }
+.outcome--revise { color: #d9a400; background: rgba(217, 164, 0, 0.14); }
+.outcome--failed { color: var(--danger); background: color-mix(in srgb, var(--danger) 13%, transparent); }
+.outcome--needs_you { color: var(--hl); background: var(--hl-soft); }
+.outcome--working { color: var(--hl); background: var(--hl-soft); }
+.outcome--working svg { animation: spin 1.2s linear infinite; }
+.outcome--review { color: #2f9fbf; background: rgba(47, 159, 191, 0.13); }
+@media (prefers-reduced-motion: reduce) { .outcome--working svg { animation: none; } }
+/* View all (ui/Reports.tsx ReportsModal): phones, one column as before; a computer, an inbox: list | the report */
+.reports-modal__side { display: contents; }
+.report-row.is-picked > .report-row__main { background: var(--hl-soft); }
+.reports-modal--inbox { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr); gap: 0; padding: 0; height: min(80vh, 860px); }
+.reports-modal--inbox .reports-modal__side { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 14px 14px 12px 18px; border-right: 1px solid var(--line); }
+.reports-modal--inbox .reports-modal__list { flex: 1; min-height: 0; max-height: none; overflow-y: auto; }
+.reports-modal--inbox .reports-modal__bar--filters .search-box { flex: 1 1 100%; }
+.reports-modal--inbox .pager { flex-wrap: wrap; row-gap: 6px; }
+.reports-modal__reader { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; padding: 16px 22px 0; }
+.reports-modal__reader .modal__foot { position: sticky; bottom: 0; margin-top: auto; padding: 12px 0 16px; background: var(--card); border-top: 1px solid var(--line); }
+.report__title { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.report__title .outcome { vertical-align: 2px; margin-left: 4px; }
+.reports-modal__none { margin: auto; display: flex; align-items: center; gap: 8px; }
+.reports-modal__reader .report__text { max-height: none; overflow: visible; }
+/* the day a run of reports belongs to (Today, Yesterday, …): an inbox, not a log */
+.report-day { list-style: none; position: sticky; top: 0; z-index: 1; padding: 8px 4px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); background: var(--card); }
+.report-day + .report-row { border-top: none; }

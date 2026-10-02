@@ -340,6 +340,16 @@ export function onPromptSubmitted(agentId: string, prompt?: string, midTurn = fa
   fileReport(agentId, a, 'Interrupted before the agent finished. The task is back in To do.', false)
 }
 
+/**
+ * A task the manager handed out (and is still there to follow up): its report goes to the manager, who sums the work
+ * up for the owner. So it arrives already read, with no push: the owner reads the manager's notes, and the steps
+ * stay one click away (Reports → Agents).
+ */
+export function managerFollowsUp(taskId: string | null | undefined) {
+  const by = taskId ? tasksRepo.get(taskId)?.delegatedBy : undefined
+  return !!by && agentsRepo.get(by)?.kind === 'manager'
+}
+
 export function fileReport(agentId: string, ref: Omit<Active, 'restoreMode' | 'submitted' | 'promptHead'>, text: string | undefined, ok: boolean, opts: { forward?: boolean } = {}) {
   // attachments: files written during the run, then files the report points to (only ones the agent may share)
   const row = agentsRepo.get(agentId)
@@ -354,12 +364,15 @@ export function fileReport(agentId: string, ref: Omit<Active, 'restoreMode' | 's
     ok,
     startedAt: ref.startedAt,
     finishedAt: Date.now(),
-    read: false,
+    read: managerFollowsUp(ref.taskId),
+    ...(managerFollowsUp(ref.taskId) ? { viaManager: true } : {}),
     ...(files.length ? { files } : {}),
     // the task's tags come along, so the report is found under them too
     ...(ref.taskId && tasksRepo.get(ref.taskId)?.tags?.length ? { tags: tasksRepo.get(ref.taskId)!.tags } : {}),
     // and its folder: the report shows in that folder's details
     ...(ref.taskId && tasksRepo.get(ref.taskId)?.folder ? { folder: tasksRepo.get(ref.taskId)!.folder } : {}),
+    // and its job: shown with the other steps of the same work
+    ...(ref.taskId && tasksRepo.get(ref.taskId)?.job ? { job: tasksRepo.get(ref.taskId)!.job } : {}),
   }
   reportsRepo.put(report)
   reportsRepo.prune()

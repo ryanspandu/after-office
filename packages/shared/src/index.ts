@@ -301,6 +301,15 @@ export interface TaskArchivePage {
   archiveDays: number
 }
 
+/** How a piece of work turned out, at a glance: approved, needs another round, failed, or waiting on the owner. */
+export type ReportOutcome = 'done' | 'pass' | 'revise' | 'failed' | 'needs_you'
+
+/** One piece of work made of several tasks (the owner's one request), so its reports read as one item. */
+export interface WorkJob {
+  id: string
+  title: string
+}
+
 /** What an agent reported when it finished a task or a cron run: its final message of that turn. */
 export interface WorkReport {
   id: string
@@ -323,6 +332,12 @@ export interface WorkReport {
   folder?: string
   /** tag ids (a task's report starts with the task's tags) */
   tags?: string[]
+  /** the piece of work it belongs to (its task's, or the one the manager's note is about) */
+  job?: WorkJob
+  /** how it turned out, when the manager said so (notify_user) */
+  outcome?: ReportOutcome
+  /** a step of a task the manager handed out: the manager sums it up, so the Reports card leaves it to that summary */
+  viaManager?: boolean
 }
 
 export type OfficeEvent =
@@ -432,6 +447,9 @@ export interface OfficeTask {
   /** Live: if its agent is busy, run it in a session of its own next to the busy one (Office settings → parallel
    *  sessions, when allowed and the folders don't overlap) instead of waiting in the queue. */
   parallel?: boolean
+  /** The bigger piece of work it is a step of (the owner's one request: write → review → revise…). Its reports are
+   *  shown together, as one item. Set by the manager (delegate_task `job`); steps chained with `after` share it. */
+  job?: WorkJob
   /** Server-owned: the side session it's running in (s2, s3…), while it runs there; closed when it finishes. */
   sessionKey?: string
 }

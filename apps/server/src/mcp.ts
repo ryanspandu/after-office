@@ -11,6 +11,7 @@ import { requestHire } from './work/hires'
 import { bossMode, countBoss } from './work/settings'
 import { noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
+import { jobNamed } from './work/jobs'
 import { isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker } from './work/work'
 import { listTags, tagIdsByName, tagNames } from './work/tags'
 import { cleanFolder } from './work/folders'
@@ -172,6 +173,13 @@ function buildServer(managerId: string) {
           .optional()
           .describe('task ids this one waits for; it starts on its own once they are finished (use it to chain steps, e.g. build → test)'),
         tags: z.array(z.string().max(40)).max(10).optional().describe('tag names the owner made (see list_tags), e.g. ["SEO"]; only existing tags'),
+        job: z
+          .string()
+          .max(120)
+          .optional()
+          .describe(
+            "the owner's request this task is a step of, as a short name (e.g. \"Artikel TV Stand\"). Give every step of the same request the same name (write, review, revise, review again): the owner sees them as one item instead of a report per step. A task with `after` joins the job of the task it waits for on its own",
+          ),
         parallel: z
           .boolean()
           .optional()
@@ -180,7 +188,7 @@ function buildServer(managerId: string) {
           ),
       },
     },
-    async ({ agent, title, description, priority, deadlineHours, mode, after, folder, tags, parallel }) => {
+    async ({ agent, title, description, priority, deadlineHours, mode, after, folder, tags, parallel, job }) => {
       try {
         const target = resolveAgent(agent, managerId)
         const out = await delegateTask(managerId, {
@@ -189,6 +197,7 @@ function buildServer(managerId: string) {
           folder: folder ?? null,
           tags: tagIdsByName(tags),
           parallel,
+          job,
           title,
           description,
           priority,
@@ -210,7 +219,7 @@ function buildServer(managerId: string) {
         const boss = bossMode()
         // asked for a parallel session but queued: why
         const notParallel = parallel && out.result === 'queued' ? parallelBlocker(out.task, target.id) : null
-        return json({ taskId: out.task.id, agent: target.name, division: divisionOf(target.role), delivery, ...(notParallel ? { parallelNotUsed: notParallel } : {}), ...(boss ? { bossMode: `on until ${new Date(boss.until).toISOString()}: started without approval` } : {}) })
+        return json({ taskId: out.task.id, agent: target.name, division: divisionOf(target.role), delivery, ...(out.task.job ? { job: out.task.job.title } : {}), ...(notParallel ? { parallelNotUsed: notParallel } : {}), ...(boss ? { bossMode: `on until ${new Date(boss.until).toISOString()}: started without approval` } : {}) })
       } catch (e) {
         return fail(e)
       }
@@ -628,18 +637,23 @@ function buildServer(managerId: string) {
     'notify_user',
     {
       description:
-        'Put a note in the dashboard’s Reports (unread badge, and a push notification to their phone if set up), for things the owner should see even if they are not reading this chat. When it is about the work in a folder, give `folder`: the note then also shows in that folder\'s reports.',
+        'Put a note in the dashboard’s Reports (unread badge, and a push notification to their phone if set up), for things the owner should see even if they are not reading this chat. When it is about the work in a folder, give `folder`: the note then also shows in that folder\'s reports. One note per outcome: if you already told the owner this (e.g. another report of the same work came in), don\'t repeat it.',
       inputSchema: {
         title: z.string().min(1).max(200),
         text: z.string().min(1).max(20_000),
         folder: z.string().max(1000).optional().describe('absolute path of the folder the note is about'),
         tags: z.array(z.string().max(40)).max(10).optional().describe("tag names the owner made (see list_tags), e.g. [\"SEO\"]; only existing tags"),
+        job: z.string().max(120).optional().describe('the job this note sums up (the same name you gave its tasks in delegate_task): it is shown with that work'),
+        outcome: z
+          .enum(['done', 'pass', 'revise', 'failed', 'needs_you'])
+          .optional()
+          .describe('how it turned out, shown as a badge: done (finished), pass (approved in review), revise (needs another round), failed, needs_you (the owner has to decide or act)'),
       },
     },
-    async ({ title, text: body, folder, tags }) => {
+    async ({ title, text: body, folder, tags, job, outcome }) => {
       try {
         const where = cleanFolder(folder)
-        notifyUser(managerId, title, body, tagIdsByName(tags), where)
+        notifyUser(managerId, title, body, tagIdsByName(tags), where, job ? jobNamed(job) : undefined, outcome)
         return text(where ? `Posted to Reports, with the folder ${where}.` : 'Posted to Reports.')
       } catch (e) {
         return fail(e)

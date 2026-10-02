@@ -75,6 +75,7 @@ function cleanTask(id: string, b: Partial<OfficeTask>, prev: OfficeTask | null):
     assignAskedAt: prev?.assignAskedAt,
     pendingCheck: prev?.pendingCheck,
     sessionKey: prev?.sessionKey,
+    job: prev?.job,
   }
 }
 

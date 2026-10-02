@@ -3,7 +3,7 @@ import { agentsRepo, tasksRepo } from '../db'
 import { addPending, resolvePending } from '../agents/registry'
 import { runCheck } from './checks'
 import { notify } from '../notify'
-import { addComment, deliver, forwardToManager, markTask, publishWork, taskFolder } from './work'
+import { addComment, deliver, forwardToManager, managerFollowsUp, markTask, publishWork, taskFolder } from './work'
 
 // The quality gate: a task's check command runs when its agent reports; a failed check goes back for a fix round (or
 // to review). A check the manager proposes waits for the owner's approval.
@@ -31,7 +31,7 @@ export async function runGate(taskId: string, agentId: string, cmd: string, repo
     markTask(taskId, { status: 'review', checkState: 'passed' })
     addComment({ taskId, author: 'system', text: `Check passed: ${cmd} (${secs}s)` })
     if (report) forwardToManager(report, `Quality check \`${cmd}\` passed.`)
-    void notify('review', `${who} finished "${t.title}"`, `Check passed. ${report?.text ?? ''}`)
+    if (!managerFollowsUp(taskId)) void notify('review', `${who} finished "${t.title}"`, `Check passed. ${report?.text ?? ''}`)
     return
   }
   addComment({ taskId, author: 'system', text: `Check failed: ${cmd} (${secs}s)\n\n${res.output}` })

@@ -1,4 +1,4 @@
-import type { WorkReport } from '@after-office/shared'
+import type { ReportOutcome, WorkJob, WorkReport } from '@after-office/shared'
 import { agentsRepo, reportsRepo } from '../db'
 import { AgentError } from '../agents/manager'
 import { agentFiles } from '../agents/files'
@@ -8,7 +8,7 @@ import { publishWork } from './work'
 // Reports: the manager's notes to the owner, and marking reports read or tagged.
 
 /** Something the manager wants the user to see outside the chat: filed as an unread report. */
-export function notifyUser(managerId: string, title: string, text: string, tags?: string[], folder?: string) {
+export function notifyUser(managerId: string, title: string, text: string, tags?: string[], folder?: string, job?: WorkJob, outcome?: ReportOutcome) {
   const now = Date.now()
   const report: WorkReport = {
     id: crypto.randomUUID(),
@@ -23,6 +23,8 @@ export function notifyUser(managerId: string, title: string, text: string, tags?
     read: false,
     ...(tags?.length ? { tags } : {}),
     ...(folder ? { folder } : {}),
+    ...(job ? { job } : {}),
+    ...(outcome ? { outcome } : {}),
   }
   // files it points at (its team's work, the office's folders) become the note's attachments
   const row = agentsRepo.get(managerId)

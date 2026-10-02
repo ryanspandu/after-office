@@ -104,6 +104,8 @@ describe('background subagents', () => {
     const reports = reportsFor('bg-1')
     expect(reports).toHaveLength(1)
     expect(reports[0].text).toBe('All done: see keywords.md')
+    // the manager's task: the manager sums it up for the owner, so its own report arrives read
+    expect(reports[0].read).toBe(true)
     await until(() => queueRepo.countFor('bg-mgr') > 0)
     const [forwarded] = managerInbox()
     expect(forwarded).toContain('Report from BG-W on task "Keyword research"')

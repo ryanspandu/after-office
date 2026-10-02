@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuSlidersHorizontal, LuCheckCheck, LuChevronLeft, LuChevronRight, LuCircleAlert, LuClock, LuCrown, LuFileText, LuFolder, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
-import type { WorkReport } from '@after-office/shared'
+import { LuSlidersHorizontal, LuCheckCheck, LuChevronLeft, LuChevronRight, LuCircleAlert, LuCircleCheck, LuCircleX, LuClock, LuHourglass, LuLoader, LuRefreshCw, LuHand, LuCrown, LuFileText, LuFolder, LuLayers, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
+import type { OfficeTask, ReportOutcome, WorkJob, WorkReport } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
 import { useOffice, avatarStyle } from '../state/store'
@@ -19,6 +19,7 @@ import { RangePicker, type PickedRange } from './DateRangePicker'
 import { Select } from './Select'
 import { TagChips, TagFilter, TagPicker } from './tags'
 import { NotesList } from './OwnerNotes'
+import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 
 // Reports: what an agent said when it finished a task or a cron run (its final message), kept apart from the chat
 // so finished work can be reviewed later. Written by the server on the agent's Stop hook; no LLM involved.
@@ -43,16 +44,19 @@ const KindIcon = ({ r }: { r: WorkReport }) =>
     <LuListTodo className="report__icon" />
   )
 
-export function ReportRow({ r, now, onOpen }: { r: WorkReport; now: number; onOpen: () => void }) {
+export function ReportRow({ r, now, onOpen, showJob = true, picked }: { r: WorkReport; now: number; onOpen: () => void; showJob?: boolean; picked?: boolean }) {
   const agent = useOffice((s) => s.agents.find((a) => a.id === r.agentId))
   const firstLine = r.text.replace(/[#*`>_-]/g, '').split('\n').find((l) => l.trim()) ?? ''
   return (
-    <li className={`report-row${r.read ? '' : ' report-row--unread'}`}>
+    <li className={`report-row${r.read ? '' : ' report-row--unread'}${picked ? ' is-picked' : ''}`} aria-current={picked || undefined}>
       <button className="report-row__main" onClick={onOpen}>
         <KindIcon r={r} />
         <span className="report-row__body">
-          <span className="report-row__title truncate">{r.title}</span>
-          <span className="report-row__text truncate">{firstLine}</span>
+          <span className="report-row__title-line">
+            <span className="report-row__title clamp2">{r.title}</span>
+            <OutcomeBadge state={outcomeOf(r)} />
+          </span>
+          <span className="report-row__text clamp2">{firstLine}</span>
           <span className="report-row__meta">
             {/* who: a small initial in the agent's colour, about the size of the text */}
             <span className="report-row__who" style={agent ? avatarStyle(agent.look.shirt) : undefined} aria-hidden>
@@ -61,6 +65,11 @@ export function ReportRow({ r, now, onOpen }: { r: WorkReport; now: number; onOp
             <span className="truncate">
               {agent?.name ?? 'Removed agent'} · {ago(now - r.finishedAt)}
             </span>
+            {showJob && r.job && (
+              <span className="report-row__job truncate">
+                <LuLayers /> {r.job.title}
+              </span>
+            )}
             <TagChips ids={r.tags} />
           </span>
         </span>
@@ -70,9 +79,152 @@ export function ReportRow({ r, now, onOpen }: { r: WorkReport; now: number; onOp
   )
 }
 
-type PanelTab = 'manager' | 'agents'
+/** The day a report belongs to, as an inbox says it: Today, Yesterday, a weekday this week, else the date. */
+export function dayLabel(at: number, now: number) {
+  const start = (t: number) => new Date(new Date(t).toDateString()).getTime()
+  const days = Math.round((start(now) - start(at)) / 86_400_000)
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  const d = new Date(at)
+  if (days < 7) return d.toLocaleDateString('en-GB', { weekday: 'long' })
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date(now).getFullYear() ? { year: 'numeric' } : {}) })
+}
+
+/** A list split by day: a heading before the first item of each day. */
+function withDays<T>(items: T[], at: (x: T) => number, now: number, render: (x: T) => ReactNode, key: (x: T) => string): ReactNode[] {
+  const out: ReactNode[] = []
+  let last = ''
+  for (const x of items) {
+    const label = dayLabel(at(x), now)
+    if (label !== last) {
+      out.push(
+        <li key={`day-${label}-${key(x)}`} className="report-day" aria-hidden>
+          {label}
+        </li>,
+      )
+      last = label
+    }
+    out.push(render(x))
+  }
+  return out
+}
+
+/** How a report turned out: what the manager said, a failed run, or the review's verdict in its first lines. */
+export function outcomeOf(r: WorkReport): ReportOutcome | null {
+  if (r.outcome) return r.outcome
+  if (!r.ok) return 'failed'
+  const head = r.text.slice(0, 600)
+  if (/\bPASS(ED)?\b/.test(head)) return 'pass'
+  if (/\b(REVISE|REVISI)\b/.test(head)) return 'revise'
+  return null
+}
+
+type BadgeState = ReportOutcome | 'working' | 'waiting' | 'review'
+const BADGES: Record<BadgeState, { label: string; icon: ReactNode }> = {
+  done: { label: 'Done', icon: <LuCircleCheck /> },
+  pass: { label: 'Pass', icon: <LuCircleCheck /> },
+  revise: { label: 'Revise', icon: <LuRefreshCw /> },
+  failed: { label: 'Failed', icon: <LuCircleX /> },
+  needs_you: { label: 'Needs you', icon: <LuHand /> },
+  working: { label: 'Working', icon: <LuLoader /> },
+  waiting: { label: 'Waiting', icon: <LuHourglass /> },
+  review: { label: 'To review', icon: <LuCircleCheck /> },
+}
+/** The verdict at a glance, before the words. */
+export function OutcomeBadge({ state }: { state: BadgeState | null }) {
+  if (!state) return null
+  const b = BADGES[state]
+  return (
+    <span className={`outcome outcome--${state}`}>
+      {b.icon} {b.label}
+    </span>
+  )
+}
+
+/** Reports that read as one item: every report of one job, or the rounds of one task; anything else on its own. */
+interface ReportGroup {
+  key: string
+  job?: WorkJob
+  /** newest first */
+  reports: WorkReport[]
+}
+export function groupReports(list: WorkReport[]): ReportGroup[] {
+  const groups = new Map<string, ReportGroup>()
+  for (const r of list) {
+    const key = r.job ? `job:${r.job.id}` : r.kind === 'task' ? `task:${r.refId}` : r.id
+    const g = groups.get(key)
+    if (g) g.reports.push(r)
+    else groups.set(key, { key, job: r.job, reports: [r] })
+  }
+  return [...groups.values()]
+    .map((g) => ({ ...g, reports: [...g.reports].sort((a, b) => b.finishedAt - a.finishedAt) }))
+    .sort((a, b) => b.reports[0].finishedAt - a.reports[0].finishedAt)
+}
+
+/** Where a job (or a task) stands, from its tasks still on the board. */
+function jobState(tasks: OfficeTask[]): 'working' | 'waiting' | 'review' | 'done' | null {
+  if (!tasks.length) return null
+  if (tasks.some((t) => t.status === 'in_progress')) return 'working'
+  if (tasks.some((t) => t.status === 'todo')) return 'waiting'
+  if (tasks.some((t) => t.status === 'review')) return 'review'
+  return 'done'
+}
+
+/** One job: its title, how it stands, the latest step's words; opens into its steps. */
+function JobRow({ g, now }: { g: ReportGroup; now: number }) {
+  const [open, setOpen] = useState(false)
+  const reports = [...g.reports].sort((a, b) => b.finishedAt - a.finishedAt)
+  // its words: the manager's latest summary if there is one, else the latest step's
+  const latest = reports.find((r) => r.kind === 'note') ?? reports[0]
+  const newest = reports[0]
+  const refIds = new Set(g.reports.map((r) => r.refId))
+  const tasks = useDashboard(useShallow((s) => s.tasks.filter((t) => (g.job ? t.job?.id === g.job.id : refIds.has(t.id)))))
+  const agents = useOffice((s) => s.agents)
+  const who = [...new Set(g.reports.map((r) => r.agentId))].map((id) => agents.find((a) => a.id === id)).filter((a) => !!a)
+  const state = jobState(tasks)
+  // still going: that first; else what the latest word on it says, else where its tasks stand
+  const badge: BadgeState | null = state === 'working' || state === 'waiting' ? state : (outcomeOf(latest) ?? (state === 'review' ? 'review' : state))
+  const unread = g.reports.some((r) => !r.read)
+  const firstLine = latest.text.replace(/[#*`>_-]/g, '').split('\n').find((l) => l.trim()) ?? ''
+  const steps = g.reports.length
+  return (
+    <li className={`report-row job-row${unread ? ' report-row--unread' : ''}${open ? ' is-open' : ''}`}>
+      <button className="report-row__main" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <LuLayers className="report__icon" />
+        <span className="report-row__body">
+          <span className="report-row__title-line">
+            <span className="report-row__title clamp2">{g.job?.title ?? latest.title}</span>
+            <OutcomeBadge state={badge} />
+          </span>
+          <span className="report-row__text clamp2">{firstLine}</span>
+          <span className="report-row__meta">
+            <span className="job-row__who" aria-hidden>
+              {who.slice(0, 4).map((a) => (
+                <span key={a.id} className="report-row__who" style={avatarStyle(a.look.shirt)}>
+                  {a.name[0]}
+                </span>
+              ))}
+            </span>
+            <span className="truncate">
+              {steps} {steps === 1 ? 'report' : 'reports'} · {ago(now - newest.finishedAt)}
+            </span>
+          </span>
+        </span>
+        {unread && <span className="report-row__dot" aria-label="Unread" />}
+        <LuChevronRight className={`job-row__chev${open ? ' open' : ''}`} />
+      </button>
+      {open && (
+        <ul className="job-row__steps">
+          {reports.map((r) => (
+            <ReportRow key={r.id} r={r} now={now} showJob={false} onOpen={() => openUrl({ report: r.id })} />
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}
+
 type PanelView = 'reports' | 'notes'
-const TAB_KEY = 'ao-reports-tab'
 const VIEW_KEY = 'ao-reports-view'
 const remembered = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
   try {
@@ -89,14 +241,6 @@ const remember = (key: string, v: string) => {
     /* this visit only */
   }
 }
-/**
- * Reports that belong under "Manager": the manager's own notes, and anything the manager itself ran (a cron job or
- * a task assigned to it). Everything else is an agent's.
- */
-function useIsManagerReport() {
-  const managerIds = useOffice(useShallow((s) => s.agents.filter((a) => a.kind === 'manager').map((a) => a.id)))
-  return (r: WorkReport) => r.kind === 'note' || managerIds.includes(r.agentId)
-}
 
 /** The card: Reports (the manager's summaries, the agents' reports) | Notes (the owner's own). */
 export function ReportsPanel() {
@@ -104,23 +248,19 @@ export function ReportsPanel() {
   const reports = useDashboard((s) => s.reports)
   const now = useNow(60_000).getTime()
   const [view, setView] = useState<PanelView>(() => remembered(VIEW_KEY, ['reports', 'notes'] as const, 'reports'))
-  // the manager's summaries apart from the agents' own task and cron reports
-  const [tab, setTab] = useState<PanelTab>(() => remembered(TAB_KEY, ['manager', 'agents'] as const, 'manager'))
   const pickView = (v: PanelView) => (setView(v), remember(VIEW_KEY, v))
-  const pick = (t: PanelTab) => (setTab(t), remember(TAB_KEY, t))
-  const isManagerReport = useIsManagerReport()
-  const fromManager = reports.filter(isManagerReport)
-  const fromAgents = reports.filter((r) => !isManagerReport(r))
-  const shown = tab === 'manager' ? fromManager : fromAgents
-  const unreadOf = (list: WorkReport[]) => list.filter((r) => !r.read).length
-  const unread = unreadOf(reports)
+  // One list, one item per piece of work. A step of the manager's task is left to the manager's summary (it shows
+  // inside that job's item); everything else (the manager's notes, the owner's own tasks, daily jobs) is its own.
+  const shown = reports.filter((r) => !r.viaManager || r.job)
+  const unread = shown.filter((r) => !r.read).length
+  const items = groupReports(shown)
   return (
     <section className="card card--reports">
       <header className="card__head">
         <div className="card__titletabs" role="tablist" aria-label="Reports or notes">
           <button role="tab" aria-selected={view === 'reports'} className={view === 'reports' ? 'is-on' : ''} onClick={() => pickView('reports')}>
             <LuFileText /> <span className="card__titletabs-label">Reports</span>
-            {view !== 'reports' && unread > 0 && <span className="badge badge--accent reports-tabs__count">{unread}</span>}
+            {unread > 0 && <span className="badge badge--accent reports-tabs__count">{unread}</span>}
           </button>
           <span className="card__titletabs-sep" aria-hidden>
             |
@@ -136,7 +276,7 @@ export function ReportsPanel() {
               <LuPlus />
             </button>
           )}
-          <button className="small" onClick={() => (view === 'notes' ? openUrl({ notes: '1' }) : openUrl({ reports: tab, page: null, q: null }))}>
+          <button className="small" onClick={() => (view === 'notes' ? openUrl({ notes: '1' }) : openUrl({ reports: 'all', page: null, q: null }))}>
             View all
           </button>
         </span>
@@ -144,33 +284,21 @@ export function ReportsPanel() {
       {view === 'notes' ? (
         <NotesList />
       ) : (
-        <>
-          <div className="seg task-tabs reports-tabs" role="tablist" aria-label="Reports from">
-            {(
-              [
-                ['manager', <LuCrown key="i" />, 'Manager', fromManager],
-                ['agents', <LuListTodo key="i" />, 'Agents', fromAgents],
-              ] as const
-            ).map(([id, icon, label, list]) => (
-              <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => pick(id)}>
-                {icon} {label}
-                {unreadOf(list) > 0 && (
-                  <span className="badge badge--accent reports-tabs__count" {...tip(`${unreadOf(list)} unread`)}>
-                    {unreadOf(list)}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-          <ul className="list">
-            {shown.slice(0, 20).map((r) => (
-              <ReportRow key={r.id} r={r} now={now} onOpen={() => openUrl({ report: r.id })} />
-            ))}
-            {!shown.length && ready && (
-              <li className="empty">{tab === 'manager' ? "The manager's summaries of finished work show up here." : 'Finished tasks and daily runs show up here.'}</li>
-            )}
-          </ul>
-        </>
+        <ul className="list">
+          {withDays(
+            items.slice(0, 20),
+            (g) => g.reports[0].finishedAt,
+            now,
+            (g) =>
+              g.reports.length > 1 ? (
+                <JobRow key={g.key} g={g} now={now} />
+              ) : (
+                <ReportRow key={g.key} r={g.reports[0]} now={now} onOpen={() => openUrl({ report: g.reports[0].id })} />
+              ),
+            (g) => g.key,
+          )}
+          {!items.length && ready && <li className="empty">Finished work shows up here: the manager's summaries, your own tasks and daily jobs.</li>}
+        </ul>
       )}
     </section>
   )
@@ -288,11 +416,17 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, latestKey])
 
+  // a computer: an inbox, the list on the left and the report picked (?ri=<id>) on the right; phones open it on top
+  const wide = !useMediaQuery(MOBILE)
+  const picked = params.ri ?? ''
+  const pickedReport = useDashboard((s) => s.reports.find((r) => r.id === picked)) ?? data?.items.find((r) => r.id === picked)
+  const pick = (id: string) => (wide ? setUrl({ ri: id }) : openUrl({ report: id }))
   const first = data && data.total ? (data.page - 1) * data.per + 1 : 0
   const last = data ? Math.min(data.total, data.page * data.per) : 0
   return (
-    <Modal open onClose={onClose} title="Reports" description="The manager's summaries, and what each agent reported when it finished a task or a daily run." width={720}>
-      <div className="modal__body reports-modal">
+    <Modal open onClose={onClose} title="Reports" description="The manager's summaries, and what each agent reported when it finished a task or a daily run." width={wide ? 1180 : 720}>
+      <div className={`modal__body reports-modal${wide ? ' reports-modal--inbox' : ''}`}>
+        <div className="reports-modal__side">
         <div className="reports-modal__bar reports-modal__bar--tabs">
           <div className="seg reports-modal__filter-tabs" role="tablist" aria-label="Filter">
             {FILTERS.map((f) => (
@@ -386,9 +520,13 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
         </div>
         {error && <div className="row__error">{error}</div>}
         <ul className="list reports-modal__list">
-          {(data?.items ?? []).map((r) => (
-            <ReportRow key={r.id} r={r} now={now} onOpen={() => openUrl({ report: r.id })} />
-          ))}
+          {withDays(
+            data?.items ?? [],
+            (r) => r.finishedAt,
+            now,
+            (r) => <ReportRow key={r.id} r={r} now={now} picked={wide && r.id === picked} onOpen={() => pick(r.id)} />,
+            (r) => r.id,
+          )}
           {data && !data.items.length && <li className="empty">{q || days || folder || filter !== 'all' ? 'No reports match.' : 'Nothing here.'}</li>}
           {!data && !error && <li className="empty">Loading…</li>}
         </ul>
@@ -413,6 +551,18 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
             <LuChevronRight />
           </button>
         </footer>
+        </div>
+        {wide && (
+          <section className="reports-modal__reader report" aria-label="Report">
+            {pickedReport ? (
+              <ReportView key={pickedReport.id} r={pickedReport} title onClose={() => setUrl({ ri: null })} />
+            ) : (
+              <p className="empty reports-modal__none">
+                <LuFileText /> Pick a report to read it here.
+              </p>
+            )}
+          </section>
+        )}
       </div>
     </Modal>
   )
@@ -421,77 +571,96 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
 /** One report. Opening it marks it read. */
 export function ReportModal({ id, onClose }: { id: string; onClose: () => void }) {
   const r = useDashboard((s) => s.reports.find((x) => x.id === id))
-  const { markReport, removeReport, setReportTags } = useDashboard(
-    useShallow((s) => ({ markReport: s.markReport, removeReport: s.removeReport, setReportTags: s.setReportTags })),
-  )
-  const taskExists = useDashboard((s) => !!r && r.kind === 'task' && s.tasks.some((t) => t.id === r.refId))
-  const agent = useOffice((s) => s.agents.find((a) => a.id === r?.agentId))
-  // attachments through the report itself: still there after its agent was removed, "gone" once deleted
-  const files = useReportFiles(id, r?.files)
   // full size for long reports and wide tables
   const max = useModalMaximize(640)
-  const openProfile = useOffice((s) => s.openProfile)
-
-  useEffect(() => {
-    if (r && !r.read) markReport(r.id, true)
-    // only on open
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
-
   if (!r) return null
   return (
     <Modal open onClose={onClose} title={r.title} {...max.modalProps}>
       <div className="modal__body report" ref={max.bodyRef}>
-        <div className="report__meta">
-          <span className={`status-pill${r.ok ? '' : ' status-pill--bad'}`}>{r.ok ? (r.kind === 'cron' ? 'Daily run' : r.kind === 'note' ? 'From the manager' : r.kind === 'chat' ? 'From the chat' : 'Task') : 'Failed'}</span>
-          <span>{agent?.name ?? 'Removed agent'}</span>
-          <span>·</span>
-          <span>{new Date(r.finishedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</span>
-          <span>·</span>
-          <span>took {duration(r.finishedAt - r.startedAt)}</span>
-        </div>
-        <div className="report__tags">
-          <TagPicker size="sm" value={r.tags ?? []} onChange={(tags) => setReportTags(r.id, tags)} />
-        </div>
-        <div className="report__text">
-          <FileLinksProvider agentId={r.agentId} files={files} urlFor={reportUrl(r.id)}>
-            <Markdown text={r.text} />
-          </FileLinksProvider>
-        </div>
-        <Attachments agentId={r.agentId} files={files} urlFor={reportUrl(r.id)} />
-        <footer className="modal__foot">
-          <button
-            className="ghost"
-            onClick={async () => {
-              if (!(await confirm({ title: 'Delete this report?', message: <>“{r.title}” is removed from Reports. This can't be undone.</> }))) return
-              removeReport(r.id)
-              onClose()
-            }}
-          >
-            <LuTrash2 /> Delete
-          </button>
-          <span className="grow" />
-          <button className="small" onClick={() => (markReport(r.id, false), onClose())}>
-            Mark unread
-          </button>
-          {taskExists && (
-            <button onClick={() => openUrl({ task: r.refId })}>
-              <LuListTodo /> Open task
-            </button>
-          )}
-          {agent && (
-            <button
-              onClick={() => {
-                onClose()
-                openProfile(agent.id)
-              }}
-            >
-              <LuMessageSquareText /> Open chat
-            </button>
-          )}
-        </footer>
+        <ReportView r={r} onClose={onClose} />
       </div>
     </Modal>
+  )
+}
+
+/** A report in full: who and when, its tags, its words and files, and what to do with it. Seeing it marks it read. */
+function ReportView({ r, onClose, title }: { r: WorkReport; onClose: () => void; title?: boolean }) {
+  const { markReport, removeReport, setReportTags } = useDashboard(
+    useShallow((s) => ({ markReport: s.markReport, removeReport: s.removeReport, setReportTags: s.setReportTags })),
+  )
+  const taskExists = useDashboard((s) => r.kind === 'task' && s.tasks.some((t) => t.id === r.refId))
+  const agent = useOffice((s) => s.agents.find((a) => a.id === r.agentId))
+  // attachments through the report itself: still there after its agent was removed, "gone" once deleted
+  const files = useReportFiles(r.id, r.files)
+  const openProfile = useOffice((s) => s.openProfile)
+
+  useEffect(() => {
+    if (!r.read) markReport(r.id, true)
+    // only when it's shown
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [r.id])
+
+  return (
+    <>
+      {title && (
+        <h3 className="report__title">
+          {r.title} <OutcomeBadge state={outcomeOf(r)} />
+        </h3>
+      )}
+      <div className="report__meta">
+        <span className={`status-pill${r.ok ? '' : ' status-pill--bad'}`}>{r.ok ? (r.kind === 'cron' ? 'Daily run' : r.kind === 'note' ? 'From the manager' : r.kind === 'chat' ? 'From the chat' : 'Task') : 'Failed'}</span>
+        <span>{agent?.name ?? 'Removed agent'}</span>
+        <span>·</span>
+        <span>{new Date(r.finishedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+        <span>·</span>
+        <span>took {duration(r.finishedAt - r.startedAt)}</span>
+        {r.job && (
+          <span className="report-row__job">
+            <LuLayers /> {r.job.title}
+          </span>
+        )}
+      </div>
+      <div className="report__tags">
+        <TagPicker size="sm" value={r.tags ?? []} onChange={(tags) => setReportTags(r.id, tags)} />
+      </div>
+      <div className="report__text">
+        <FileLinksProvider agentId={r.agentId} files={files} urlFor={reportUrl(r.id)}>
+          <Markdown text={r.text} />
+        </FileLinksProvider>
+      </div>
+      <Attachments agentId={r.agentId} files={files} urlFor={reportUrl(r.id)} />
+      <footer className="modal__foot">
+        <button
+          className="ghost"
+          onClick={async () => {
+            if (!(await confirm({ title: 'Delete this report?', message: <>“{r.title}” is removed from Reports. This can't be undone.</> }))) return
+            removeReport(r.id)
+            onClose()
+          }}
+        >
+          <LuTrash2 /> Delete
+        </button>
+        <span className="grow" />
+        <button className="small" onClick={() => (markReport(r.id, false), onClose())}>
+          Mark unread
+        </button>
+        {taskExists && (
+          <button onClick={() => openUrl({ task: r.refId })}>
+            <LuListTodo /> Open task
+          </button>
+        )}
+        {agent && (
+          <button
+            onClick={() => {
+              onClose()
+              openProfile(agent.id)
+            }}
+          >
+            <LuMessageSquareText /> Open chat
+          </button>
+        )}
+      </footer>
+    </>
   )
 }
 
