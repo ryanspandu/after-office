@@ -10,6 +10,8 @@ interface WorkspaceStore {
   data: Workspace[] | null
   error: string | null
   loading: boolean
+  /** goes up with each fresh read (the refresh button): open folders in the tree read their contents again */
+  stamp: number
   load: (fresh?: boolean) => Promise<void>
 }
 
@@ -17,11 +19,12 @@ export const useWorkspaces = create<WorkspaceStore>((set, get) => ({
   data: null,
   error: null,
   loading: false,
+  stamp: 0,
   load: async (fresh = false) => {
     if (useOffice.getState().source !== 'live' || get().loading) return
     set({ loading: true })
     try {
-      set({ data: await liveApi.workspaces(fresh), error: null })
+      set({ data: await liveApi.workspaces(fresh), error: null, ...(fresh ? { stamp: get().stamp + 1 } : {}) })
     } catch (e) {
       set({ error: (e as Error).message })
     } finally {

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { LuChevronRight, LuFile, LuFileImage, LuFileText, LuFolder, LuLink, LuLoader } from 'react-icons/lu'
 import type { FolderListing } from '@after-office/shared'
 import { api } from '../state/auth'
+import { useWorkspaces } from '../state/workspaces'
 import { canPreview, FilePreview, formatSize, saveUrl } from './Attachments'
 import { fileUrl } from './FileBrowser'
 
@@ -39,6 +40,8 @@ export function FolderTree({ root, rel = '', depth, projectAt, pick, onOpenDir }
   const [listing, setListing] = useState<FolderListing | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ path: string; size: number } | null>(null)
+  // the refresh button: read again (what's shown stays until the new listing arrives)
+  const stamp = useWorkspaces((s) => s.stamp)
   useEffect(() => {
     let gone = false
     api(`/api/workspaces/files?${new URLSearchParams({ root, path: rel })}`)
@@ -46,10 +49,10 @@ export function FolderTree({ root, rel = '', depth, projectAt, pick, onOpenDir }
         if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Could not read the folder (${r.status})`)
         return (await r.json()) as FolderListing
       })
-      .then((l) => !gone && setListing(l))
+      .then((l) => !gone && (setListing(l), setError(null)))
       .catch((e: Error) => !gone && setError(e.message))
     return () => void (gone = true)
-  }, [root, rel])
+  }, [root, rel, stamp])
   const pad = { ['--depth' as string]: depth }
   if (error) return <div className="tree__note row__error" style={pad}>{error}</div>
   if (!listing)
