@@ -132,3 +132,17 @@ test('hooks from before side sessions are an upgrade, not tampering', async () =
   expect(hooksTampered(cwd)).not.toBeNull()
   expect(hooksTampered(cwd, { ignoreNewer: true })).toBeNull()
 })
+
+test("a tool finishing settles only its own permission prompt, not another tool's still open beside it", async () => {
+  const held = hook({ hook_event_name: 'PermissionRequest', tool_name: 'Read', tool_input: { file_path: '/elsewhere/a.md' }, tool_use_id: 'tu-read' })
+  await Bun.sleep(50)
+  const f = pendingFor('ss-a').find((x) => x.tool === 'Read')!
+  expect(f.id).toBe('ss-a:tu-read')
+  // a grep that ran beside it finishes: the Read prompt is still waiting for the owner
+  await hook({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'grep x' }, tool_use_id: 'tu-grep' })
+  expect(getPending(f.id)).toBeDefined()
+  // the Read itself goes through (answered in the terminal): its card goes
+  await hook({ hook_event_name: 'PostToolUse', tool_name: 'Read', tool_input: { file_path: '/elsewhere/a.md' }, tool_use_id: 'tu-read' })
+  expect(getPending(f.id)).toBeUndefined()
+  expect((await held).status).toBe(200)
+})

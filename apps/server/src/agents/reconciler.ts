@@ -116,7 +116,9 @@ async function adoptScreenDialog(agentId: string, session: string) {
     return
   }
   if (imports) heldAtStart.add(agentId)
-  if (pendingFor(agentId).length) return // the dashboard already shows it (held or timed-out hook request)
+  // the dashboard already shows it (held or timed-out hook request). Only the main session's prompts count: a delegation,
+  // a daily job or a side session's prompt waiting for the owner isn't this dialog
+  if (pendingFor(agentId).some((f) => !f.sessionKey && ['permission', 'question', 'plan'].includes(f.kind))) return
   if (imports) {
     heldAtStart.add(agentId)
     // shown when a session starts in a folder whose CLAUDE.md (or the account's) imports files from outside it

@@ -58,8 +58,11 @@ export async function handleHook(c: Context) {
   const key = sessionOf(c, agentId)
   if (key === null) return c.json(noDecision)
 
-  // anything that shows the agent moved on means a pending prompt was answered elsewhere (e.g. in the terminal)
-  if (['PostToolUse', 'PostToolUseFailure', 'UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd'].includes(e.hook_event_name)) clearPendingFor(agentId, undefined, key)
+  // anything that shows the agent moved on means a pending prompt was answered elsewhere (e.g. in the terminal). A tool
+  // that finished only settles its own prompt: tools run side by side, and another one's permission can still be open
+  const finished = ['PostToolUse', 'PostToolUseFailure'].includes(e.hook_event_name)
+  if (finished && e.tool_use_id) clearPendingFor(agentId, (f) => !f.id.endsWith(`:${e.tool_use_id}`), key)
+  else if (finished || ['UserPromptSubmit', 'Stop', 'StopFailure', 'SessionEnd'].includes(e.hook_event_name)) clearPendingFor(agentId, undefined, key)
 
   // OFFICE_DEBUG_HOOKS=true appends every raw hook payload to data/hooks-debug.jsonl (for reverse-engineering fields)
   if (process.env.OFFICE_DEBUG_HOOKS === 'true') appendFileSync(DEBUG_LOG, JSON.stringify({ t: Date.now(), agentId, key, e }) + '\n')
