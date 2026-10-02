@@ -100,7 +100,7 @@ export function NotesModal({ onClose }: { onClose: () => void }) {
       }
     >
       <div className="modal__body reports-modal">
-        <div className="reports-modal__bar">
+        <div className="reports-modal__bar notes-modal__bar">
           <label className="search-box grow">
             <LuSearch />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes" aria-label="Search notes" maxLength={200} />

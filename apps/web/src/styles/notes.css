@@ -41,3 +41,10 @@
 .card__titletabs { flex: 0 1 auto; overflow: hidden; }
 .card__titletabs > button { min-width: 0; flex: 0 1 auto; padding: 3px 4px; }
 .card__titletabs > button > svg { flex: none; }
+/* Notes → View all: the search on a line of its own when it's narrow, project and tags sharing the next */
+.notes-modal__bar { flex-wrap: wrap; }
+.notes-modal__bar > .search-box { flex: 1 1 240px; min-width: 0; }
+.notes-modal__bar > .rs { flex: 1 1 160px; min-width: 0; }
+@media (max-width: 768px) {
+  .notes-modal__bar > .search-box { flex-basis: 100%; }
+}
