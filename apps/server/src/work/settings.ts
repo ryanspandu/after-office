@@ -11,7 +11,12 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
   quota: { enabled: true, threshold: 80 },
   managerApproval: false,
   autoAssign: false,
+  parallelSessions: 0,
 }
+
+/** Most parallel sessions per agent the owner can allow. */
+export const MAX_PARALLEL_SESSIONS = 3
+const cleanParallel = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(MAX_PARALLEL_SESSIONS, Math.max(0, Math.round(v))) : undefined)
 
 const KEY = 'office'
 
@@ -29,6 +34,7 @@ export function officeSettings(): OfficeSettings {
     notifyDetail: saved.notifyDetail === 'full' ? 'full' : 'minimal',
     managerApproval: saved.managerApproval ?? DEFAULT_SETTINGS.managerApproval,
     autoAssign: saved.autoAssign ?? DEFAULT_SETTINGS.autoAssign,
+    parallelSessions: cleanParallel(saved.parallelSessions) ?? DEFAULT_SETTINGS.parallelSessions,
   }
 }
 
@@ -39,6 +45,7 @@ export function updateSettings(patch: {
   managerApproval?: unknown
   autoAssign?: unknown
   notifyDetail?: unknown
+  parallelSessions?: unknown
 }) {
   const cur = officeSettings()
   const notify = { ...cur.notify }
@@ -53,6 +60,7 @@ export function updateSettings(patch: {
     quota,
     managerApproval: typeof patch.managerApproval === 'boolean' ? patch.managerApproval : cur.managerApproval,
     autoAssign: typeof patch.autoAssign === 'boolean' ? patch.autoAssign : cur.autoAssign,
+    parallelSessions: cleanParallel(patch.parallelSessions) ?? cur.parallelSessions,
   }
   settingsRepo.set(KEY, JSON.stringify(next))
   return next

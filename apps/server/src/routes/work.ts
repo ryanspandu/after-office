@@ -64,6 +64,7 @@ function cleanTask(id: string, b: Partial<OfficeTask>, prev: OfficeTask | null):
     blockedBy: cleanBlockedBy(id, b.blockedBy),
     tags: cleanTagIds(b.tags),
     check: typeof b.check === 'string' && b.check.trim() ? b.check.trim().slice(0, 1000) : undefined,
+    parallel: b.parallel === true ? true : undefined,
     // server-owned
     delegatedBy: prev?.delegatedBy,
     awaitingApproval: prev?.awaitingApproval,
@@ -73,6 +74,7 @@ function cleanTask(id: string, b: Partial<OfficeTask>, prev: OfficeTask | null):
     stuckNotifiedAt: prev?.stuckNotifiedAt,
     assignAskedAt: prev?.assignAskedAt,
     pendingCheck: prev?.pendingCheck,
+    sessionKey: prev?.sessionKey,
   }
 }
 

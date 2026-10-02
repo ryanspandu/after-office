@@ -429,6 +429,11 @@ export interface OfficeTask {
   pendingCheck?: string
   /** Server-owned: when the manager was asked to find someone for it (auto-assign). */
   assignAskedAt?: number
+  /** Live: if its agent is busy, run it in a session of its own next to the busy one (Office settings → parallel
+   *  sessions, when allowed and the folders don't overlap) instead of waiting in the queue. */
+  parallel?: boolean
+  /** Server-owned: the side session it's running in (s2, s3…), while it runs there; closed when it finishes. */
+  sessionKey?: string
 }
 
 /** A file changed since a task was handed to its agent. */
@@ -478,6 +483,8 @@ export interface OfficeSettings {
   managerApproval: boolean
   /** auto-start tasks without an agent are handed out (by the manager if there is one, else to an idle agent) */
   autoAssign: boolean
+  /** extra sessions an agent may open for a parallel task while it's busy (0: off; tasks wait in its queue) */
+  parallelSessions: number
 }
 
 /** Read-only server state shown next to the settings. */

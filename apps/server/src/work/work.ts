@@ -22,6 +22,7 @@ import { endBossMode } from './bossMode'
 import { publicAccess, watchPublicAccess } from './publicAccess'
 import { chatReport, putChatReport, type ChatContext } from './chatContext'
 import { moveProjectsToFolders } from './folders'
+import { mainBusy, noteParallelFile, onParallelStopped, PARALLEL_NOTE, parallelBlocker, startParallel, tidyParallel } from './parallel'
 
 
 // Tasks, cron jobs and the prompt queue. Handing work to an agent is just typing a prompt into its session; if the
@@ -130,8 +131,8 @@ export function noteFileWritten(agentId: string, path: string, key = '') {
     c.files ??= new Set()
     if (c.files.size < 100) c.files.add(path)
   }
-  // a side session's files are its own chat's, never a task's
-  if (key) return
+  // a side session's files are its own chat's, or its parallel task's
+  if (key) return noteParallelFile(agentId, key, path)
   const a = active.get(agentId)
   if (!a) return
   a.files ??= new Set()
@@ -251,7 +252,7 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
   // the answer to the owner's chat message with a folder / tags: kept in Reports
   const chat = !a && fileChatTurn(agentId, '', finalMessage, failed)
   // after a server restart the in-memory link is gone: fall back to the agent's task in progress
-  const t = a?.taskId ? tasksRepo.get(a.taskId) : a || chat ? null : tasksRepo.active().find((x) => x.agentId === agentId && x.status === 'in_progress')
+  const t = a?.taskId ? tasksRepo.get(a.taskId) : a || chat ? null : tasksRepo.active().find((x) => x.agentId === agentId && x.status === 'in_progress' && !x.sessionKey)
   const ref = a ?? (t ? { taskId: t.id, title: t.title, startedAt: t.startedAt ?? Date.now() } : null)
   const cmd = t && t.status === 'in_progress' && !failed ? checkFor(t) : undefined
   if (t && cmd) {
@@ -292,6 +293,8 @@ function fileChatTurn(agentId: string, key: string, finalMessage: string | undef
  * ever theirs. Only a chat answer the owner asked to keep (folder / tags) becomes a report.
  */
 export function onSideStopped(agentId: string, key: string, finalMessage?: string, failed = false) {
+  // a parallel task's session: the task's report (parallel.ts)
+  if (onParallelStopped(agentId, key, finalMessage, failed)) return
   fileChatTurn(agentId, key, finalMessage, failed)
 }
 
@@ -509,8 +512,16 @@ export async function startTask(taskId: string, agentId?: string) {
   ]
     .filter(Boolean)
     .join('\n')
+  // the agent is busy and the task may run next to that work: a session of its own (parallel.ts)
+  if (task.parallel && mainBusy(target) && !parallelBlocker(task, target)) {
+    const gitFolder = taskFolder(task, target)
+    const gitBase = gitFolder ? await snapshot(gitFolder) : undefined
+    markTask(taskId, { gitBase, checkState: undefined, checkAttempts: undefined, stuckNotifiedAt: undefined })
+    await startParallel(task, target, `${prompt}\n${PARALLEL_NOTE}`, () => deliver(target, prompt, { taskId }))
+    return 'parallel' as const
+  }
   const result = await deliver(target, prompt, { taskId })
-  markTask(taskId, { agentId: target, ...(result === 'sent' ? { status: 'in_progress', startedAt: Date.now() } : {}) })
+  markTask(taskId, { agentId: target, sessionKey: undefined, ...(result === 'sent' ? { status: 'in_progress', startedAt: Date.now() } : {}) })
   return result
 }
 
@@ -712,6 +723,8 @@ export function startWorkJobs() {
   const safe = (fn: () => Promise<unknown>) => () => void fn().catch((e) => console.error('[work]', e))
   setInterval(safe(tickCrons), 20_000)
   setInterval(safe(() => tickTasks()), 20_000)
+  // parallel sessions closed by hand or gone: their tasks back to To do
+  setInterval(() => tidyParallel(), 20_000)
   setInterval(safe(drainQueues), 5_000)
   void safe(tickCrons)()
 }
@@ -726,3 +739,4 @@ export * from './bossMode'
 export * from './publicAccess'
 export * from './managerCrons'
 export * from './chatContext'
+export * from './parallel'

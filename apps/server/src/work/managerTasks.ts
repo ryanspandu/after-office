@@ -26,6 +26,8 @@ export interface DelegateInput {
   folder?: string | null
   /** tag ids (existing tags only) */
   tags?: string[]
+  /** if the agent is busy, run it in a parallel session (when the owner allows it) */
+  parallel?: boolean
 }
 
 /** Most prompts that may wait for one agent; stops a runaway manager from piling work on someone. */
@@ -51,6 +53,7 @@ export async function delegateTask(managerId: string, input: DelegateInput) {
     delegatedBy: managerId,
     origin: managerOrigin(managerId),
     ...(input.tags?.length ? { tags: input.tags } : {}),
+    ...(input.parallel ? { parallel: true } : {}),
   }
   const after = [...new Set(input.after ?? [])]
   for (const id of after) if (!tasksRepo.get(id)) throw new AgentError(`No task ${id} to wait for; see list_tasks`, 404)

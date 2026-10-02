@@ -11,7 +11,7 @@ import { requestHire } from './work/hires'
 import { bossMode, countBoss } from './work/settings'
 import { noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
-import { isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone } from './work/work'
+import { isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker } from './work/work'
 import { listTags, tagIdsByName, tagNames } from './work/tags'
 import { cleanFolder } from './work/folders'
 import { agentDeleteNote, agentEditNote, agentNotes, agentReadNote, agentWriteNote, noteForAgent } from './work/notes'
@@ -172,9 +172,15 @@ function buildServer(managerId: string) {
           .optional()
           .describe('task ids this one waits for; it starts on its own once they are finished (use it to chain steps, e.g. build → test)'),
         tags: z.array(z.string().max(40)).max(10).optional().describe('tag names the owner made (see list_tags), e.g. ["SEO"]; only existing tags'),
+        parallel: z
+          .boolean()
+          .optional()
+          .describe(
+            'if the agent is busy, start it now in a separate session of theirs instead of queueing it. Only when the owner allows parallel sessions, under their limit per agent, and when this task\'s folder is not one the agent is already working in (else it is queued as usual). Use it for urgent or independent work in another folder; it costs extra plan usage',
+          ),
       },
     },
-    async ({ agent, title, description, priority, deadlineHours, mode, after, folder, tags }) => {
+    async ({ agent, title, description, priority, deadlineHours, mode, after, folder, tags, parallel }) => {
       try {
         const target = resolveAgent(agent, managerId)
         const out = await delegateTask(managerId, {
@@ -182,6 +188,7 @@ function buildServer(managerId: string) {
           after,
           folder: folder ?? null,
           tags: tagIdsByName(tags),
+          parallel,
           title,
           description,
           priority,
@@ -191,6 +198,8 @@ function buildServer(managerId: string) {
         const delivery =
           out.result === 'sent'
             ? 'sent now'
+            : out.result === 'parallel'
+              ? 'the agent was busy: started now in a parallel session of theirs (it closes when the task is done)'
             : out.result === 'queued'
               ? 'queued until the agent is free'
               : out.result === 'waiting'
@@ -199,7 +208,9 @@ function buildServer(managerId: string) {
                   ? "waiting for the owner's approval in the dashboard; if they reject it you get a message"
                   : `on hold: ${out.paused}; starts on its own when usage drops`
         const boss = bossMode()
-        return json({ taskId: out.task.id, agent: target.name, division: divisionOf(target.role), delivery, ...(boss ? { bossMode: `on until ${new Date(boss.until).toISOString()}: started without approval` } : {}) })
+        // asked for a parallel session but queued: why
+        const notParallel = parallel && out.result === 'queued' ? parallelBlocker(out.task, target.id) : null
+        return json({ taskId: out.task.id, agent: target.name, division: divisionOf(target.role), delivery, ...(notParallel ? { parallelNotUsed: notParallel } : {}), ...(boss ? { bossMode: `on until ${new Date(boss.until).toISOString()}: started without approval` } : {}) })
       } catch (e) {
         return fail(e)
       }

@@ -10,6 +10,7 @@ import { liveApi, useLive } from '../state/live'
 import { useOffice } from '../state/store'
 import { chime, useReplyAlerts } from '../state/replyAlerts'
 import { Modal } from './Modal'
+import { Select } from './Select'
 
 // Office automation: push notifications to your phone, and the quota brake that holds automatic work (auto-start,
 // cron, the manager's new tasks) when the Claude plan is nearly used up. Channels hold secrets, so they are set in
@@ -31,6 +32,13 @@ const EVENTS: { id: NotifyEvent; label: string; hint: string }[] = [
 ]
 
 /** Navbar button (desktop). Shows a dot while the quota brake holds work. */
+const PARALLEL_OPTIONS = [
+  { value: '0', label: 'Off' },
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+]
+
 export function AutomationButton() {
   const live = useOffice((s) => s.source === 'live')
   const paused = useLive((s) => s.automation.quotaPaused)
@@ -67,6 +75,7 @@ export function AutomationModal() {
     quota?: Partial<OfficeSettings['quota']>
     managerApproval?: boolean
     autoAssign?: boolean
+    parallelSessions?: number
     notifyDetail?: OfficeSettings['notifyDetail']
   }) => {
     setError(null)
@@ -77,6 +86,7 @@ export function AutomationModal() {
         managerApproval: patch.managerApproval ?? settings.managerApproval,
         notifyDetail: patch.notifyDetail ?? settings.notifyDetail,
         autoAssign: patch.autoAssign ?? settings.autoAssign,
+        parallelSessions: patch.parallelSessions ?? settings.parallelSessions,
       },
     })
     liveApi.saveAutomation(patch).catch((e) => setError(e.message))
@@ -228,6 +238,22 @@ export function AutomationModal() {
               </span>
             </span>
           </label>
+          <div className="switch-row switch-row--select">
+            <Select
+              size="sm"
+              ariaLabel="Parallel sessions per agent"
+              value={String(settings.parallelSessions ?? 0)}
+              options={PARALLEL_OPTIONS}
+              onChange={(v) => save({ parallelSessions: Number(v) })}
+            />
+            <span>
+              <span className="switch-row__label">Parallel sessions per agent</span>
+              <span className="field__hint">
+                When the agent is busy, the manager can start an urgent task in a separate session of theirs (in another folder than the one they're
+                working in) instead of queueing it. It closes when the task is done. Each session uses plan usage of its own.
+              </span>
+            </span>
+          </div>
         </section>
         <section className="automation__section">
           <h4>Security</h4>

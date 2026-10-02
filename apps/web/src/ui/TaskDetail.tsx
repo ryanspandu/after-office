@@ -1,10 +1,10 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuCheck, LuCrown, LuMessageSquareReply, LuPlay, LuRotateCcw, LuSend, LuTrash2 } from 'react-icons/lu'
+import { LuCheck, LuCrown, LuMessageSquareReply, LuPlay, LuRotateCcw, LuSend, LuSplit, LuTrash2 } from 'react-icons/lu'
 import type { OfficeTask } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { hasUnsaved, useDashboard } from '../state/dashboard'
-import { liveApi } from '../state/live'
+import { liveApi, useLive } from '../state/live'
 import { useOffice } from '../state/store'
 import { Field, Modal } from './Modal'
 import { confirm } from './Confirm'
@@ -41,6 +41,11 @@ function TitleField({ value, onChange }: { value: string; onChange: (v: string) 
   )
 }
 
+const BUSY_OPTIONS = [
+  { value: 'queue', label: 'Wait in its queue' },
+  { value: 'parallel', label: 'Run in a parallel session' },
+]
+
 // One task, fully editable. Changes apply immediately (no save step), like the board and list controls.
 
 export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: () => void }) {
@@ -55,6 +60,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
   const [feedback, setFeedback] = useState('')
   const [sending, setSending] = useState(false)
   const tasks = useDashboard((s) => s.tasks)
+  const parallelAllowed = useLive((s) => (s.settings?.parallelSessions ?? 0) > 0)
   if (!task) return null
   const waiting = waitingOn(task, tasks)
   const blocks = tasks.filter((t) => t.blockedBy?.includes(task.id))
@@ -84,7 +90,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
       // edits are saved with a short delay; make sure the agent gets the latest description
       while (hasUnsaved(task.id)) await new Promise((r) => setTimeout(r, 150))
       const { result } = await liveApi.startTask(task.id)
-      setStartMsg({ ok: true, text: result === 'queued' ? 'Agent is busy: queued, it starts when the agent is free.' : 'Sent to the agent.' })
+      setStartMsg({ ok: true, text: result === 'queued' ? 'Agent is busy: queued, it starts when the agent is free.' : result === 'parallel' ? 'Agent is busy: started in a parallel session.' : 'Sent to the agent.' })
     } catch (e) {
       setStartMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not start' })
     } finally {
@@ -106,6 +112,11 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             {status.label}
           </span>
           {!done && <span className={`due due--${due.level}`}>{due.text}</span>}
+          {task.sessionKey && (
+            <span className="check-pill check-pill--approval" data-tip="Running in a separate session of the agent, next to its other work; it closes when this is done">
+              <LuSplit /> Parallel session
+            </span>
+          )}
           {task.delegatedBy && (
             <span className="by-manager by-manager--label">
               <LuCrown /> Delegated by the manager
@@ -143,6 +154,16 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
           <Field label="Tags">
             <TagPicker value={task.tags ?? []} onChange={(tags) => set({ tags })} />
           </Field>
+          {(parallelAllowed || task.parallel) && (
+            <Field label="If the agent is busy">
+              <Select
+                ariaLabel="If the agent is busy"
+                value={task.parallel ? 'parallel' : 'queue'}
+                options={BUSY_OPTIONS}
+                onChange={(v) => set({ parallel: v === 'parallel' || undefined })}
+              />
+            </Field>
+          )}
         </div>
 
         <TaskRunFields value={task} onChange={set} />

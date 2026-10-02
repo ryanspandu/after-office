@@ -81,3 +81,5 @@ input.invalid { border-color: var(--danger); }
 .modal .modal__scroll::-webkit-scrollbar-track { margin-bottom: calc(var(--foot-h, 0px) + 6px); }
 .figure-picker { align-self: flex-start; }
 .figure-row { display: flex; align-items: center; gap: 8px; }
+.switch-row--select { cursor: default; }
+.switch-row--select > .rs { flex: 0 0 78px; }
