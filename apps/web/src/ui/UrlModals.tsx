@@ -126,7 +126,8 @@ function NoteWindows({ current }: { current?: string }) {
         return (
           <NoteModal
             key={key}
-            id={key.startsWith('new-') ? 'new' : id}
+            // the note itself (a window that was opened as "new" keeps its key, but loads the note when it opens again)
+            id={id}
             hidden={id !== current}
             onCreated={(nid) => {
               born.current.set(nid, key)
@@ -134,6 +135,7 @@ function NoteWindows({ current }: { current?: string }) {
               setUrl({ note: nid })
             }}
             onClose={() => {
+              born.current.delete(id)
               useMinimized.getState().remove(id)
               if (id === current) setUrl({ note: null })
             }}
