@@ -1,5 +1,6 @@
 import { useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { MOBILE } from './useMediaQuery'
+import { haptic } from './haptic'
 
 /**
  * Phones: a bottom sheet (a modal or a chat drawer, styles/sheet.css) closes by dragging its grab handle or header
@@ -42,13 +43,14 @@ export function useSheetDrag<T extends HTMLElement>(onClose: () => void, cardRef
       setTimeout(() => el.classList.remove('is-settling'), 220)
     }
     if (onShrink) {
-      if (dy > el.offsetHeight * 0.75) return onClose()
+      if (dy > el.offsetHeight * 0.75) return haptic(), onClose()
       // a pull (or a flick) down: back to the usual size, sliding into place while it shrinks
-      if (dy > 60 || (dy > 30 && speed > 0.6)) settle(), onShrink()
+      if (dy > 60 || (dy > 30 && speed > 0.6)) settle(), haptic(), onShrink()
       else settle()
       return
     }
     if (dy > el.offsetHeight / 3 || (dy > 40 && speed > 0.6)) {
+      haptic()
       onClose()
       return
     }

@@ -1,0 +1,22 @@
+/* ── phones and the installed app: feel like an app, not a web page ─────────────────── */
+/* no grey flash on tap, no double-tap zoom (and its tap delay), no text blown up in landscape */
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
+
+@media (hover: none) and (pointer: coarse) {
+  /* the app's chrome isn't text to select or long-press (links, buttons, tabs, the dock, headers);
+     what people write and read (fields, chats, notes, reports) still is */
+  button, [role='tab'], [role='button'], label, .dock, .modal__head, .card__head, .drawer__head, .sheet-grab, .modal__grab, .drawer__grab, img, svg {
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+  /* a press shows on the button itself, right away (no hover state to wait for) */
+  button:not(:disabled), [role='tab'], [role='button'] { transition: transform 0.08s ease-out, opacity 0.08s ease-out; }
+  button:not(:disabled):active, [role='tab']:active, [role='button']:active { transform: scale(0.96); opacity: 0.8; }
+  /* big tap targets keep their size while pressed: just dim */
+  .modal__foot button.primary:active, .composer button:active { transform: none; }
+  /* scrollbars only while scrolling, like the system's */
+  * { scrollbar-width: none; }
+  *::-webkit-scrollbar { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  button:active, [role='tab']:active { transform: none !important; }
+}

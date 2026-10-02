@@ -1,3 +1,4 @@
+import { haptic } from '../state/haptic'
 import { useMemo, type ReactNode, useEffect } from 'react'
 import { LuBot, LuBriefcase, LuCalendarClock, LuCrown, LuInbox, LuLibrary } from 'react-icons/lu'
 import { useNow } from '../state/clock'
@@ -22,7 +23,7 @@ const SHEETS: Sheet[] = ['attention', 'cron', 'tasks', 'reports', 'agents']
 
 function DockButton({ icon, label, count, alert, onClick }: { icon: ReactNode; label: string; count: number; alert?: boolean; onClick: () => void }) {
   return (
-    <button className={`dock__btn${alert ? ' dock__btn--alert' : ''}`} onClick={onClick} {...tip(count ? `${label} · ${count}` : label)}>
+    <button className={`dock__btn${alert ? ' dock__btn--alert' : ''}`} onClick={() => (haptic(), onClick())} {...tip(count ? `${label} · ${count}` : label)}>
       {icon}
       <span className="dock__label">{label}</span>
       {count > 0 && <span className="dock__count">{count > 99 ? '99+' : count}</span>}

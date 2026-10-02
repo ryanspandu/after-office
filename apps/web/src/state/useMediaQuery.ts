@@ -15,3 +15,12 @@ export function useMediaQuery(query: string) {
 
 /** Phones: the agents list becomes a modal behind a floating button. Keep in sync with the phone breakpoint in src/styles/. */
 export const MOBILE = '(max-width: 768px)'
+
+/**
+ * A tap on the dimmed area around a modal or drawer: closes it on a computer. On a phone it does nothing (a stray
+ * touch shouldn't throw the sheet away): there, the close button or dragging the sheet down closes it.
+ */
+export const onBackdropTap = (fn: () => void) => (e: { target: EventTarget; currentTarget: EventTarget }) => {
+  if (e.target !== e.currentTarget || window.matchMedia(MOBILE).matches) return
+  fn()
+}

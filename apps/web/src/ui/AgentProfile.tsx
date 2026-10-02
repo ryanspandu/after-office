@@ -1,3 +1,4 @@
+import { onBackdropTap } from '../state/useMediaQuery'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { LuFileText, LuLoader, LuMessageSquare, LuPlug, LuPlus, LuRotateCw, LuSettings2, LuSparkles, LuSquareTerminal, LuTrash2, LuX, LuCopy, LuInfo, LuShuffle, LuActivity, LuFolder } from 'react-icons/lu'
@@ -159,7 +160,7 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
   // phones: a bottom sheet, closed by dragging its handle or header down
   const { dragProps } = useSheetDrag(onClose, max.ref)
   return (
-    <div className={`drawer-backdrop${closing ? ' drawer-backdrop--closing' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={`drawer-backdrop${closing ? ' drawer-backdrop--closing' : ''}`} onMouseDown={onBackdropTap(onClose)}>
       <aside ref={max.ref} className={`drawer${live ? ' drawer--wide' : ''}${live && max.full ? ' drawer--full' : ''}`} role="dialog" aria-modal="true" aria-label={`${agent.name}`}>
         <div className="drawer__grab" aria-hidden="true" {...dragProps} />
         <header className="drawer__head" {...dragProps}>

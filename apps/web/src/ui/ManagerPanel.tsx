@@ -1,3 +1,4 @@
+import { onBackdropTap } from '../state/useMediaQuery'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { LuCrown, LuMessageSquare, LuUsers, LuX } from 'react-icons/lu'
@@ -58,7 +59,7 @@ function Panel({ manager, onClose: close }: { manager: OfficeAgent; onClose: () 
   const open = delegated.filter((t) => t.status !== 'done').length
 
   return (
-    <div className={`drawer-backdrop${closing ? ' drawer-backdrop--closing' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className={`drawer-backdrop${closing ? ' drawer-backdrop--closing' : ''}`} onMouseDown={onBackdropTap(onClose)}>
       <aside ref={max.ref} className={`drawer drawer--wide${max.full ? ' drawer--full' : ''}`} role="dialog" aria-modal="true" aria-label="Manager">
         <div className="drawer__grab" aria-hidden="true" {...dragProps} />
         <header className="drawer__head" {...dragProps}>

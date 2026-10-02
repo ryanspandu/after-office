@@ -1,3 +1,4 @@
+import { onBackdropTap } from '../state/useMediaQuery'
 import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { usePresence } from '../state/usePresence'
@@ -94,7 +95,7 @@ export function Modal({ open, title, description, onClose, children, width = 460
   const { mounted, closing } = usePresence(open, 180)
   if (!mounted) return null
   return createPortal(
-    <div ref={setBackdrop} className={`modal-backdrop${closing ? ' modal-backdrop--closing' : ''}${hidden ? ' modal-backdrop--hidden' : ''}`} aria-hidden={hidden || undefined} onMouseDown={(e) => e.target === e.currentTarget && (onBackdrop ?? onClose)()}>
+    <div ref={setBackdrop} className={`modal-backdrop${closing ? ' modal-backdrop--closing' : ''}${hidden ? ' modal-backdrop--hidden' : ''}`} aria-hidden={hidden || undefined} onMouseDown={onBackdropTap(onBackdrop ?? onClose)}>
       <div ref={card} className={`modal${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} style={{ width: `min(${width}px, 100%)` }}>
         {/* phones: the grab handle of the bottom sheet (hidden on larger screens) */}
         <div className="modal__grab" aria-hidden="true" {...dragProps} />
