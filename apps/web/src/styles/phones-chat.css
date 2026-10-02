@@ -28,7 +28,8 @@
   }
   .drawer.is-dragging { animation: none; transition: none; }
   .drawer.is-settling { transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .drawer-backdrop--closing .drawer { animation: sheet-out 0.22s ease-in forwards; }
+  .drawer.is-opened { animation: none; }
+  .drawer-backdrop--closing .drawer, .drawer-backdrop--closing .drawer.is-opened { animation: sheet-out 0.22s ease-in forwards; }
   .drawer__grab { display: flex; justify-content: center; flex-shrink: 0; padding: 8px 0 0; cursor: grab; touch-action: none; }
   .drawer__grab::before { content: ''; width: 38px; height: 5px; border-radius: 999px; background: var(--line); }
   .drawer__head { touch-action: none; padding-top: 6px; }

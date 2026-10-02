@@ -79,6 +79,7 @@ export function useModalMaximize(width: number, remember?: string) {
       width: full ? 100_000 : width,
       className: full ? 'modal--full' : undefined,
       onShrink: full ? toggle : undefined,
+      onGrow: full ? undefined : toggle,
       actions: (
         <button className="icon-btn small ghost" data-tip={full ? 'Smaller' : 'Full size'} aria-label={full ? 'Smaller' : 'Full size'} onClick={toggle}>
           {full ? <LuMinimize2 /> : <LuMaximize2 />}

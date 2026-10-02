@@ -22,9 +22,11 @@ interface Props {
   onBackdrop?: () => void
   /** at full size (maximized): back to the usual size; on phones a short pull down on the sheet does it */
   onShrink?: () => void
+  /** phones: a long pull up on the sheet's header makes it full size */
+  onGrow?: () => void
 }
 
-export function Modal({ open, title, description, onClose, children, width = 460, className, actions, hidden, onBackdrop, onShrink }: Props) {
+export function Modal({ open, title, description, onClose, children, width = 460, className, actions, hidden, onBackdrop, onShrink, onGrow }: Props) {
   const backdrop = useRef<HTMLDivElement | null>(null)
   const shownAt = useRef(0)
   const setBackdrop = useCallback((el: HTMLDivElement | null) => {
@@ -89,7 +91,7 @@ export function Modal({ open, title, description, onClose, children, width = 460
   })
 
   // phones: a bottom sheet (styles/sheet.css), closed by dragging its handle or header down
-  const { ref: card, dragProps } = useSheetDrag<HTMLDivElement>(onClose, undefined, onShrink)
+  const { ref: card, dragProps } = useSheetDrag<HTMLDivElement>(onClose, undefined, onShrink, onGrow)
 
   // stays mounted briefly after closing so it can animate out
   const { mounted, closing } = usePresence(open, 180)

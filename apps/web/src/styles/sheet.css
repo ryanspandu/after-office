@@ -34,7 +34,9 @@
   .modal__foot > button { flex: 1; justify-content: center; min-height: 44px; }
   .modal.is-dragging { animation: none; transition: none; }
   .modal.is-settling { transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .modal-backdrop--closing .modal { animation: sheet-out 0.18s ease-in forwards; }
+  /* dragged once: its opening slide never plays again (a drag that springs back ends with no replay) */
+  .modal.is-opened { animation: none; }
+  .modal-backdrop--closing .modal, .modal-backdrop--closing .modal.is-opened { animation: sheet-out 0.18s ease-in forwards; }
 }
 @keyframes sheet-in { from { transform: translateY(100%); } }
 @keyframes sheet-out { to { transform: translateY(100%); } }
