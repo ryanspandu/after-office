@@ -41,6 +41,15 @@
 .card__titletabs { flex: 0 1 auto; overflow: hidden; }
 .card__titletabs > button { min-width: 0; flex: 0 1 auto; padding: 3px 4px; }
 .card__titletabs > button > svg { flex: none; }
+.card__titletabs-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.card__titletabs > button > .badge, .card__titletabs-sep { flex: none; }
+.card__titletabs > button > .badge { margin-left: 0; }
+.card__titletabs > button { gap: 5px; }
+/* too narrow for both words: the tab not shown keeps only its icon (and its unread count) */
+.card--reports { container-type: inline-size; }
+@container (max-width: 300px) {
+  .card__titletabs > button:not(.is-on) > .card__titletabs-label { display: none; }
+}
 /* Notes → View all: the search on a line of its own when it's narrow, project and tags sharing the next */
 .notes-modal__bar { flex-wrap: wrap; }
 .notes-modal__bar > .search-box { flex: 1 1 240px; min-width: 0; }

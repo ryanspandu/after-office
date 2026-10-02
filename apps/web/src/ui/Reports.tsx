@@ -119,14 +119,14 @@ export function ReportsPanel() {
       <header className="card__head">
         <div className="card__titletabs" role="tablist" aria-label="Reports or notes">
           <button role="tab" aria-selected={view === 'reports'} className={view === 'reports' ? 'is-on' : ''} onClick={() => pickView('reports')}>
-            <LuFileText /> Reports
+            <LuFileText /> <span className="card__titletabs-label">Reports</span>
             {view !== 'reports' && unread > 0 && <span className="badge badge--accent reports-tabs__count">{unread}</span>}
           </button>
           <span className="card__titletabs-sep" aria-hidden>
             |
           </span>
           <button role="tab" aria-selected={view === 'notes'} className={view === 'notes' ? 'is-on' : ''} onClick={() => pickView('notes')}>
-            <LuNotebookPen /> Notes
+            <LuNotebookPen /> <span className="card__titletabs-label">Notes</span>
           </button>
         </div>
         <span className="grow" />

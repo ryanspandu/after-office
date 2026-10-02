@@ -24,7 +24,9 @@
   border: 1px solid transparent; background: transparent; border-radius: 10px;
 }
 .task-detail__title:hover { border-color: var(--line); }
-.task-detail__badges { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+textarea.task-detail__title { display: block; width: calc(100% + 20px); resize: none; overflow: hidden; line-height: 1.3; padding: 6px 10px; border-radius: 10px; font-family: inherit; }
+.task-detail__badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12px; }
+.task-detail__badges > * { white-space: nowrap; flex: none; }
 .status-pill {
   font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
   color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent);
@@ -53,6 +55,15 @@ button.danger-solid:hover:not(:disabled) { color: #fff; opacity: 0.9; border-col
 /* task detail footer: buttons keep their label on one line; the row wraps as a whole if it must */
 .task-detail__foot { flex-wrap: wrap; row-gap: 8px; }
 .task-detail__foot button { white-space: nowrap; }
+/* a phone: Delete and the task's actions on one row, "Done editing" the full width below */
+@media (max-width: 560px) {
+  .task-detail__foot { gap: 8px; }
+  .task-detail__foot > .grow { display: none; }
+  .task-detail__foot > button:not(.primary) { flex: 1 1 0; min-width: 0; justify-content: center; padding-inline: 10px; }
+  .task-detail__foot > button.ghost { flex: 0 0 auto; }
+  .task-detail__foot > button.primary { flex: 1 0 100%; }
+  .task-detail__msg { flex: 1 0 100%; max-width: none; }
+}
 
 .agents-modal .agents-card { box-shadow: none; padding: 0; background: transparent; }
 .agents-modal .agents-card .card__head h2,

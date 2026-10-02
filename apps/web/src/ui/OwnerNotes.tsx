@@ -293,35 +293,71 @@ function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?
   const editorEmpty = useRef(true)
   const closed = useRef(false)
 
+  /** the newest version this window has (opened on, or its own last save) */
+  const known = useRef(0)
+  const saving = useRef(0)
+  const typedAt = useRef(0)
+  /** bumped when the note changed elsewhere (an agent, another tab): the editor starts over on the new text */
+  const [rev, setRev] = useState(0)
+  const apply = (n: OwnerNote) => {
+    known.current = Math.max(known.current, n.updatedAt)
+    setLoaded(n)
+    setTitle(n.title)
+    setTags(n.tags ?? [])
+    setFolder(n.folder)
+    setShared(!!n.shared)
+    setPinned(!!n.pinned)
+    editorEmpty.current = !n.html.trim()
+    draft.current = { title: n.title, html: n.html, folder: n.folder ?? null, tags: n.tags ?? [], shared: !!n.shared, pinned: !!n.pinned }
+  }
+  const fetchNote = (noteKey: string) =>
+    api(`/api/notes/${encodeURIComponent(noteKey)}`).then(async (r) => {
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? 'Could not open this note')
+      return (await r.json()) as OwnerNote
+    })
+
   useEffect(() => {
     if (id === 'new') return
     let gone = false
-    api(`/api/notes/${encodeURIComponent(id)}`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? 'Could not open this note')
-        return (await r.json()) as OwnerNote
-      })
-      .then((n) => {
-        if (gone) return
-        setLoaded(n)
-        setTitle(n.title)
-        setTags(n.tags ?? [])
-        setFolder(n.folder)
-        setShared(!!n.shared)
-        setPinned(!!n.pinned)
-        editorEmpty.current = !n.html.trim()
-        draft.current = { title: n.title, html: n.html, folder: n.folder ?? null, tags: n.tags ?? [], shared: !!n.shared, pinned: !!n.pinned }
-      })
+    fetchNote(id)
+      .then((n) => !gone && apply(n))
       .catch((e: Error) => !gone && setError(e.message))
     return () => void (gone = true)
     // the note it was opened on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Changed by someone else while open (an agent wrote it, another tab): show their version, unless the owner is in
+  // the middle of typing here (theirs is saved in a moment and would be overwritten by the reload).
+  const remoteAt = useLive((s) => (noteId.current ? s.notes.find((n) => n.id === noteId.current)?.updatedAt : undefined))
+  useEffect(() => {
+    const key = noteId.current
+    if (!key || !remoteAt || !known.current || remoteAt <= known.current) return
+    if (saving.current || titleTimer.current || Date.now() - typedAt.current < 3000) return
+    let gone = false
+    fetchNote(key)
+      .then((n) => {
+        if (gone || saving.current || n.updatedAt <= known.current) return
+        apply(n)
+        setRev((r) => r + 1)
+      })
+      .catch(() => {})
+    return () => void (gone = true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteAt])
+
   const chain = useRef<Promise<number | null>>(Promise.resolve(null))
   const persist = (patch: Partial<Draft>) => {
     draft.current = { ...draft.current, ...patch }
     const run = async (): Promise<number | null> => {
+      saving.current++
+      try {
+        return await save()
+      } finally {
+        saving.current--
+      }
+    }
+    const save = async (): Promise<number | null> => {
       const made = noteId.current
       const r = made
         ? await api(`/api/notes/${encodeURIComponent(made)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) })
@@ -333,6 +369,7 @@ function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?
         // closed before its first save landed: that window is gone, nothing to follow
         if (!closed.current) onCreated?.(n.id)
       }
+      known.current = Math.max(known.current, n.updatedAt)
       return n.updatedAt
     }
     const next = chain.current.catch(() => null).then(run)
@@ -346,7 +383,10 @@ function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?
   const changeTitle = (v: string) => {
     setTitle(v)
     if (titleTimer.current) clearTimeout(titleTimer.current)
-    titleTimer.current = setTimeout(() => persistQuietly({ title: v.trim() }), 600)
+    titleTimer.current = setTimeout(() => {
+      titleTimer.current = null
+      persistQuietly({ title: v.trim() })
+    }, 600)
   }
   /** a title still being typed: saved now */
   const flushTitle = () => {
@@ -403,6 +443,8 @@ function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?
     leave,
     remove,
     togglePin,
+    rev,
+    typedAt,
     /** its folder (none: cleared) */
     setPlace: (f: string | null) => {
       setFolder(f ?? undefined)
@@ -474,12 +516,13 @@ function NoteFields({ note, autoFocus }: { note: NoteState; autoFocus: boolean }
         }
       >
         <RichNotes
+          key={note.rev}
           initial={note.loaded.html}
           initialAt={note.loaded.updatedAt || null}
           autofocus={false}
           placeholder="Write your note: ideas, decisions, todos, links…"
           save={(html) => note.persist({ html })}
-          onEdit={(empty) => (note.editorEmpty.current = empty)}
+          onEdit={(empty) => ((note.editorEmpty.current = empty), (note.typedAt.current = Date.now()))}
         />
       </Suspense>
     </>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { LuCheck, LuCrown, LuMessageSquareReply, LuPlay, LuRotateCcw, LuSend, LuTrash2 } from 'react-icons/lu'
 import type { OfficeTask } from '@after-office/shared'
@@ -16,6 +16,30 @@ import { AgentSelect, dueInfo, PRIORITY_OPTIONS, FolderSelect, STATUS_BY_ID, Sta
 import { TaskTimeline } from './TaskTimeline'
 import { TaskDiff } from './TaskDiff'
 import { TagPicker } from './tags'
+
+/** The task's title: wraps onto as many lines as it needs (a long one isn't cut off on a phone); Enter doesn't add a line. */
+function TitleField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      className="task-detail__title"
+      value={value}
+      onChange={(e) => onChange(e.target.value.replace(/\n/g, ' '))}
+      onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+      aria-label="Title"
+      autoComplete="off"
+      data-1p-ignore
+    />
+  )
+}
 
 // One task, fully editable. Changes apply immediately (no save step), like the board and list controls.
 
@@ -76,14 +100,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
   return (
     <Modal open onClose={onClose} title="Task" width={640}>
       <div className="modal__body task-detail">
-        <input
-          className="task-detail__title"
-          value={task.title}
-          onChange={(e) => set({ title: e.target.value })}
-          aria-label="Title"
-          autoComplete="off"
-          data-1p-ignore
-        />
+        <TitleField value={task.title} onChange={(title) => set({ title })} />
         <div className="task-detail__badges">
           <span className="status-pill" style={{ ['--c' as string]: status.color }}>
             {status.label}
