@@ -15,22 +15,49 @@ type Params = Record<string, string>
 const read = (): Params => (typeof window === 'undefined' ? {} : Object.fromEntries(new URLSearchParams(window.location.search)))
 export const useUrl = create<{ params: Params }>(() => ({ params: read() }))
 
-if (typeof window !== 'undefined') window.addEventListener('popstate', () => useUrl.setState({ params: read() }))
+// changes asked for while our own Back is still on its way: made once it has landed (in order)
+let backing: Array<() => void> | null = null
+if (typeof window !== 'undefined')
+  window.addEventListener('popstate', () => {
+    useUrl.setState({ params: read() })
+    const queued = backing
+    backing = null
+    queued?.forEach((fn) => fn())
+  })
 
 /**
  * Change parameters (null / '' removes one). Opening something adds a history entry, so Back closes it; closing it
  * or changing a filter replaces the entry instead.
  */
 export function setUrl(patch: Record<string, string | number | null | undefined>, mode: 'push' | 'replace' = 'replace') {
+  if (backing) return void backing.push(() => setUrl(patch, mode))
   const params = new URLSearchParams(window.location.search)
   for (const [k, v] of Object.entries(patch)) {
     if (v === null || v === undefined || v === '') params.delete(k)
     else params.set(k, String(v))
   }
   const qs = params.toString()
+  const here = `${window.location.pathname}${window.location.search}${window.location.hash}`
   const next = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`
-  if (next === `${window.location.pathname}${window.location.search}${window.location.hash}`) return
-  window.history[mode === 'push' ? 'pushState' : 'replaceState'](window.history.state, '', next)
+  if (next === here) return
+  // Closing what this history entry opened (back to exactly the page it was opened from): go Back instead of
+  // rewriting the entry. Otherwise the entry stays behind as a copy of the page below, and the phone's Back gesture
+  // later lands on that copy and seems to do nothing (the window under it doesn't close).
+  const state = window.history.state as { aoFrom?: string } | null
+  if (mode === 'replace' && state?.aoFrom === next) {
+    const mine: Array<() => void> = []
+    backing = mine
+    window.history.back()
+    // never stuck if the Back doesn't come (it always should: this entry was pushed on top of `aoFrom`)
+    setTimeout(() => {
+      if (backing !== mine) return
+      backing = null
+      mine.forEach((fn) => fn())
+    }, 600)
+    return
+  }
+  if (mode === 'push') window.history.pushState({ aoFrom: here }, '', next)
+  else window.history.replaceState(window.history.state, '', next)
   useUrl.setState({ params: read() })
 }
 

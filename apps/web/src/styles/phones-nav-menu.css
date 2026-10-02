@@ -14,7 +14,6 @@
   .nav-right { order: 2; margin-left: auto; flex-wrap: nowrap; gap: 8px; }
   .clock b { font-size: 16px; }
   .clock__sec { font-size: 12px; }
-  .app--full.app--mobile .dock, .app--full.app--mobile .nav-metrics { display: none; }
 }
 /* agent drawer tabs: scroll sideways when they don't fit (phones) */
 .drawer__tabs { max-width: calc(100% - 40px); box-sizing: border-box; overflow-x: auto; overflow-y: hidden; flex-shrink: 0; scrollbar-width: none; }

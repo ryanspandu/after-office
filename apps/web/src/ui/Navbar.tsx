@@ -49,7 +49,7 @@ export function Navbar() {
   // nothing measured yet (first moments in live mode): dashes, not a jump from 0
   const measured = metrics.memTotalGb > 0
   const memPct = measured ? (metrics.memUsedGb / metrics.memTotalGb) * 100 : 0
-  // phones: timezone, theme, fullscreen and the account move into a menu next to the clock
+  // phones: timezone, theme and the account move into a menu (no fullscreen: the office already fills the screen) next to the clock
   const mobile = useMediaQuery(MOBILE)
   const live = useOffice((s) => s.source === 'live')
   const paused = useLive((s) => s.automation.quotaPaused)
@@ -135,9 +135,6 @@ export function Navbar() {
               </button>
             )}
             <InstallMenuItem />
-            <button className="nav-menu__item" onClick={toggleFullscreen}>
-              {fullscreen ? <LuMinimize2 /> : <LuMaximize2 />} {fullscreen ? 'Show panels' : 'Fullscreen office'}
-            </button>
             <div className="nav-menu__user">
               <button className="nav-menu__profile" onClick={() => useProfileModal.getState().setOpen(true)}>
                 <OwnerAvatar className="avatar--xs" />
@@ -246,7 +243,7 @@ function Meter({ icon, label, value, pct }: { icon: ReactNode; label: string; va
 
 /** Claude subscription usage (5-hour and 7-day windows) as reported by Claude Code's statusline. Live mode only. */
 
-/** Phones: the burger button and its dropdown (timezone, theme, fullscreen, account). */
+/** Phones: the burger button and its dropdown (timezone, theme, account). */
 /**
  * Phones: the menu button floats on the 3D stage, bottom right (the reload button is bottom left), and the menu opens
  * upwards from it. The button is rendered into the stage (a portal), the menu into the page.

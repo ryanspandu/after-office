@@ -47,7 +47,7 @@ export function App() {
   }, [launch, manager])
 
   return (
-    <div className={`app${fullscreen ? ' app--full' : ''}${mobile ? ' app--mobile' : ''}`}>
+    <div className={`app${fullscreen && !mobile ? ' app--full' : ''}${mobile ? ' app--mobile' : ''}`}>
       <Navbar />
       {!mobile && <LeftSidebar />}
       <main className="stage">
