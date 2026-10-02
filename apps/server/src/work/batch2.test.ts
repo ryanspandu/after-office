@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { OfficeTask } from '@after-office/shared'
-import { agentsRepo, commentsRepo, cronsRepo, projectsRepo, queueRepo, tasksRepo, triggersRepo, type AgentRow } from '../db'
+import { agentsRepo, commentsRepo, cronsRepo, queueRepo, tasksRepo, triggersRepo, type AgentRow } from '../db'
 import { getPending, resolvePending, setRateLimits, updateRuntime } from '../agents/registry'
 import { runCheck } from './checks'
 import { diffSince, snapshot } from './git'
@@ -43,7 +43,7 @@ const task = (id: string, patch: Partial<OfficeTask> = {}): OfficeTask => ({
   id,
   title: id,
   agentId: 'b2-w',
-  projectId: null,
+ 
   deadline: Date.now() + 3_600_000,
   priority: 'medium',
   status: 'todo',
@@ -76,16 +76,16 @@ beforeAll(() => {
   updateSettings({ managerApproval: false, autoAssign: false })
 })
 
-describe('project brief', () => {
-  test('goes into the task prompt', async () => {
-    projectsRepo.put({ id: 'b2-p', name: 'Shop', color: '#ff0000', brief: 'Repo: ~/shop. Use pnpm.', check: 'true' })
-    expect(projectsRepo.get('b2-p')).toMatchObject({ brief: 'Repo: ~/shop. Use pnpm.', check: 'true' })
-    tasksRepo.put(task('b2-brief', { projectId: 'b2-p' }))
+describe('a task in a folder', () => {
+  test('the prompt says where to work', async () => {
+    const where = mkdtempSync(join(tmpdir(), 'b2-folder-'))
+    tasksRepo.put(task('b2-folder', { folder: where }))
     queuedTexts('b2-w')
-    await startTask('b2-brief')
+    await startTask('b2-folder')
     const [prompt] = queuedTexts('b2-w')
-    expect(prompt).toContain('Project: Shop')
-    expect(prompt).toContain('Project context:\nRepo: ~/shop. Use pnpm.')
+    expect(prompt).toContain(`Folder: ${where} (work there)`)
+    expect(prompt).not.toContain('Project')
+    rmSync(where, { recursive: true, force: true })
   })
 })
 

@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { ActivityEntry, AgentKind, CronJob, LiveMode, OfficeTask, OwnerNote, Project, TaskComment, WorkReport } from '@after-office/shared'
+import type { ActivityEntry, AgentKind, CronJob, LiveMode, OfficeTask, OwnerNote, TaskComment, WorkReport } from '@after-office/shared'
 
 // Persistent state lives in one SQLite file (OFFICE_DATA_DIR, default apps/server/data).
 // Runtime state (status, current tool, pending approvals) stays in memory and is rebuilt from hooks.
@@ -39,11 +39,6 @@ CREATE TABLE IF NOT EXISTS usage_daily (
   input    INTEGER NOT NULL DEFAULT 0,
   output   INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (date, agent_id)
-);
-CREATE TABLE IF NOT EXISTS projects (
-  id    TEXT PRIMARY KEY,
-  name  TEXT NOT NULL,
-  color TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id          TEXT PRIMARY KEY,
@@ -136,9 +131,6 @@ for (const col of ['git_name', 'git_email', 'ssh_public', 'ssh_fingerprint']) if
 if (!hasColumn('agents', 'pinned')) db.exec('ALTER TABLE agents ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
 if (!hasColumn('agents', 'extra_dirs')) db.exec("ALTER TABLE agents ADD COLUMN extra_dirs TEXT NOT NULL DEFAULT '[]'")
 db.exec('CREATE INDEX IF NOT EXISTS tasks_updated ON tasks (updated_at)')
-if (!hasColumn('projects', 'brief')) db.exec('ALTER TABLE projects ADD COLUMN brief TEXT')
-if (!hasColumn('projects', 'check_cmd')) db.exec('ALTER TABLE projects ADD COLUMN check_cmd TEXT')
-if (!hasColumn('projects', 'folder')) db.exec('ALTER TABLE projects ADD COLUMN folder TEXT')
 // webhook tokens that can run a cron job (never part of the dashboard's work state)
 db.exec('CREATE TABLE IF NOT EXISTS cron_triggers (cron_id TEXT PRIMARY KEY, token TEXT NOT NULL, last_at INTEGER NOT NULL DEFAULT 0)')
 // a task's timeline (TaskComment JSON); newer tables are created here so old databases get them too
@@ -415,8 +407,6 @@ export const commentsRepo = {
   removeTask: (taskId: string) => db.query('DELETE FROM task_comments WHERE task_id = ?').run(taskId),
 }
 
-type ProjectRow = { id: string; name: string; color: string; brief: string | null; check_cmd: string | null; folder: string | null }
-const toProject = (r: ProjectRow): Project => ({ id: r.id, name: r.name, color: r.color, ...(r.brief ? { brief: r.brief } : {}), ...(r.check_cmd ? { check: r.check_cmd } : {}), ...(r.folder ? { folder: r.folder } : {}) })
 
 export interface SessionRow {
   id: string
@@ -464,20 +454,16 @@ export const loginLog = {
     db.query<{ at: number; ok: number; ip: string; agent: string; user: string; step: string }, [number]>('SELECT at, ok, ip, agent, user, step FROM login_log ORDER BY id DESC LIMIT ?').all(limit),
 }
 
-export const projectsRepo = {
-  all: () => db.query<ProjectRow, []>('SELECT * FROM projects ORDER BY rowid').all().map(toProject),
-  get: (id: string) => {
-    const r = db.query<ProjectRow, [string]>('SELECT * FROM projects WHERE id = ?').get(id)
-    return r ? toProject(r) : null
-  },
-  put: (p: Project) =>
-    db
-      .query(
-        `INSERT INTO projects (id, name, color, brief, check_cmd, folder) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-         ON CONFLICT(id) DO UPDATE SET name = ?2, color = ?3, brief = ?4, check_cmd = ?5, folder = ?6`,
-      )
-      .run(p.id, p.name, p.color, p.brief ?? null, p.check ?? null, p.folder ?? null),
-  remove: (id: string) => db.query('DELETE FROM projects WHERE id = ?').run(id),
+/**
+ * The dashboard's projects, from before tasks simply had a folder: read once to give their tasks and notes that folder
+ * (work/folders.ts), then dropped with everything in them (names, briefs, checks).
+ */
+const hasProjects = () => !!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'projects'").get()
+export const legacyProjectsRepo = {
+  exists: hasProjects,
+  folderOf: (id: string) =>
+    hasProjects() && hasColumn('projects', 'folder') ? (db.query<{ folder: string | null }, [string]>('SELECT folder FROM projects WHERE id = ?').get(id)?.folder ?? null) : null,
+  drop: () => db.exec('DROP TABLE IF EXISTS projects'),
 }
 
 /** Webhook tokens are stored as SHA-256 (the dashboard shows a token once, when it is made). */
@@ -518,6 +504,11 @@ export const ownerNotesRepo = {
   put: (n: OwnerNote) =>
     db.query('INSERT INTO owner_notes (id, data, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET data = ?2, updated_at = ?3').run(n.id, JSON.stringify(n), n.updatedAt),
   remove: (id: string) => db.query('DELETE FROM owner_notes WHERE id = ?').run(id),
+  /** A folder renamed or moved: its notes (and those of the folders in it) follow. */
+  moveFolder: (from: string, to: string) => {
+    for (const n of ownerNotesRepo.all())
+      if (n.folder && (n.folder === from || n.folder.startsWith(`${from}/`))) ownerNotesRepo.put({ ...n, folder: to + n.folder.slice(from.length) })
+  },
 }
 
 export const folderNotesRepo = {
@@ -527,6 +518,9 @@ export const folderNotesRepo = {
     if (!text.trim()) return void db.query('DELETE FROM folder_notes WHERE path = ?').run(path)
     db.query('INSERT INTO folder_notes (path, text, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(path) DO UPDATE SET text = ?2, updated_at = ?3').run(path, text, Date.now())
   },
+  /** Every one (the move to the owner's notes, notes.ts). */
+  all: () => db.query<{ path: string; text: string; updated_at: number }, []>('SELECT path, text, updated_at FROM folder_notes').all(),
+  remove: (path: string) => db.query('DELETE FROM folder_notes WHERE path = ?').run(path),
   /** A folder renamed or moved: its notes (and those of the folders in it) follow. */
   move: (from: string, to: string) =>
     db.query('UPDATE folder_notes SET path = ?2 || substr(path, length(?1) + 1) WHERE path = ?1 OR path LIKE ?1 || \'/%\'').run(from, to),

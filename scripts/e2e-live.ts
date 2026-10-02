@@ -225,7 +225,7 @@ async function main() {
 
   // ── tasks ──
   const mk = (tid: string, extra: object) =>
-    j(`/api/tasks/${tid}`, 'PUT', { title: tid, agentId: id, projectId: null, deadline: Date.now() + 3600e3, priority: 'low', status: 'todo', ...extra })
+    j(`/api/tasks/${tid}`, 'PUT', { title: tid, agentId: id, deadline: Date.now() + 3600e3, priority: 'low', status: 'todo', ...extra })
   await idle(id, 'idle before tasks')
   await mk('qa-task-manual', { description: 'Reply with exactly: TASK-MANUAL-OK' })
   const st = await j('/api/tasks/qa-task-manual/start', 'POST', {})

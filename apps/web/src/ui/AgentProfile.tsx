@@ -403,7 +403,7 @@ function Overview({ agent, live, draft, set }: { agent: OfficeAgent; live: boole
                 </button>
               )}
             </dd>
-            <dt>Project folders</dt>
+            <dt>Other folders</dt>
             <dd className="extra-dirs">
               {agent.extraDirs?.length ? (
                 agent.extraDirs.map((d) => (
@@ -423,7 +423,7 @@ function Overview({ agent, live, draft, set }: { agent: OfficeAgent; live: boole
                   </span>
                 ))
               ) : (
-                <span className="muted">Only its own folder. Tasks in projects linked to other folders add them here.</span>
+                <span className="muted">Only its own folder. A task or chat set in another folder adds that folder here.</span>
               )}
             </dd>
             <dt>tmux</dt>

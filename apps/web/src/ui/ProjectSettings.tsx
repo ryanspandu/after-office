@@ -85,7 +85,7 @@ export function ProjectSettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal open onClose={onClose} title="Project settings" description="How this office looks: navbar, sign-in page and browser tab." width={480}>
+    <Modal open onClose={onClose} title="Office settings" description="How this office looks: navbar, sign-in page and browser tab." width={480}>
       <form
         className="modal__body project-settings"
         onSubmit={(e) => {

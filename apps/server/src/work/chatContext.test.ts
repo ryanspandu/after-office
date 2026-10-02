@@ -1,9 +1,12 @@
 import { afterAll, expect, test } from 'bun:test'
-import { agentsRepo, projectsRepo, reportsRepo, type AgentRow } from '../db'
+import { mkdirSync, realpathSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import { agentsRepo, reportsRepo, type AgentRow } from '../db'
+import { PROJECTS_DIR } from '../fsroots'
 import { deleteTag, putTag } from './tags'
 import { cleanChatContext, contextBlock, CONTEXT_HEADER, expectChatReport, onAgentStopped, onPromptSubmitted, withContext } from './work'
 
-// The chat's optional project and tags: a block after the owner's words; the manager uses them for its work, any
+// The chat's optional folder and tags: a block after the owner's words; the manager uses them for its work, any
 // other agent's answer is kept in Reports under them.
 
 const row = (id: string, kind: AgentRow['kind']): AgentRow => ({
@@ -12,38 +15,39 @@ const row = (id: string, kind: AgentRow['kind']): AgentRow => ({
 })
 agentsRepo.insert(row('cc-w', 'worker'))
 agentsRepo.insert(row('cc-m', 'manager'))
-projectsRepo.put({ id: 'cc-p', name: 'Blog', color: '#f07a1d', brief: 'Running shoes for beginners.', folder: '/tmp/cc-blog' })
+mkdirSync(join(PROJECTS_DIR, 'cc-blog'), { recursive: true })
+const BLOG = realpathSync(join(PROJECTS_DIR, 'cc-blog'))
 putTag('cc-t', { name: 'SEO' })
 afterAll(() => {
   agentsRepo.remove('cc-w')
   agentsRepo.remove('cc-m')
-  projectsRepo.remove('cc-p')
+  rmSync(BLOG, { recursive: true, force: true })
   deleteTag('cc-t')
 })
 
-test('the picks are checked: an existing project, known tags only', () => {
-  expect(cleanChatContext('cc-p', ['cc-t', 'nope'])).toEqual({ projectId: 'cc-p', tags: ['cc-t'] })
+test('the picks are checked: a folder agents may work in, known tags only', () => {
+  expect(cleanChatContext(BLOG, ['cc-t', 'nope'])).toEqual({ folder: BLOG, tags: ['cc-t'] })
   expect(cleanChatContext('', [])).toEqual({})
-  expect(() => cleanChatContext('ghost', [])).toThrow('No such project')
+  expect(() => cleanChatContext(join(PROJECTS_DIR, 'ghost'), [])).toThrow('No folder')
+  expect(() => cleanChatContext('/etc', [])).toThrow('Folder must be inside')
 })
 
-test('the manager is told to use them; another agent gets the folder and brief, and hears its answer is kept', () => {
-  const ctx = { projectId: 'cc-p', tags: ['cc-t'] }
+test('the manager is told to use them; another agent gets the folder, and hears its answer is kept', () => {
+  const ctx = { folder: BLOG, tags: ['cc-t'] }
   const m = contextBlock('cc-m', ctx)!
   expect(m).toStartWith(CONTEXT_HEADER)
-  expect(m).toContain('Project: Blog (id cc-p)')
+  expect(m).toContain(`Folder: ${BLOG}`)
   expect(m).toContain('Tags: SEO')
   expect(m).toContain('delegate_task')
   const w = contextBlock('cc-w', ctx)!
-  expect(w).toContain('Folder: /tmp/cc-blog (work there)')
-  expect(w).toContain('Running shoes for beginners.')
+  expect(w).toContain(`Folder: ${BLOG} (work there)`)
   expect(w).toContain("kept in the owner's Reports")
   expect(contextBlock('cc-w', {})).toBeNull()
   expect(withContext('Write the intro', w)).toStartWith('Write the intro\n\n[After Office context]')
 })
 
-test("a worker's answer to that message becomes a report with the project and tags; the next plain message doesn't", () => {
-  const ctx = { projectId: 'cc-p', tags: ['cc-t'] }
+test("a worker's answer to that message becomes a report with the folder and tags; the next plain message doesn't", () => {
+  const ctx = { folder: BLOG, tags: ['cc-t'] }
   const sent = withContext('Write the intro\nAbout 200 words', contextBlock('cc-w', ctx))
   expectChatReport('cc-w', sent, 'Write the intro\nAbout 200 words', ctx)
   // its turn ending before the message was even seen (an earlier turn): not this answer
@@ -52,7 +56,7 @@ test("a worker's answer to that message becomes a report with the project and ta
   onPromptSubmitted('cc-w', sent)
   onAgentStopped('cc-w', 'Here is the intro.')
   const r = reportsRepo.latest(50).find((x) => x.kind === 'chat' && x.refId === 'cc-w')!
-  expect(r).toMatchObject({ title: 'Write the intro', text: 'Here is the intro.', projectId: 'cc-p', tags: ['cc-t'], ok: true })
+  expect(r).toMatchObject({ title: 'Write the intro', text: 'Here is the intro.', folder: BLOG, tags: ['cc-t'], ok: true })
   reportsRepo.remove(r.id)
   // a plain message afterwards: no report
   onPromptSubmitted('cc-w', 'thanks')

@@ -7,7 +7,7 @@ import { decideCheck, decideDelegation } from './work'
 // Notes the owner writes when approving the manager's requests reach whoever needs them.
 
 const mgr = { id: 'ap-mgr', name: 'Boss', tmux_session: 'ao-ap-mgr', cwd: '/tmp/ap-mgr', desk: 971, role: '', model: 'haiku', permission_mode: 'default' as const, session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'manager' as const }
-const task = (id: string, patch: Partial<OfficeTask> = {}): OfficeTask => ({ id, title: id, agentId: null, projectId: null, deadline: Date.now() + 3_600_000, priority: 'medium', status: 'todo', delegatedBy: 'ap-mgr', ...patch })
+const task = (id: string, patch: Partial<OfficeTask> = {}): OfficeTask => ({ id, title: id, agentId: null, deadline: Date.now() + 3_600_000, priority: 'medium', status: 'todo', delegatedBy: 'ap-mgr', ...patch })
 const follow = (id: string, kind: LiveFollowUp['kind'], taskId: string): LiveFollowUp => {
   const f = { id, agentId: 'ap-mgr', kind, tool: kind, message: id, input: { taskId }, createdAt: Date.now() }
   addPending(f)

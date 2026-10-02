@@ -27,7 +27,7 @@
 
 .task-list { display: flex; flex-direction: column; max-height: 64vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 14px; }
 .task-list .task-table__head, .task-list .task-table__row {
-  grid-template-columns: 22px minmax(0, 1fr) 120px 130px 120px 96px 130px 26px;
+  grid-template-columns: 22px minmax(0, 1fr) 120px 120px 96px 130px 26px;
 }
 .task-group__head {
   position: sticky; top: 33px; z-index: 1;
@@ -39,8 +39,8 @@
 .task-list .task-table__row { border-top: none; }
 .task-list .task-table__row + .task-table__row { border-top: 1px solid var(--line); }
 /* narrow list (phones, tablets): title on top, the controls in two columns under it. A container query, so it
-   follows the list's own width rather than the screen (children: checkbox, title, status, project, deadline,
-   priority, agent, delete) */
+   follows the list's own width rather than the screen (children: checkbox, title, status, deadline, priority,
+   agent, delete) */
 .task-list { container-type: inline-size; }
 @container (max-width: 900px) {
   .task-list .task-table__head { display: none; }
@@ -51,8 +51,7 @@
   .task-list .task-table__row > :nth-child(4) { grid-column: 3; grid-row: 2; }
   .task-list .task-table__row > :nth-child(5) { grid-column: 2; grid-row: 3; }
   .task-list .task-table__row > :nth-child(6) { grid-column: 3; grid-row: 3; }
-  .task-list .task-table__row > :nth-child(7) { grid-column: 2 / 4; grid-row: 4; }
-  .task-list .task-table__row > :nth-child(8) { grid-column: 4; grid-row: 1; }
+  .task-list .task-table__row > :nth-child(7) { grid-column: 4; grid-row: 1; }
   .task-group__head { top: 0; }
 }
 

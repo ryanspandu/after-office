@@ -248,8 +248,19 @@ export interface OwnerNoteSummary {
   title: string
   /** the start of its text, plain (for lists and search) */
   excerpt: string
-  projectId?: string
   tags?: string[]
+  /** the agents may read and change it (the manager through its tools, the others through theirs) */
+  shared?: boolean
+  /** kept on top of the list */
+  pinned?: boolean
+  /** its place in the list (the owner's order, by drag and drop): lower first; a new note goes on top */
+  rank?: number
+  /** a folder's note (its details → Notes): the folder's real path */
+  folder?: string
+  /** an agent's id when an agent wrote it (unset: the owner) */
+  author?: string
+  /** the agent who changed it last (unset: the owner) */
+  editedBy?: string
   createdAt: number
   updatedAt: number
 }
@@ -260,7 +271,6 @@ export interface OwnerNote extends Omit<OwnerNoteSummary, 'excerpt'> {
 
 export interface WorkState {
   tasks: OfficeTask[]
-  projects: Project[]
   crons: CronJob[]
   /** Office timezone the server schedules crons in. */
   timezone: string
@@ -295,7 +305,7 @@ export interface TaskArchivePage {
 export interface WorkReport {
   id: string
   /** task / cron run: an agent's final message; note: something the manager wanted you to see */
-  /** `chat`: an agent's answer to the owner's chat message sent with a project or tags (refId: the agent) */
+  /** `chat`: an agent's answer to the owner's chat message sent with a folder or tags (refId: the agent) */
   kind: 'task' | 'cron' | 'note' | 'chat'
   /** Task or cron job id */
   refId: string
@@ -309,8 +319,8 @@ export interface WorkReport {
   read: boolean
   /** files the agent wrote during this run, or pointed to in its report (downloadable) */
   files?: Attachment[]
-  /** the project it's about: a task's project, or the one the manager filed its summary under */
-  projectId?: string | null
+  /** the folder the work was in: its task's, or the one the chat message was about */
+  folder?: string
   /** tag ids (a task's report starts with the task's tags) */
   tags?: string[]
 }
@@ -370,18 +380,6 @@ export interface Tag {
   color: string
 }
 
-export interface Project {
-  id: string
-  name: string
-  color: string
-  /** Live: goal, repo/folder, conventions. Added to the prompt of every task in this project. */
-  brief?: string
-  /** Live: quality gate. Shell command run when an agent finishes a task (e.g. `bun test`), in the project's folder. */
-  check?: string
-  /** Live: the project's folder (absolute). Tasks are told to work there; checks and the Changes view run there. */
-  folder?: string
-}
-
 export interface OfficeTask {
   /** who asked for it (the activity log's "why"): the owner from a device, or the manager and what started its turn */
   origin?: ActivityOrigin
@@ -390,7 +388,9 @@ export interface OfficeTask {
   id: string
   title: string
   agentId: string | null
-  projectId: string | null
+  /** Live: the folder the agent works in for this task (absolute; unset: its own folder). Outside its own, it's added
+   *  to the agent's session when the task starts; the Changes view and the quality check run there. */
+  folder?: string
   /** epoch ms */
   deadline: number
   priority: TaskPriority
@@ -413,7 +413,7 @@ export interface OfficeTask {
   blockedBy?: string[]
   /** tag ids (the owner's labels, see Tag) */
   tags?: string[]
-  /** Live: quality gate for this task only (overrides the project's check). */
+  /** Live: quality gate for this task: a shell command run in its folder when the agent finishes. */
   check?: string
   /** Server-owned: quality gate state for the current run. */
   checkState?: 'running' | 'passed' | 'failed'
@@ -622,7 +622,7 @@ export interface LoginEvent {
   step?: 'password' | 'code' | 'recovery'
 }
 
-/** Git state of a folder (the Projects tab). */
+/** Git state of a folder (the Folders tab). */
 export interface GitInfo {
   branch: string | null
   /** changed or new files */
@@ -632,8 +632,6 @@ export interface GitInfo {
 
 export interface WorkspaceFolder {
   path: string
-  /** the dashboard project linked to this folder, if any */
-  projectId?: string | null
   name: string
   /** null: not a git repo */
   git: GitInfo | null
@@ -641,21 +639,19 @@ export interface WorkspaceFolder {
   updatedAt: number
 }
 
-/** An agent working folder, with the agents in it and (unless it is itself a project) the projects inside it. */
+/** An agent working folder, with the agents in it and (unless it is itself one piece of work, e.g. a repo) the folders inside it. */
 export interface Workspace extends WorkspaceFolder {
   agentIds: string[]
-  /** the dashboard project linked to this folder, if any */
-  projectId?: string | null
   /** the folder itself is one project (a repo, or it has package.json, README.md, …) */
   isProject: boolean
   projects: WorkspaceFolder[]
-  /** the office's own projects folder (<agents dir>/project): new projects' folders, no agent lives here */
+  /** the office's own folder for work (<agents dir>/project): new folders made in the dashboard, no agent lives here */
   shared?: boolean
   /** a folder in the agents' folder whose agent was removed (its files are still there) */
   orphan?: boolean
 }
 
-/** One entry of a folder in the Projects tab's file manager. */
+/** One entry of a folder in the Folders tab's file manager. */
 export interface FolderEntry {
   name: string
   dir: boolean

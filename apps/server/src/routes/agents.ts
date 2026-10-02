@@ -4,11 +4,11 @@ import { noteOwnerMessage } from '../work/activity'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { FollowUpDecision, LiveMode } from '@after-office/shared'
-import { agentsRepo, projectsRepo, sideSessionsRepo, usageRepo } from '../db'
+import { agentsRepo, sideSessionsRepo, usageRepo } from '../db'
 import { existsSync } from 'node:fs'
 import { cleanChatContext, contextBlock, expectChatReport, withContext } from '../work/work'
 import { decide } from '../agents/ingest'
-import { AgentError, changeFolder, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeProjectDir, randomStyle, grantProjectDir, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
+import { AgentError, changeFolder, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeFolder, randomStyle, grantFolder, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
 import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime } from '../agents/registry'
 import type { Runtime } from '../agents/state'
 import { readChat } from '../agents/transcripts'
@@ -63,11 +63,11 @@ agentRoutes.delete('/agents/:id', async (c) => {
 })
 
 agentRoutes.post('/agents/:id/prompt', async (c) => {
-  const { text, uploads, projectId, tags } = await c.req.json<{ text: string; uploads?: unknown; projectId?: unknown; tags?: unknown }>()
+  const { text, uploads, folder: folderIn, tags } = await c.req.json<{ text: string; uploads?: unknown; folder?: unknown; tags?: unknown }>()
   // ?session=s2: one of its side sessions (unset: its main session)
   const key = sessionKeyOf(c.req.query('session'))
-  // the project and tags picked above the message box (optional): a block after the owner's words (work/chatContext.ts)
-  const ctx = cleanChatContext(projectId, tags)
+  // the folder and tags picked above the message box (optional): a block after the owner's words (work/chatContext.ts)
+  const ctx = cleanChatContext(folderIn, tags)
   // attached files (staged by /uploads): moved into the agent's folder now, listed at the end of the message
   const ids = Array.isArray(uploads) ? uploads.filter((f): f is string => typeof f === 'string').slice(0, MAX_UPLOADS) : []
   const row = ids.length ? agentsRepo.get(c.req.param('id')) : null
@@ -80,9 +80,9 @@ agentRoutes.post('/agents/:id/prompt', async (c) => {
   const message = withAttachments(withContext(String(text ?? ''), block), paths)
   const agent = agentsRepo.get(id)
   if (block && agent && agent.kind !== 'manager') {
-    // a project outside its own folder: the agent may work there (no permission prompts)
-    const folder = ctx.projectId ? projectsRepo.get(ctx.projectId)?.folder : undefined
-    if (folder && existsSync(folder) && folder !== agent.cwd) await grantProjectDir(id, folder).catch((e) => console.warn(`[chat] could not add ${folder} for ${id}:`, e.message))
+    // a folder outside its own: the agent may work there (no permission prompts)
+    const folder = ctx.folder
+    if (folder && existsSync(folder) && folder !== agent.cwd) await grantFolder(id, folder).catch((e) => console.warn(`[chat] could not add ${folder} for ${id}:`, e.message))
     // its answer to this message is kept in Reports
     expectChatReport(id, message, String(text ?? ''), ctx, key)
   }
@@ -141,7 +141,7 @@ agentRoutes.post('/agents/:id/folder', async (c) => {
 agentRoutes.delete('/agents/:id/dirs', async (c) => {
   const b = await c.req.json<{ dir?: string }>().catch(() => ({}) as { dir?: string })
   if (typeof b.dir !== 'string' || !b.dir) throw new AgentError('Which folder?')
-  return c.json(toInfo(await revokeProjectDir(c.req.param('id'), b.dir)))
+  return c.json(toInfo(await revokeFolder(c.req.param('id'), b.dir)))
 })
 agentRoutes.post('/agents/:id/restart', async (c) => c.json(toInfo(await restartAgent(c.req.param('id')))))
 

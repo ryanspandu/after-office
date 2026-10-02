@@ -1,8 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { matchesSearch } from './SearchBox'
 import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen, LuCheck, LuX, LuListTodo, LuFileText, LuFile, LuRotateCcw, LuSquareTerminal, LuNotebookPen, LuMinus } from 'react-icons/lu'
-import { DeleteProject } from './DeleteProject'
-import { ProjectReports } from './Reports'
+import { FolderReports } from './Reports'
 import { confirm } from './Confirm'
 import { api } from '../state/auth'
 import { FileBrowser } from './FileBrowser'
@@ -16,10 +15,9 @@ import { useMinimized } from '../state/minimized'
 import { useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { ago } from './FollowUps'
 import { Modal } from './Modal'
+import { FolderNoteList } from './OwnerNotes'
 import { useModalMaximize } from './Maximize'
 import { FolderTerminal } from './FolderTerminal'
-// the notes' rich text editor loads only when Notes is opened
-const FolderNotes = lazy(() => import('./FolderNotes'))
 import { formatSize } from './Attachments'
 import { STATUS_BY_ID } from './taskMeta'
 import { Previews } from './Previews'
@@ -28,11 +26,10 @@ import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSens
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
-// Projects tab: what the agents are working on, straight from their folders, in two lists. "Projects": the folders in
-// the office's own projects folder (~/after-office/project, where new projects get a folder). "Agents": each agent's
-// folder (a git repo is one project; any other folder holds one project per subfolder), and folders whose agent was
-// removed (hideable). Folders are only read here; projects can be set up, renamed and deleted (with their folder, if
-// the office made it).
+// Folders tab: what the agents are working on, straight from their folders, in two lists. "Folders": the folders in
+// the office's own folder (~/after-office/project, where New folder makes one). "Agents": each agent's folder (a git
+// repo is one piece of work; any other folder holds one per subfolder), and folders whose agent was removed
+// (hideable). The office's own folders can be renamed and deleted here; the others are only read.
 
 type View = 'projects' | 'agents'
 const VIEW_KEY = 'ao-projects-view'
@@ -52,14 +49,14 @@ function useWorkspaceData() {
 
 export type Open = { folder: WorkspaceFolder; agentIds: string[]; orphan?: boolean }
 
-export function ProjectsTab({ q = '' }: { q?: string }) {
+export function FoldersTab({ q = '' }: { q?: string }) {
   const ws = useWorkspaceData()
   const [order, saveOrder] = useFolderOrder()
   // a mouse drags after moving a little (a click still opens); a finger after holding a moment (a swipe still scrolls)
   const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }))
   const agents = useOffice((s) => s.agents)
   const now = useNow(60_000).getTime()
-  // a folder's details and the new-project form open in the address bar (ui/UrlModals.tsx)
+  // a folder's details and the new-folder form open in the address bar (ui/UrlModals.tsx)
   const setOpen = (o: Open) => openUrl({ folder: o.folder.path })
   // folders whose agent was removed: shown by default, hideable (remembered in this browser)
   const [showOrphans, setShowOrphans] = useState(() => {
@@ -69,7 +66,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
       return true
     }
   })
-  // agent folders with projects start folded; the ones opened are remembered in this browser (a search opens them all)
+  // agent folders start folded; the ones opened are remembered in this browser (a search opens them all)
   const [unfolded, setUnfolded] = useState<Set<string>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem('ao-open-folders') ?? '[]') as string[])
@@ -114,13 +111,13 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
       return !v
     })
 
-  if (!ws.live) return <div className="empty">Projects come from your agents' folders in live mode.</div>
+  if (!ws.live) return <div className="empty">Folders come from your agents' folders in live mode.</div>
   if (ws.error) return <div className="row__error">{ws.error}</div>
   if (!ws.data) return <div className="empty">Reading the agents' folders…</div>
   if (!ws.data.length) return <div className="empty">No agents yet. Their folders show up here.</div>
 
   const orphans = ws.data.filter((w) => w.orphan).length
-  // the office's projects folder: its subfolders are the Projects list
+  // the office's own folder: its subfolders are the Folders list
   const home = ws.data.find((w) => w.shared)
   // in the owner's order (dragged), new folders after the ordered ones
   const rank = (path: string) => {
@@ -133,7 +130,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
     const all = homeProjects.map((p) => p.path)
     saveOrder(arrayMove(all, all.indexOf(from), all.indexOf(to)))
   }
-  // a search keeps the agent folders that match, or that hold a project that does (only those projects then)
+  // a search keeps the agent folders that match, or that hold a folder that does (only those then)
   const shown = (showOrphans ? ws.data : ws.data.filter((w) => !w.orphan))
     .filter((w) => !w.shared)
     .map((w) => {
@@ -148,8 +145,8 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
   const agentFolders = shown.length
   const summary =
     view === 'projects'
-      ? `${homeProjects.length} project${homeProjects.length === 1 ? '' : 's'} in the projects folder`
-      : `${count} project${count === 1 ? '' : 's'} in ${agentFolders} agent folder${agentFolders === 1 ? '' : 's'}${
+      ? `${homeProjects.length} folder${homeProjects.length === 1 ? '' : 's'} in the office folder`
+      : `${count} folder${count === 1 ? '' : 's'} in ${agentFolders} agent folder${agentFolders === 1 ? '' : 's'}${
           !showOrphans && orphans ? ` (${orphans} without an agent hidden)` : ''
         }`
   const tree = { isOpen: (k: string) => unfolded.has(k), toggle: toggleFold }
@@ -158,7 +155,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
       <Previews />
       <div className="seg ws-tabs" role="tablist">
         <button role="tab" aria-selected={view === 'projects'} className={view === 'projects' ? 'active' : ''} onClick={() => pickView('projects')}>
-          Projects
+          Folders
           <span className="seg__count">{home?.projects.length ?? 0}</span>
         </button>
         <button role="tab" aria-selected={view === 'agents'} className={view === 'agents' ? 'active' : ''} onClick={() => pickView('agents')}>
@@ -172,11 +169,11 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
           {summary}
         </span>
         <span className="grow" />
-        <button className="icon-btn small" data-tip="New project" aria-label="New project" onClick={() => openUrl({ newproject: '1' })}>
+        <button className="icon-btn small" data-tip="New folder" aria-label="New folder" onClick={() => openUrl({ newfolder: '1' })}>
           <LuFolderPlus />
         </button>
         {view === 'projects' && home && (
-          <button className="icon-btn small" data-tip={`Open the projects folder · ${home.path}`} aria-label="Open the projects folder" onClick={() => setOpen({ folder: home, agentIds: home.agentIds })}>
+          <button className="icon-btn small" data-tip={`Open the office folder · ${home.path}`} aria-label="Open the office folder" onClick={() => setOpen({ folder: home, agentIds: home.agentIds })}>
             <LuFolderOpen />
           </button>
         )}
@@ -196,7 +193,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
       {view === 'projects' ? (
         <div className="ws-list">
           {!homeProjects.length ? (
-            <div className="empty">{q.trim() ? 'No projects match.' : 'No projects yet. New projects get their folder in the projects folder.'}</div>
+            <div className="empty">{q.trim() ? 'No folders match.' : 'No folders yet. New folder makes one here.'}</div>
           ) : (
             // drag a folder to put it elsewhere in the list (not while searching: only some are shown)
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => moveFolder(String(e.active.id), e.over ? String(e.over.id) : null)}>
@@ -226,13 +223,13 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
         {!shown.length && <div className="empty">{q.trim() ? 'No folders match.' : 'No agent folders.'}</div>}
         {shown.map((w) => {
           const people = w.agentIds.map((id) => agents.find((a) => a.id === id)).filter(Boolean) as OfficeAgent[]
-          // every folder opens in place (its files and subfolders); a search shows the matching projects instead
+          // every folder opens in place (its files and subfolders); a search shows the matching folders instead
           const searching = !!q.trim() && !w.isProject
           const open = searching || unfolded.has(w.path)
-          // its project subfolders: their tag and git line in the tree, their name opens their details
+          // its subfolders: their git line in the tree, their name opens their details
           const projectAt: ProjectAt = (abs) => {
             const p = w.projects.find((x) => x.path === abs || x.path.replace(/^\/private/, '') === abs.replace(/^\/private/, ''))
-            return p ? { tag: <LinkedTag projectId={p.projectId} folderName={p.name} />, sub: <GitLine folder={p} now={now} compact />, open: () => setOpen({ folder: p, agentIds: w.agentIds }) } : undefined
+            return p ? { tag: null, sub: <GitLine folder={p} now={now} compact />, open: () => setOpen({ folder: p, agentIds: w.agentIds }) } : undefined
           }
           return (
             <section key={w.path} className={`ws${w.orphan ? ' ws--orphan' : ''}`}>
@@ -244,9 +241,8 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
                 data-tip={w.orphan ? 'Its agent was removed' : undefined}
               >
                 {w.git ? <LuFolderGit2 className="ws__icon" /> : <LuFolder className="ws__icon" />}
-                <span className="ws__name truncate">{w.shared ? 'Projects folder' : w.name}</span>
-                {w.isProject && <LinkedTag projectId={w.projectId} folderName={w.name} />}
-                {!w.isProject && !open && w.projects.length > 0 && <span className="ws__count muted" data-tip={`${w.projects.length} project${w.projects.length === 1 ? '' : 's'}`}>{w.projects.length}</span>}
+                <span className="ws__name truncate">{w.shared ? 'Office folder' : w.name}</span>
+                {!w.isProject && !open && w.projects.length > 0 && <span className="ws__count muted" data-tip={`${w.projects.length} folder${w.projects.length === 1 ? '' : 's'}`}>{w.projects.length}</span>}
                 {w.orphan ? <span className="ws__tag ws__tag--orphan">no agent</span> : <Avatars agents={people} />}
               </button>
               </div>
@@ -271,7 +267,7 @@ export function ProjectsTab({ q = '' }: { q?: string }) {
   )
 }
 
-/** One project folder in a list: its name, the dashboard project it's linked to, its git state. */
+/** One folder in a list: its name and its git state. */
 function FolderRow({ folder: p, now, onOpen }: { folder: WorkspaceFolder; now: number; onOpen: () => void }) {
   return (
     <button className="ws-row" onClick={onOpen}>
@@ -279,20 +275,11 @@ function FolderRow({ folder: p, now, onOpen }: { folder: WorkspaceFolder; now: n
       <span className="ws-row__body">
         <span className="ws-row__name">
           <span className="truncate">{p.name}</span>
-          <LinkedTag projectId={p.projectId} folderName={p.name} />
         </span>
         <GitLine folder={p} now={now} compact />
       </span>
     </button>
   )
-}
-
-/** The dashboard project a folder is linked to (colour + name), or a hint that it can be set up. */
-function LinkedTag({ projectId }: { projectId?: string | null; folderName?: string }) {
-  const project = useDashboard((s) => s.projects.find((p) => p.id === projectId))
-  if (!project) return <span className="ws__tag">project</span>
-  // a project of the dashboard (brief, check, tasks): its colour
-  return <span className="chip__dot ws__dot-tag" style={{ background: project.color }} />
 }
 
 function Avatars({ agents }: { agents: OfficeAgent[] }) {
@@ -345,26 +332,15 @@ export function ProjectFolderModal({
 }) {
   const agents = useOffice((s) => s.agents)
   const tasks = useDashboard((s) => s.tasks)
-  const addProject = useDashboard((s) => s.addProject)
-  const updateProject = useDashboard((s) => s.updateProject)
-  // the project linked to this folder: from the scan, or one set up here a moment ago
-  const project = useDashboard((s) => s.projects.find((p) => p.id === f.projectId || (p.folder && p.folder === f.path)))
   const reload = useWorkspaces((s) => s.load)
-  // a folder in the projects folder can be renamed here (an agent's folder is named after its agent)
+  // a folder in the office's own folder can be renamed and deleted here (an agent's folder is named after its agent)
   const home = useWorkspaces((s) => s.data?.find((w) => w.shared))
-  const renamable = !!home && f.path.startsWith(`${home.path}/`) && !f.path.slice(home.path.length + 1).includes('/')
-  const ensureProject = () => {
-    if (project) return project.id
-    const id = addProject(f.name, { folder: f.path })
-    // the scan links it on its next read
-    setTimeout(() => void reload(true), 800)
-    return id
-  }
+  const own = !!home && f.path.startsWith(`${home.path}/`) && !f.path.slice(home.path.length + 1).includes('/')
   const now = useNow(60_000).getTime()
   const [commits, setCommits] = useState<GitCommit[] | null>(null)
   const [copied, setCopied] = useState(false)
   const people = agentIds.map((id) => agents.find((a) => a.id === id)).filter(Boolean) as OfficeAgent[]
-  // a folder whose agent was removed: it can go, with everything in it (after a clear warning)
+  // a folder whose agent was removed, or one of the office's own: it can go, with everything in it (after a clear warning)
   const removeFolder = async () => {
     const ok = await confirm({
       title: `Delete the folder “${f.name}”?`,
@@ -382,14 +358,11 @@ export function ProjectFolderModal({
     void reload(true)
     onClose()
   }
-  // tasks of the agents working here that mention the folder, else all their open tasks
+  // open tasks set in this folder (or one inside it), and those of the agents living here that work in their own
   const related = useMemo(() => {
-    const mine = tasks.filter((t) => t.status !== 'done' && ((project && t.projectId === project.id) || (t.agentId && agentIds.includes(t.agentId))))
-    const here = mine.filter(
-      (t) => (project && t.projectId === project.id) || (t.description ?? '').includes(f.path) || t.title.toLowerCase().includes(f.name.toLowerCase()),
-    )
-    return (here.length ? here : mine).slice(0, 8)
-  }, [tasks, agentIds, f.path, f.name, project])
+    const inside = (p?: string) => !!p && (p === f.path || p.startsWith(`${f.path}/`))
+    return tasks.filter((t) => t.status !== 'done' && (inside(t.folder) || (!t.folder && !!t.agentId && agentIds.includes(t.agentId)))).slice(0, 20)
+  }, [tasks, agentIds, f.path])
 
   useEffect(() => {
     if (f.git) liveApi.commits(f.path).then(setCommits)
@@ -408,9 +381,9 @@ export function ProjectFolderModal({
     { id: 'files', label: 'Files', icon: <LuFolderOpen /> },
     { id: 'notes', label: 'Notes', icon: <LuNotebookPen /> },
     { id: 'terminal', label: 'Terminal', icon: <LuSquareTerminal /> },
-    { id: 'project', label: project ? 'Project settings' : 'Set up as project', icon: <LuSettings2 /> },
     { id: 'tasks', label: 'Open tasks', icon: <LuListTodo />, count: related.length },
-    { id: 'reports', label: 'Reports', icon: <LuFileText />, show: !!project },
+    { id: 'reports', label: 'Reports', icon: <LuFileText /> },
+    { id: 'settings', label: 'Settings', icon: <LuSettings2 />, show: own },
     { id: 'git', label: 'Git', icon: <LuGitBranch />, show: !!f.git },
     { id: 'trash', label: 'Trash', icon: <LuTrash2 />, count: trash.items?.length },
   ]
@@ -470,16 +443,14 @@ export function ProjectFolderModal({
             ))}
           </div>
           <div className="fd__actions">
-            <button className="primary" onClick={() => openUrl({ newtask: '1', nt_agent: people[0]?.id ?? null, nt_project: ensureProject() })}>
+            <button className="primary" onClick={() => openUrl({ newtask: '1', nt_agent: people[0]?.id ?? null, nt_folder: f.path })}>
               <LuPlus /> New task here
             </button>
-            {orphan && (
+            {(orphan || own) && (
               <button className="ghost danger-text" onClick={() => void removeFolder()}>
                 <LuTrash2 /> Delete folder
               </button>
             )}
-            {/* deleting the project: apart from the settings (asks first; the folder only if ticked) */}
-            {project && <DeleteProject labelled project={project} taskCount={tasks.filter((t) => t.projectId === project.id).length} onDeleted={onClose} />}
           </div>
         </aside>
 
@@ -487,53 +458,19 @@ export function ProjectFolderModal({
           {section === 'files' && <FileBrowser root={f.path} fill onTrashed={trash.reload} />}
           {section === 'terminal' && <FolderTerminal root={f.path} />}
           {section === 'notes' && (
-            <Suspense fallback={<div className="fd__panel muted">Loading…</div>}>
-              <FolderNotes path={f.path} />
-            </Suspense>
+            <FolderNoteList folder={f.path} />
           )}
 
-          {section === 'project' && (
+          {section === 'settings' && own && (
             <div className="fd__panel">
-              {renamable && <FolderName folder={f} />}
-              {project ? (
-                <>
-                  <p className="field__hint ws-project__hint">Its tasks work in this folder, get the brief below, and run the check when they finish.</p>
-                  <label className="field">
-                    <span className="field__label">Brief</span>
-                    <textarea
-                      rows={6}
-                      maxLength={5000}
-                      value={project.brief ?? ''}
-                      onChange={(e) => updateProject(project.id, { brief: e.target.value || undefined })}
-                      placeholder="Goal, stack, conventions. Added to every task in this project."
-                    />
-                  </label>
-                  <label className="field">
-                    <span className="field__label">Quality check</span>
-                    <input
-                      className="mono"
-                      maxLength={1000}
-                      value={project.check ?? ''}
-                      onChange={(e) => updateProject(project.id, { check: e.target.value || undefined })}
-                      placeholder="e.g. pnpm lint && pnpm test (runs in this folder, as the agents' user)"
-                    />
-                  </label>
-                </>
-              ) : (
-                <div className="ws-project__setup">
-                  <span className="field__hint">Not a project in the dashboard yet. Set it up to give its tasks a brief and a quality check.</span>
-                  <button className="small" onClick={ensureProject}>
-                    <LuSettings2 /> Set up as project
-                  </button>
-                </div>
-              )}
+              <FolderName folder={f} />
             </div>
           )}
 
           {section === 'tasks' && (
             <div className="fd__panel">
               {!related.length ? (
-                <span className="muted">No open tasks for the agents here.</span>
+                <span className="muted">No open tasks in this folder.</span>
               ) : (
                 <ul className="team-list">
                   {related.map((t) => (
@@ -553,9 +490,9 @@ export function ProjectFolderModal({
             </div>
           )}
 
-          {section === 'reports' && project && (
+          {section === 'reports' && (
             <div className="fd__panel">
-              <ProjectReports projectId={project.id} />
+              <FolderReports folder={f.path} />
             </div>
           )}
 
@@ -595,38 +532,37 @@ export function ProjectFolderModal({
 function ProjectsRefresh({ ws }: { ws: ReturnType<typeof useWorkspaceData> }) {
   if (!ws.live) return null
   return (
-    <button className="icon-btn small" data-tip="Read the folders again" aria-label="Refresh projects" onClick={() => void ws.refresh()} disabled={ws.loading}>
+    <button className="icon-btn small" data-tip="Read the folders again" aria-label="Refresh folders" onClick={() => void ws.refresh()} disabled={ws.loading}>
       <LuRefreshCw className={ws.loading ? 'spin' : ''} />
     </button>
   )
 }
 
-/** A new project with its own folder in ~/after-office/project (made by the server). */
-export function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: (folder: WorkspaceFolder) => void }) {
-  const addProject = useDashboard((s) => s.addProject)
+/** A new folder in ~/after-office/project (made by the server), then its details. */
+export function NewFolderModal({ onClose, onCreated }: { onClose: () => void; onCreated: (folder: WorkspaceFolder) => void }) {
   const reload = useWorkspaces((s) => s.load)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const create = async () => {
     if (!name.trim()) return
     setBusy(true)
-    const id = addProject(name.trim(), undefined, { createFolder: true })
-    // wait for the server to make the folder, then open it
-    for (let i = 0; i < 20; i++) {
-      await new Promise((r) => setTimeout(r, 300))
-      const folder = useDashboard.getState().projects.find((p) => p.id === id)?.folder
-      if (!folder) continue
+    setError(null)
+    try {
+      const r = await api('/api/folders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) })
+      const body = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(body?.error ?? 'Could not make the folder')
       await reload(true)
-      const f = useWorkspaces.getState().data?.flatMap((w) => w.projects).find((x) => x.path === folder)
+      const f = useWorkspaces.getState().data?.flatMap((w) => w.projects).find((x) => x.path === body.folder)
       onClose()
       if (f) onCreated(f)
-      return
+    } catch (e) {
+      setError((e as Error).message)
+      setBusy(false)
     }
-    setBusy(false)
-    onClose()
   }
   return (
-    <Modal open onClose={onClose} title="New project" description="It gets its own folder in ~/after-office/project" width={420}>
+    <Modal open onClose={onClose} title="New folder" description="In the office folder, ~/after-office/project" width={420}>
       <form
         className="modal__body"
         onSubmit={(e) => {
@@ -638,10 +574,10 @@ export function NewProjectModal({ onClose, onCreated }: { onClose: () => void; o
           <span className="field__label">Name</span>
           <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="e.g. SEO" />
           <span className="field__hint">
-            Folder: <code>~/after-office/project/{name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'name'}</code>. To use an
-            agent's folder or a repo instead, open it above and choose "Set up as project".
+            Folder: <code>~/after-office/project/{name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'name'}</code>
           </span>
         </label>
+        {error && <div className="row__error">{error}</div>}
         <footer className="modal__foot">
           <button type="button" onClick={onClose}>
             Cancel
@@ -655,7 +591,7 @@ export function NewProjectModal({ onClose, onCreated }: { onClose: () => void; o
   )
 }
 
-/** The name of a folder in the projects folder: renaming it renames the folder (its project follows). */
+/** The name of a folder in the office's own folder: renaming it renames the folder (its tasks, reports and notes follow). */
 function FolderName({ folder }: { folder: WorkspaceFolder }) {
   const reload = useWorkspaces((s) => s.load)
   const [name, setName] = useState(folder.name)
@@ -717,12 +653,12 @@ function FolderName({ folder }: { folder: WorkspaceFolder }) {
           </>
         )}
       </span>
-      {(changed || error) && <span className={`field__hint${error ? ' danger-text' : ''}`}>{error ?? 'Renames the folder itself (letters, numbers and dashes); the project keeps its brief, check and tasks.'}</span>}
+      {(changed || error) && <span className={`field__hint${error ? ' danger-text' : ''}`}>{error ?? 'Renames the folder itself (letters, numbers and dashes); its tasks, reports and notes follow.'}</span>}
     </label>
   )
 }
 
-const SECTIONS = ['files', 'terminal', 'notes', 'project', 'tasks', 'reports', 'git', 'trash'] as const
+const SECTIONS = ['files', 'terminal', 'notes', 'tasks', 'reports', 'git', 'settings', 'trash'] as const
 type Section = (typeof SECTIONS)[number]
 
 interface TrashItem {
@@ -776,7 +712,7 @@ function TrashPanel({ trash, now, tilde, under }: { trash: ReturnType<typeof use
   return (
     <div className="fd__panel">
       <div className="fd__trash-head">
-        <span className="field__hint">Deleted from this folder. Kept in ~/after-office/.trash (never inside the project) until you empty it.</span>
+        <span className="field__hint">Deleted from this folder. Kept in ~/after-office/.trash (never inside the folder) until you empty it.</span>
         <span className="grow" />
         {!!trash.items?.length && (
           <button className="small danger-text" onClick={() => void empty()} disabled={busy === 'all'}>

@@ -23,3 +23,22 @@
 .rs__option { padding: 6px 9px; border-radius: 9px; cursor: pointer; }
 .rs__option--focused { background: var(--card-2); }
 .rs__option--selected { background: var(--accent); color: var(--accent-fg); }
+
+/* a task's folder (ui/taskMeta.tsx FolderSelect): looks like the selects beside it, opens the folder picker */
+.folder-select {
+  display: flex; align-items: center; min-width: 0; min-height: 30px; box-sizing: border-box;
+  background: var(--card-2); border: 1px solid var(--line); border-radius: 999px; transition: border-color 0.15s;
+}
+.folder-select:hover { border-color: var(--muted); }
+.folder-select--sm { min-height: 24px; font-size: 12px; }
+.folder-select__pick {
+  all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 7px;
+  padding: 0 11px; height: 100%; min-height: inherit; cursor: pointer;
+}
+.folder-select__pick > svg { flex: none; color: var(--hl); }
+.folder-select__pick:focus-visible { outline: 2px solid var(--hl); outline-offset: 1px; border-radius: 999px; }
+.folder-select__clear {
+  all: unset; display: grid; place-items: center; flex: none; width: 20px; height: 20px; margin-right: 5px; border-radius: 50%;
+  color: var(--muted); cursor: pointer;
+}
+.folder-select__clear:hover { background: var(--card); color: var(--text); }

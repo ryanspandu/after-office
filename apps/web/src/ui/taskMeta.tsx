@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import ReactSelect from 'react-select'
 import { ProjectFolderPicker } from './ProjectFolderPicker'
-import { LuCircleCheck, LuCircleX, LuFolder, LuHourglass, LuLoader, LuLock } from 'react-icons/lu'
-import { projectFolders, useWorkspaces } from '../state/workspaces'
-import CreatableSelect from 'react-select/creatable'
+import { LuCircleCheck, LuCircleX, LuFolder, LuHourglass, LuLoader, LuLock, LuX } from 'react-icons/lu'
 import type { OfficeTask, TaskPriority, TaskStatus } from '@after-office/shared'
 import { useDashboard } from '../state/dashboard'
 import { useOffice } from '../state/store'
@@ -60,96 +58,30 @@ export function StatusSelect({ value, onChange, size }: { value: TaskStatus; onC
   return <Select ariaLabel="Status" size={size} value={value} options={STATUSES} onChange={onChange} />
 }
 
-/** Project picker; typing a new name creates the project. */
-type ProjectOption = Option<string> & { hint?: string; folder?: boolean }
-const BROWSE = '__browse'
+const base = (p: string) => p.split('/').filter(Boolean).pop() ?? p
+const tilde = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, '~')
 
 /**
- * Pick a project, or one of the folders the agents work in (which becomes a project linked to that folder), or
- * type a new name.
+ * Where a task's agent works: a folder, however deep (the folder picker, with search), or none (its own folder).
+ * Looks like the other fields' selects.
  */
-export function ProjectSelect({ value, onChange, size = 'md', menuPlacement = 'auto' }: { value: string; onChange: (v: string) => void; size?: 'sm' | 'md'; menuPlacement?: 'auto' | 'top' }) {
-  const projects = useDashboard((s) => s.projects)
-  const addProject = useDashboard((s) => s.addProject)
-  const live = useOffice((s) => s.source === 'live')
-  const workspaces = useWorkspaces((s) => s.data)
-  const loadWorkspaces = useWorkspaces((s) => s.load)
-  const linked = new Set(projects.map((p) => p.folder).filter(Boolean))
-  const base = (p: string) => p.split('/').filter(Boolean).pop() ?? p
-
-  const projectOptions: ProjectOption[] = [
-    { value: '', label: 'No project' },
-    // one name: a project with a folder is called like its folder
-    ...projects.map((p) => ({ value: p.id, label: p.folder ? base(p.folder) : p.name })),
-  ]
-  const folderOptions: ProjectOption[] = [
-    ...projectFolders(workspaces)
-      .filter((f) => !f.projectId && !linked.has(f.path))
-      .map((f) => ({ value: `folder:${f.path}`, label: f.name, hint: f.path, folder: true })),
-    // any folder, however deep (a folder inside one of these): picked from a tree
-    ...(live ? [{ value: BROWSE, label: 'Browse folders…', hint: 'a folder inside one of these', folder: true }] : []),
-  ]
-  const groups = folderOptions.length
-    ? [
-        { label: 'Projects', options: projectOptions },
-        { label: 'Folders your agents work in', options: folderOptions },
-      ]
-    : projectOptions
+export function FolderSelect({ value, onChange, size = 'md', none = 'Its own folder' }: { value?: string; onChange: (v: string | undefined) => void; size?: 'sm' | 'md'; none?: string }) {
   const [browsing, setBrowsing] = useState(false)
-
-  // a folder: the project already linked to it, or a new one named after it
-  const useFolder = (folder: string) => onChange(projects.find((p) => p.folder === folder)?.id ?? addProject(base(folder), { folder }))
-  const pick = (v: string) => {
-    if (v === BROWSE) return setBrowsing(true)
-    if (!v.startsWith('folder:')) return onChange(v)
-    useFolder(v.slice('folder:'.length))
-  }
-
   return (
     <>
-    {browsing && <ProjectFolderPicker onPick={(path) => useFolder(path)} onClose={() => setBrowsing(false)} />}
-    <CreatableSelect<ProjectOption, false>
-      unstyled
-      aria-label="Project"
-      className={`rs rs--${size}`}
-      classNamePrefix="rs"
-      value={projectOptions.find((o) => o.value === value) ?? projectOptions[0]}
-      options={groups}
-      onMenuOpen={() => live && void loadWorkspaces()}
-      onChange={(o) => o && pick(o.value)}
-      // a new project gets its folder in the projects folder (named like it)
-      onCreateOption={(name) => onChange(addProject(name.trim(), {}, { createFolder: true }))}
-      formatCreateLabel={(name) => `Create project “${name}”`}
-      formatOptionLabel={(o, meta) =>
-        meta.context === 'menu' && (o.hint || o.folder) ? (
-          <span className="proj-opt">
-            {o.folder ? <LuFolder /> : null}
-            <span className="truncate">{o.label}</span>
-            {o.hint && <span className="muted truncate">{o.hint}</span>}
-          </span>
-        ) : (
-          o.label
-        )
-      }
-      placeholder="Search or create…"
-      menuPortalTarget={document.body}
-      menuPlacement={menuPlacement}
-      classNames={{
-        control: (s) => (s.isFocused ? 'rs__control--focused' : ''),
-        option: (s) => [s.isSelected && 'rs__option--selected', s.isFocused && 'rs__option--focused'].filter(Boolean).join(' '),
-      }}
-    />
+      {browsing && <ProjectFolderPicker onPick={(path) => onChange(path)} onClose={() => setBrowsing(false)} />}
+      <span className={`folder-select folder-select--${size}`}>
+        <button type="button" className="folder-select__pick" onClick={() => setBrowsing(true)} data-tip={value ? tilde(value) : 'Pick the folder to work in'}>
+          <LuFolder />
+          <span className={`truncate${value ? '' : ' muted'}`}>{value ? base(value) : none}</span>
+        </button>
+        {value && (
+          <button type="button" className="folder-select__clear" aria-label="Its own folder" data-tip="Its own folder" onClick={() => onChange(undefined)}>
+            <LuX />
+          </button>
+        )}
+      </span>
     </>
-  )
-}
-
-export function ProjectTag({ projectId }: { projectId: string | null }) {
-  const project = useDashboard((s) => s.projects.find((p) => p.id === projectId))
-  if (!project) return null
-  return (
-    <span className="project-tag" style={{ ['--c' as string]: project.color }}>
-      {project.name}
-    </span>
   )
 }
 

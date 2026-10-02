@@ -11,7 +11,7 @@ const task = (id: string, status: OfficeTask['status'], title = id): OfficeTask 
   id,
   title,
   agentId: null,
-  projectId: null,
+ 
   deadline: Date.now(),
   priority: 'medium',
   status,

@@ -10,12 +10,12 @@ import { useClock, useNow, zonedParts } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
 import { useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { CronTrigger } from './CronTrigger'
-import { ProjectsTab } from './ProjectsTab'
+import { FoldersTab } from './ProjectsTab'
 import { Field, Modal } from './Modal'
 import { confirm } from './Confirm'
 import { DateTimeField, TimeField } from './pickers'
 import { Select } from './Select'
-import { AgentSelect, dueInfo, HOUR, PRIORITY_OPTIONS, PRIORITY_RANK, ProjectSelect, ProjectTag, StatusSelect, WaitsForSelect, BlockedBadge, CheckBadge } from './taskMeta'
+import { AgentSelect, dueInfo, HOUR, PRIORITY_OPTIONS, PRIORITY_RANK, FolderSelect, StatusSelect, WaitsForSelect, BlockedBadge, CheckBadge } from './taskMeta'
 import { useLaunch } from '../pwa/launch'
 import { MOBILE } from '../state/useMediaQuery'
 import { useWorkReady } from '../state/live'
@@ -368,15 +368,17 @@ export function TaskPanel() {
     openUrl({ tasks: '1' })
     useLaunch.getState().done()
   }, [launch])
-  const [tab, setTab] = useState<'tasks' | 'projects' | 'tags' | 'activity'>(() => {
+  const [tab, setTab] = useState<'tasks' | 'folders' | 'tags' | 'activity'>(() => {
     try {
       const saved = localStorage.getItem(TAB_KEY)
-      return saved === 'projects' || saved === 'tags' || saved === 'activity' ? saved : 'tasks'
+      // "projects": the same tab, from before it was called Folders
+      if (saved === 'projects') return 'folders'
+      return saved === 'folders' || saved === 'tags' || saved === 'activity' ? saved : 'tasks'
     } catch {
       return 'tasks'
     }
   })
-  const pickTab = (t: 'tasks' | 'projects' | 'tags' | 'activity') => {
+  const pickTab = (t: 'tasks' | 'folders' | 'tags' | 'activity') => {
     setTab(t)
     try {
       localStorage.setItem(TAB_KEY, t)
@@ -409,7 +411,6 @@ export function TaskPanel() {
           {!isDone && (
             <span className="task-row__meta">
               <span className={`due due--${due.level}`}>{due.text}</span>
-              <ProjectTag projectId={t.projectId} />
               {t.delegatedBy && (
                 <span className="by-manager" data-tip="Delegated by the manager">
                   <LuCrown />
@@ -433,12 +434,12 @@ export function TaskPanel() {
   return (
     <section className="card card--grow">
       <header className="card__head">
-        <ScrollTabs className="task-tabs" label="Tasks, projects, tags or activity" active={tab}>
+        <ScrollTabs className="task-tabs" label="Tasks, folders, tags or activity" active={tab}>
           <button role="tab" aria-selected={tab === 'tasks'} className={tab === 'tasks' ? 'active' : ''} onClick={() => pickTab('tasks')}>
             <LuListTodo /> Tasks
           </button>
-          <button role="tab" aria-selected={tab === 'projects'} className={tab === 'projects' ? 'active' : ''} onClick={() => pickTab('projects')}>
-            <LuFolderGit2 /> Projects
+          <button role="tab" aria-selected={tab === 'folders'} className={tab === 'folders' ? 'active' : ''} onClick={() => pickTab('folders')}>
+            <LuFolderGit2 /> Folders
           </button>
           <button role="tab" aria-selected={tab === 'tags'} className={tab === 'tags' ? 'active' : ''} onClick={() => pickTab('tags')}>
             <LuTag /> Tags
@@ -451,7 +452,7 @@ export function TaskPanel() {
       <SearchBox
         value={q}
         onChange={setQ}
-        placeholder={tab === 'tasks' ? 'Search tasks' : tab === 'projects' ? 'Search projects' : tab === 'tags' ? 'Search tags' : 'Search activity'}
+        placeholder={tab === 'tasks' ? 'Search tasks' : tab === 'folders' ? 'Search folders' : tab === 'tags' ? 'Search tags' : 'Search activity'}
         className="side-search"
       />
       {/* its own row under the tabs, so nothing gets squeezed in a narrow column */}
@@ -483,8 +484,8 @@ export function TaskPanel() {
           </button>
         </div>
       )}
-      {tab === 'projects' ? (
-        <ProjectsTab q={q} />
+      {tab === 'folders' ? (
+        <FoldersTab q={q} />
       ) : tab === 'tags' ? (
         <TagsTab q={q} />
       ) : tab === 'activity' ? (
@@ -503,14 +504,14 @@ export function TaskPanel() {
 }
 
 
-export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults?: Partial<Pick<OfficeTask, 'agentId' | 'projectId' | 'status' | 'description'>> }) {
+export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults?: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'description'>> }) {
   const addTask = useDashboard((s) => s.addTask)
   const [title, setTitle] = useState('')
   const [deadline, setDeadline] = useState(() => Date.now() + 24 * HOUR)
   const [priority, setPriority] = useState<TaskPriority>('medium')
   const [status, setStatus] = useState<TaskStatus>(defaults?.status ?? 'todo')
   const [agentId, setAgentId] = useState(defaults?.agentId ?? '')
-  const [projectId, setProjectId] = useState(defaults?.projectId ?? '')
+  const [folder, setFolder] = useState<string | undefined>(defaults?.folder)
   const [description, setDescription] = useState(defaults?.description ?? '')
   const [run, setRun] = useState<TaskRun>({})
   const [blockedBy, setBlockedBy] = useState<string[]>([])
@@ -520,7 +521,7 @@ export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    addTask({ title: title.trim(), deadline, priority, status, agentId: agentId || null, projectId: projectId || null, description: description.trim() || undefined, ...run, ...(blockedBy.length ? { blockedBy } : {}), ...(tags.length ? { tags } : {}) })
+    addTask({ title: title.trim(), deadline, priority, status, agentId: agentId || null, ...(folder ? { folder } : {}), description: description.trim() || undefined, ...run, ...(blockedBy.length ? { blockedBy } : {}), ...(tags.length ? { tags } : {}) })
     onClose()
   }
 
@@ -531,8 +532,8 @@ export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults
           <input placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus autoComplete="off" data-1p-ignore />
         </Field>
         <div className="field-row">
-          <Field label="Project" hint="Type a new name to create a project.">
-            <ProjectSelect value={projectId} onChange={setProjectId} />
+          <Field label="Folder" hint="Where the agent works. Empty: its own folder.">
+            <FolderSelect value={folder} onChange={setFolder} />
           </Field>
           <Field label="Status">
             <StatusSelect value={status} onChange={setStatus} />

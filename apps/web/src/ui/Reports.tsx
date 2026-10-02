@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuSlidersHorizontal, LuCheckCheck, LuChevronLeft, LuChevronRight, LuCircleAlert, LuClock, LuCrown, LuFileText, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
+import { LuSlidersHorizontal, LuCheckCheck, LuChevronLeft, LuChevronRight, LuCircleAlert, LuClock, LuCrown, LuFileText, LuFolder, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
 import type { WorkReport } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
@@ -45,7 +45,6 @@ const KindIcon = ({ r }: { r: WorkReport }) =>
 
 export function ReportRow({ r, now, onOpen }: { r: WorkReport; now: number; onOpen: () => void }) {
   const agent = useOffice((s) => s.agents.find((a) => a.id === r.agentId))
-  const project = useDashboard((s) => (r.projectId ? s.projects.find((p) => p.id === r.projectId) : undefined))
   const firstLine = r.text.replace(/[#*`>_-]/g, '').split('\n').find((l) => l.trim()) ?? ''
   return (
     <li className={`report-row${r.read ? '' : ' report-row--unread'}`}>
@@ -62,12 +61,6 @@ export function ReportRow({ r, now, onOpen }: { r: WorkReport; now: number; onOp
             <span className="truncate">
               {agent?.name ?? 'Removed agent'} · {ago(now - r.finishedAt)}
             </span>
-            {project && (
-              <span className="report-row__project" data-tip={`Project “${project.name}”`}>
-                <span className="chip__dot" style={{ background: project.color }} />
-                <span className="truncate">{project.name}</span>
-              </span>
-            )}
             <TagChips ids={r.tags} />
           </span>
         </span>
@@ -241,8 +234,8 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
   const q = params.q ?? ''
   const range: PickedRange = isDay(params.from) && isDay(params.to) ? { preset: 'custom', from: params.from!, to: params.to! } : { preset: RANGE_PRESETS.find((p) => p.id === params.range)?.id ?? 'all', from: '', to: '' }
   const per = PER_PAGE.includes(Number(params.per)) ? Number(params.per) : 25
-  const projects = useDashboard((s) => s.projects)
-  const project = params.project ?? ''
+  // one folder's reports (?folder=<path>, from a folder's details → Reports → View all)
+  const folder = params.folder ?? ''
   // tags: ids, comma-separated in the address bar (?tag=a,b): a report with any of them
   const tagIds = (params.tag ?? '').split(',').filter(Boolean)
   // one agent's reports (?by=<id>), or those of agents removed since ("removed"); not on the manager's tab
@@ -263,15 +256,15 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<ReportPage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const days = rangeDays(range)
-  // shown on the folded filters button (phones): project, tags, dates
-  const activeFilters = [!!by, !!project, tagIds.length > 0, !!days].filter(Boolean).length
+  // shown on the folded filters button (phones): agent, folder, tags, dates
+  const activeFilters = [!!by, !!folder, tagIds.length > 0, !!days].filter(Boolean).length
   const query = new URLSearchParams({
     // daily jobs are "cron" reports on the server
     filter: filter === 'daily' ? 'cron' : filter,
     per: String(per),
     page: String(page),
     ...(q ? { q } : {}),
-    ...(project ? { project } : {}),
+    ...(folder ? { folder } : {}),
     ...(by ? { by } : {}),
     ...(tagIds.length ? { tag: tagIds.join(',') } : {}),
     ...(days ? { from: String(dayStart(days[0])), to: String(dayStart(days[1]) + DAY - 1) } : {}),
@@ -322,7 +315,7 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
                 <LuX />
               </button>
             )}
-            {/* phones: project, tags, dates and reset fold away behind this */}
+            {/* phones: agent, tags, dates and reset fold away behind this */}
             <button
               type="button"
               className={`icon-btn small ghost toolbar__fold${filtersOpen ? ' is-on' : ''}`}
@@ -353,14 +346,16 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
               onChange={(v) => setUrl({ by: v || null, page: null })}
             />
           )}
-          <Select
-            ariaLabel="Project"
-            searchable
-            className="reports-modal__project"
-            value={project}
-            options={[{ value: '', label: 'All projects' }, { value: 'none', label: 'No project' }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
-            onChange={(v) => setUrl({ project: v || null, page: null })}
-          />
+          {folder && (
+            <span className="chat-ctx__project reports-modal__folder" data-tip={folder}>
+              <span className="chat-ctx__pick">
+                <LuFolder /> <span className="truncate">{folder.split('/').filter(Boolean).pop()}</span>
+              </span>
+              <button type="button" className="chat-ctx__unpick" aria-label="Any folder" onClick={() => setUrl({ folder: null, page: null })}>
+                <LuX />
+              </button>
+            </span>
+          )}
           <TagFilter className="reports-modal__tags" value={tagIds} onChange={(ids) => setUrl({ tag: ids.join(',') || null, page: null })} />
           <RangePicker
             value={range}
@@ -374,13 +369,13 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
               )
             }
           />
-          {/* back to everything: all reports, any project, all time, no search (per-page stays) */}
+          {/* back to everything: all reports, any folder, all time, no search (per-page stays) */}
           <button
             className="icon-btn reports-modal__reset"
-            disabled={filter === 'all' && !q && !by && !project && !tagIds.length && !days && page === 1}
+            disabled={filter === 'all' && !q && !by && !folder && !tagIds.length && !days && page === 1}
             onClick={() => {
               setSearch('')
-              setUrl({ reports: 'all', q: null, by: null, project: null, tag: null, range: null, from: null, to: null, page: null })
+              setUrl({ reports: 'all', q: null, by: null, folder: null, tag: null, range: null, from: null, to: null, page: null })
             }}
             data-tip="Reset filters"
             aria-label="Reset filters"
@@ -394,7 +389,7 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
           {(data?.items ?? []).map((r) => (
             <ReportRow key={r.id} r={r} now={now} onOpen={() => openUrl({ report: r.id })} />
           ))}
-          {data && !data.items.length && <li className="empty">{q || days || project || filter !== 'all' ? 'No reports match.' : 'Nothing here.'}</li>}
+          {data && !data.items.length && <li className="empty">{q || days || folder || filter !== 'all' ? 'No reports match.' : 'Nothing here.'}</li>}
           {!data && !error && <li className="empty">Loading…</li>}
         </ul>
         <footer className="pager">
@@ -426,10 +421,9 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
 /** One report. Opening it marks it read. */
 export function ReportModal({ id, onClose }: { id: string; onClose: () => void }) {
   const r = useDashboard((s) => s.reports.find((x) => x.id === id))
-  const { markReport, removeReport, setReportTags, setReportProject } = useDashboard(
-    useShallow((s) => ({ markReport: s.markReport, removeReport: s.removeReport, setReportTags: s.setReportTags, setReportProject: s.setReportProject })),
+  const { markReport, removeReport, setReportTags } = useDashboard(
+    useShallow((s) => ({ markReport: s.markReport, removeReport: s.removeReport, setReportTags: s.setReportTags })),
   )
-  const projects = useDashboard((s) => s.projects)
   const taskExists = useDashboard((s) => !!r && r.kind === 'task' && s.tasks.some((t) => t.id === r.refId))
   const agent = useOffice((s) => s.agents.find((a) => a.id === r?.agentId))
   // attachments through the report itself: still there after its agent was removed, "gone" once deleted
@@ -457,16 +451,6 @@ export function ReportModal({ id, onClose }: { id: string; onClose: () => void }
           <span>took {duration(r.finishedAt - r.startedAt)}</span>
         </div>
         <div className="report__tags">
-          {/* the owner can file it under another project (its task keeps its own) */}
-          <Select
-            ariaLabel="Project"
-            searchable
-            size="sm"
-            className="report__project"
-            value={r.projectId ?? ''}
-            options={[{ value: '', label: 'No project' }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
-            onChange={(v) => setReportProject(r.id, v || null)}
-          />
           <TagPicker size="sm" value={r.tags ?? []} onChange={(tags) => setReportTags(r.id, tags)} />
         </div>
         <div className="report__text">
@@ -565,17 +549,17 @@ function ReportBody({ r }: { r: WorkReport }) {
 }
 
 /**
- * A project's reports (Projects tab → a project's folder): the manager's latest summary for it on top, then what
- * the agents reported on its tasks. Read from the server, so older ones than the dashboard holds are there too.
+ * A folder's reports (Folders tab → a folder's details): the manager's latest summary about it on top, then what the
+ * agents reported on the work in it (or in folders inside it). Read from the server, so older ones are there too.
  */
-export function ProjectReports({ projectId }: { projectId: string }) {
+export function FolderReports({ folder }: { folder: string }) {
   const now = useNow(60_000).getTime()
   const latestKey = useDashboard((s) => s.reports.map((r) => `${r.id}${r.read ? 1 : 0}`).join(','))
   const [items, setItems] = useState<WorkReport[] | null>(null)
   const [total, setTotal] = useState(0)
   useEffect(() => {
     let gone = false
-    api(`/api/reports?${new URLSearchParams({ project: projectId, per: '10' })}`)
+    api(`/api/reports?${new URLSearchParams({ folder, per: '10' })}`)
       .then((r) => (r.ok ? (r.json() as Promise<ReportPage>) : null))
       .then((d) => {
         if (gone || !d) return
@@ -584,9 +568,9 @@ export function ProjectReports({ projectId }: { projectId: string }) {
       })
       .catch(() => {})
     return () => void (gone = true)
-  }, [projectId, latestKey])
+  }, [folder, latestKey])
   if (!items) return <span className="muted">Loading…</span>
-  if (!items.length) return <span className="muted">No reports yet. The manager's summaries and the agents' task reports for this project show up here.</span>
+  if (!items.length) return <span className="muted">No reports yet. The manager's summaries and the agents' reports on work in this folder show up here.</span>
   const summary = items.find((r) => r.kind === 'note')
   const rest = items.filter((r) => r !== summary)
   return (
@@ -607,7 +591,7 @@ export function ProjectReports({ projectId }: { projectId: string }) {
         </ul>
       )}
       {total > items.length && (
-        <button type="button" className="link" onClick={() => openUrl({ reports: 'all', project: projectId, page: null, q: null })}>
+        <button type="button" className="link" onClick={() => openUrl({ reports: 'all', folder, page: null, q: null })}>
           View all {total} reports
         </button>
       )}

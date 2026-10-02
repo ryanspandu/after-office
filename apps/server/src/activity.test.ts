@@ -64,7 +64,7 @@ test('a connector call from start to finish, with its origin', () => {
 })
 
 test('a task carries who made it into the turn', () => {
-  tasksRepo.put({ id: 'act-t', title: 'Invoice', agentId: 'act-w', projectId: null, deadline: Date.now(), priority: 'low', status: 'todo', origin: { kind: 'owner', label: 'Made in the dashboard', ip: '203.0.113.9' } })
+  tasksRepo.put({ id: 'act-t', title: 'Invoice', agentId: 'act-w', deadline: Date.now(), priority: 'low', status: 'todo', origin: { kind: 'owner', label: 'Made in the dashboard', ip: '203.0.113.9' } })
   // no active work registered here: a plain follow-up
   onPromptSubmitted('act-w', 'continue')
   expect(originOfTurn('act-w')).toMatchObject({ kind: 'agent' })

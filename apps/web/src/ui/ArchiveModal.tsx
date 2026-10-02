@@ -77,7 +77,6 @@ export function ArchiveModal({ onClose }: { onClose: () => void }) {
 function ArchivedRow({ task: t, onGone, onError }: { task: ArchivedTask; onGone: () => void; onError: (m: string) => void }) {
   const timezone = useClock((s) => s.timezone)
   const agent = useOffice((s) => s.agents.find((a) => a.id === t.agentId))
-  const project = useDashboard((s) => s.projects.find((p) => p.id === t.projectId))
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const date = dateTime(t.updatedAt, timezone)
@@ -102,7 +101,6 @@ function ArchivedRow({ task: t, onGone, onError }: { task: ArchivedTask; onGone:
             <span className="team-row__title truncate">{t.title}</span>
             <span className="team-row__meta truncate">
               Done {date} · {agent?.name ?? (t.agentId ? 'Removed agent' : 'Unassigned')}
-              {project ? ` · ${project.name}` : ''}
             </span>
           </span>
         </button>

@@ -50,6 +50,13 @@ export function Modal({ open, title, description, onClose, children, width = 460
     },
     [],
   )
+  // shown again after being put aside (minimized): on top of whatever opened since (the page stacks modals in the order
+  // they sit in <body>; React only ever removes its node, so moving it is safe)
+  useLayoutEffect(() => {
+    const el = backdrop.current
+    if (hidden || !el?.isConnected || el === document.body.lastElementChild) return
+    document.body.appendChild(el)
+  }, [hidden])
   useEffect(() => {
     if (!open || hidden) return
     // with modals stacked (a confirmation over a task), Esc closes only the one on top

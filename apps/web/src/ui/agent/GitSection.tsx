@@ -154,7 +154,7 @@ function IdentityCard({ agent, identity, onDone }: { agent: OfficeAgent; identit
   }
   const remove = async () => {
     if (!identity) return onDone?.()
-    if (!(await confirm({ title: `Remove the identity “${identity.label}”?`, message: 'Its key is deleted too. Those projects fall back to the default identity.', confirmLabel: 'Remove identity' }))) return
+    if (!(await confirm({ title: `Remove the identity “${identity.label}”?`, message: 'Its key is deleted too. Those folders and repos fall back to the default identity.', confirmLabel: 'Remove identity' }))) return
     await run('delete', () => liveApi.removeGitIdentity(agent.id, identity.id))
   }
 
@@ -241,7 +241,7 @@ export function GitSection({ agent }: { agent: OfficeAgent }) {
         <IdentityCard agent={agent} onDone={() => setAdding(false)} />
       ) : (
         <button className="small ghost git-section__add" onClick={() => setAdding(true)}>
-          <LuPlus /> {identities.length ? 'Add another identity' : 'Add an identity for other projects'}
+          <LuPlus /> {identities.length ? 'Add another identity' : 'Add an identity for other repos'}
         </button>
       )}
       <span className="field__hint">Commits and pushes pick the identity whose folder or repos match; the default one otherwise. Applies right away.</span>

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { Hono } from 'hono'
-import { agentsRepo, commentsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
+import { agentsRepo, commentsRepo, ownerNotesRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
+import { createNote } from './work/notes'
 import { updateRuntime } from './agents/registry'
 import { handleMcp } from './mcp'
 
@@ -42,9 +43,11 @@ beforeAll(() => {
 })
 
 describe('after-office MCP', () => {
-  test('unknown agents and workers are refused', async () => {
+  test('unknown agents are refused; workers get the shared notes tools only', async () => {
     expect((await rpc('nobody', 'tools/list')).status).toBe(401)
-    expect((await rpc('w1', 'tools/list')).status).toBe(403)
+    const w = await rpc('w1', 'tools/list')
+    expect(w.status).toBe(200)
+    expect((w.body.result.tools as { name: string }[]).map((t) => t.name).sort()).toEqual(['delete_note', 'edit_note', 'list_notes', 'read_note', 'write_note'])
   })
 
   test('initialize', async () => {
@@ -103,13 +106,13 @@ describe('after-office MCP', () => {
   const call = async (name: string, args: object) => (await rpc('mgr', 'tools/call', { name, arguments: args })).body.result as { isError?: boolean; content: { text: string }[] }
 
   test('update_task edits, logs it, and guards tasks in progress', async () => {
-    tasksRepo.put({ id: 'mt-1', title: 'Old', agentId: 'w1', projectId: null, deadline: Date.now(), priority: 'low', status: 'review' })
+    tasksRepo.put({ id: 'mt-1', title: 'Old', agentId: 'w1', deadline: Date.now(), priority: 'low', status: 'review' })
     const r = await call('update_task', { task: 'mt-1', title: 'New title', priority: 'high', status: 'done' })
     expect(r.isError).toBeFalsy()
     expect(tasksRepo.get('mt-1')).toMatchObject({ title: 'New title', priority: 'high', status: 'done' })
     expect(commentsRepo.forTask('mt-1').at(-1)!.text).toBe('Boss accepted it.')
 
-    tasksRepo.put({ id: 'mt-2', title: 'Busy', agentId: 'w1', projectId: null, deadline: Date.now(), priority: 'low', status: 'in_progress' })
+    tasksRepo.put({ id: 'mt-2', title: 'Busy', agentId: 'w1', deadline: Date.now(), priority: 'low', status: 'in_progress' })
     expect((await call('update_task', { task: 'mt-2', agent: 'Rio' })).isError).toBe(true)
     expect((await call('update_task', { task: 'mt-2', description: 'more detail' })).isError).toBeFalsy()
     expect((await call('update_task', { task: 'mt-1', after: ['mt-1-missing'] })).isError).toBe(true)
@@ -117,7 +120,7 @@ describe('after-office MCP', () => {
 
   test('delete_task removes it (not while in progress) and tells the owner about their tasks', async () => {
     expect((await call('delete_task', { task: 'mt-2' })).isError).toBe(true)
-    tasksRepo.put({ id: 'mt-3', title: 'Owner task', agentId: null, projectId: null, deadline: Date.now(), priority: 'low', status: 'todo' })
+    tasksRepo.put({ id: 'mt-3', title: 'Owner task', agentId: null, deadline: Date.now(), priority: 'low', status: 'todo' })
     const r = await call('delete_task', { task: 'mt-3' })
     expect(r.isError).toBeFalsy()
     expect(tasksRepo.get('mt-3')).toBeNull()
@@ -202,7 +205,7 @@ describe('after-office MCP', () => {
   test('right after a report, its task can go back to the same agent', async () => {
     const { onPromptSubmitted, MAX_MANAGER_REVISIONS } = await import('./work/work')
     const mk = (id: string, status: 'review' | 'in_progress') =>
-      tasksRepo.put({ id, title: `Task ${id}`, agentId: 'w1', projectId: null, deadline: Date.now(), priority: 'low', status, delegatedBy: 'mgr' })
+      tasksRepo.put({ id, title: `Task ${id}`, agentId: 'w1', deadline: Date.now(), priority: 'low', status, delegatedBy: 'mgr' })
     mk('sb-1', 'review')
     mk('sb-2', 'review')
     mk('sb-3', 'in_progress')
@@ -240,7 +243,7 @@ describe('after-office MCP', () => {
     updateSettings({ bossMode: true } as never)
     expect(bossMode()).toBeNull()
     // a task already waiting for approval starts when Boss mode goes on with runWaiting
-    tasksRepo.put({ id: 'bm-wait', title: 'Waiting one', agentId: 'w1', projectId: null, deadline: Date.now(), priority: 'low', status: 'todo', delegatedBy: 'mgr', awaitingApproval: true })
+    tasksRepo.put({ id: 'bm-wait', title: 'Waiting one', agentId: 'w1', deadline: Date.now(), priority: 'low', status: 'todo', delegatedBy: 'mgr', awaitingApproval: true })
     requestApproval(tasksRepo.get('bm-wait')!)
     await expect(startBossMode(Date.now() - 1)).rejects.toThrow()
     await expect(startBossMode(Date.now() + 8 * 24 * 3_600_000)).rejects.toThrow('7 days')
@@ -260,7 +263,7 @@ describe('after-office MCP', () => {
     expect(task.awaitingApproval).toBeFalsy()
     expect(commentsRepo.forTask(task.id).some((c) => c.text.includes('Boss mode'))).toBe(true)
     expect((await call('message_agent', { agent: 'Rio', text: 'hi' })).isError).toBeFalsy()
-    tasksRepo.put({ id: 'bm-rev', title: 'Rev', agentId: 'w1', projectId: null, deadline: Date.now(), priority: 'low', status: 'review', delegatedBy: 'mgr' })
+    tasksRepo.put({ id: 'bm-rev', title: 'Rev', agentId: 'w1', deadline: Date.now(), priority: 'low', status: 'review', delegatedBy: 'mgr' })
     for (let i = 0; i <= MAX_MANAGER_REVISIONS; i++) {
       tasksRepo.put({ ...tasksRepo.get('bm-rev')!, status: 'review' })
       expect((await call('send_back_task', { task: 'bm-rev', feedback: `round ${i}` })).isError).toBeFalsy()
@@ -339,7 +342,45 @@ describe('after-office MCP', () => {
     onPromptSubmitted('mgr', 'hai')
   })
 
-  test('workers cannot reach any of these tools', async () => {
-    expect((await rpc('w1', 'tools/call', { name: 'delete_task', arguments: { task: 'mt-1' } })).status).toBe(403)
+  test("workers cannot reach the manager's tools", async () => {
+    const r = await rpc('w1', 'tools/call', { name: 'delete_task', arguments: { task: 'mt-1' } })
+    expect(r.body.result?.isError ?? !!r.body.error).toBe(true)
+    expect(tasksRepo.get('mt-1')).not.toBeNull()
+  })
+
+  test("notes: only the shared ones exist for agents; they read and write them as Markdown", async () => {
+    const as = (agent: string) => async (name: string, args: object) =>
+      (await rpc(agent, 'tools/call', { name, arguments: args })).body.result as { isError?: boolean; content: { text: string }[] }
+    const worker = as('w1')
+    const mgr = as('mgr')
+    const priv = createNote({ title: 'Rahasia', html: '<p>pribadi</p>' })
+    const open = createNote({ title: 'Rencana', html: '<h2>Target</h2><ul><li><p><strong>SEO</strong> lokal</p></li></ul>', shared: true, pinned: true })
+
+    const listed = JSON.parse((await worker('list_notes', {})).content[0].text) as { id: string; title: string; pinned?: boolean }[]
+    expect(listed.map((n) => n.id)).toContain(open.id)
+    expect(listed.map((n) => n.id)).not.toContain(priv.id)
+    expect((await worker('read_note', { id: priv.id })).isError).toBe(true)
+    const read = JSON.parse((await worker('read_note', { id: open.id })).content[0].text) as { markdown: string; writtenBy: string }
+    expect(read.markdown).toBe('## Target\n\n- **SEO** lokal')
+    expect(read.writtenBy).toBe('the owner')
+
+    // the manager adds one: shared, its own, rich text
+    expect((await mgr('write_note', { title: 'Keputusan', markdown: '# Pakai Bun\n- [x] server\n- [ ] web' })).isError).toBeFalsy()
+    const made = ownerNotesRepo.all().find((n) => n.title === 'Keputusan')!
+    expect(made).toMatchObject({ shared: true, author: 'mgr' })
+    expect(made.html).toBe('<h1>Pakai Bun</h1><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>server</p></li><li data-type="taskItem" data-checked="false"><p>web</p></li></ul>')
+
+    // a worker adds to the end: the owner's formatting stays
+    await worker('edit_note', { id: open.id, append: 'Catatan dari Nova' })
+    const edited = ownerNotesRepo.get(open.id)!
+    expect(edited.html.startsWith('<h2>Target</h2>')).toBe(true)
+    expect(edited.html.endsWith('<p>Catatan dari Nova</p>')).toBe(true)
+    expect(edited.editedBy).toBe('w1')
+
+    // never the private one, not even to delete
+    expect((await worker('delete_note', { id: priv.id })).isError).toBe(true)
+    expect((await worker('delete_note', { id: made.id })).isError).toBeFalsy()
+    expect(ownerNotesRepo.get(made.id)).toBeNull()
+    for (const n of [priv, open]) ownerNotesRepo.remove(n.id)
   })
 })

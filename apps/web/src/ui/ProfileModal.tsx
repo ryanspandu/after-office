@@ -87,7 +87,7 @@ export function ProfileModal() {
             <ProfileMenu
               items={[
                 { icon: <LuUserPen />, label: 'Edit profile', onClick: () => openUrl({ editprofile: 1 }) },
-                { icon: <LuSettings2 />, label: 'Project settings', onClick: () => openUrl({ settings: 1 }) },
+                { icon: <LuSettings2 />, label: 'Office settings', onClick: () => openUrl({ settings: 1 }) },
                 { icon: <LuKeyRound />, label: 'Change password', onClick: () => openUrl({ password: 1 }) },
                 { icon: <LuShieldCheck />, label: 'Two-factor', onClick: () => openUrl({ twofa: 1 }) },
                 { icon: <LuLogOut />, label: 'Sign out', onClick: logout },
@@ -99,7 +99,7 @@ export function ProfileModal() {
                 <LuUserPen /> Edit profile
               </button>
               <button className="small" onClick={() => openUrl({ settings: 1 })} {...tip("The office's name, description and logo")}>
-                <LuSettings2 /> Project settings
+                <LuSettings2 /> Office settings
               </button>
               <button className="small" onClick={logout}>
                 <LuLogOut /> Sign out

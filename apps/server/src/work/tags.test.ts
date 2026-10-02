@@ -24,7 +24,7 @@ test('tags on tasks and reports', async () => {
   expect(listTags()[1]).toEqual({ id: 'tag-urgent', name: 'ASAP', color: '#ef4444' })
 
   // a task keeps only known tags
-  const task: Partial<OfficeTask> = { title: 'Tagged', agentId: null, projectId: null, deadline: Date.now() + 3600_000, priority: 'medium', status: 'todo', tags: ['tag-seo', 'nope', 'tag-seo'] }
+  const task: Partial<OfficeTask> = { title: 'Tagged', agentId: null, deadline: Date.now() + 3600_000, priority: 'medium', status: 'todo', tags: ['tag-seo', 'nope', 'tag-seo'] }
   expect((await call('PUT', '/tasks/task-tagged', task)).status).toBe(200)
   expect(tasksRepo.get('task-tagged')?.tags).toEqual(['tag-seo'])
 

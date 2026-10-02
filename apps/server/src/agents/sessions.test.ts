@@ -59,7 +59,7 @@ test("a side session's events change its own state only, never the main session'
 })
 
 test("a side session's turn ending never closes the main session's task", async () => {
-  tasksRepo.put({ id: 'ss-t', title: 'Ship it', agentId: 'ss-a', projectId: null, deadline: Date.now() + 1000, priority: 'low', status: 'in_progress', startedAt: Date.now() })
+  tasksRepo.put({ id: 'ss-t', title: 'Ship it', agentId: 'ss-a', deadline: Date.now() + 1000, priority: 'low', status: 'in_progress', startedAt: Date.now() })
   await hook({ hook_event_name: 'Stop', last_assistant_message: 'side answer' }, 's2')
   expect(tasksRepo.get('ss-t')!.status).toBe('in_progress')
   expect(reportsRepo.latest(50).some((r) => r.refId === 'ss-t')).toBe(false)

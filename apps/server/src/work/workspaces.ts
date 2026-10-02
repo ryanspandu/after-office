@@ -5,7 +5,7 @@ import { IMAGE, MAX_BYTES } from '../agents/files'
 import { deleteAgentFolder } from './projectFolders'
 import { basename, dirname, extname, join, sep } from 'node:path'
 import type { GitCommit, GitInfo, Workspace, WorkspaceFolder } from '@after-office/shared'
-import { agentsRepo, extraDirsOf, folderNotesRepo, projectsRepo } from '../db'
+import { agentsRepo, extraDirsOf, folderNotesRepo, ownerNotesRepo } from '../db'
 import { AgentError } from '../agents/errors'
 import { AGENTS_DIR, PROJECTS_DIR } from '../fsroots'
 import { git } from './git'
@@ -71,23 +71,6 @@ let cache: { at: number; data: Workspace[] } | null = null
 
 export async function workspaces(fresh = false): Promise<Workspace[]> {
   if (!fresh && cache && Date.now() - cache.at < 20_000) return cache.data
-  // which dashboard project each folder belongs to
-  const linked = new Map<string, string>()
-  for (const p of projectsRepo.all()) {
-    if (!p.folder) continue
-    try {
-      linked.set(realpathSync(p.folder), p.id)
-    } catch {
-      // folder gone
-    }
-  }
-  const link = <T extends WorkspaceFolder>(f: T): T => {
-    try {
-      return { ...f, projectId: linked.get(realpathSync(f.path)) ?? null }
-    } catch {
-      return { ...f, projectId: null }
-    }
-  }
   const byPath = new Map<string, string[]>()
   for (const a of agentsRepo.all()) byPath.set(a.cwd, [...(byPath.get(a.cwd) ?? []), a.id])
   const data = await Promise.all(
@@ -97,7 +80,7 @@ export async function workspaces(fresh = false): Promise<Workspace[]> {
       const isProject = !!self.git || isProjectRoot(path)
       const projects = isProject ? [] : await Promise.all(subfolders(path).map(folder))
       projects.sort((a, b) => b.updatedAt - a.updatedAt)
-      return link({ ...self, agentIds, isProject, projects: projects.map(link) })
+      return { ...self, agentIds, isProject, projects } as Workspace
     }),
   )
   data.sort((a, b) => a.name.localeCompare(b.name))
@@ -108,7 +91,7 @@ export async function workspaces(fresh = false): Promise<Workspace[]> {
     const isProject = !!self.git || isProjectRoot(path)
     const projects = isProject ? [] : await Promise.all(subfolders(path).map(folder))
     projects.sort((a, b) => b.updatedAt - a.updatedAt)
-    data.push(link({ ...self, agentIds: [], isProject, orphan: true, projects: projects.map(link) }))
+    data.push({ ...self, agentIds: [], isProject, orphan: true, projects })
   }
   // the projects folder: one entry per project folder in it; agents given one of them (extra dirs) are listed
   if (existsSync(PROJECTS_DIR) && !byPath.has(PROJECTS_DIR)) {
@@ -119,7 +102,7 @@ export async function workspaces(fresh = false): Promise<Workspace[]> {
       .all()
       .filter((a) => extraDirsOf(a).some((d) => d.startsWith(PROJECTS_DIR + sep)))
       .map((a) => a.id)
-    data.push(link({ ...self, name: 'project', agentIds, isProject: false, shared: true, projects: projects.map(link) }))
+    data.push({ ...self, name: 'project', agentIds, isProject: false, shared: true, projects })
   }
   cache = { at: Date.now(), data }
   return data
@@ -317,6 +300,7 @@ export function renameEntry(root: string, rel: string, name: string) {
   if (existsSync(to)) throw new AgentError(`${next} is already there`, 409)
   renameSync(abs, to)
   folderNotesRepo.move(abs, to)
+  ownerNotesRepo.moveFolder(abs, to)
   return { name: next }
 }
 
@@ -413,7 +397,7 @@ export function zipFromFolder(root: string, rels: string[]) {
   return { data: zip(entries), name: `${basename(base)}.zip`, files: entries.length }
 }
 
-/** Delete a folder whose agent is gone (only those: never an agent's, a project's, or anything outside). */
+/** Delete a folder whose agent is gone (only those: never an agent's, or anything outside). */
 export async function deleteOrphanFolder(path: string) {
   let real: string
   try {
@@ -422,8 +406,6 @@ export async function deleteOrphanFolder(path: string) {
     throw new AgentError('No such folder', 404)
   }
   if (!orphanFolders().includes(real)) throw new AgentError('Only folders without an agent can be deleted here', 403)
-  if (projectsRepo.all().some((p) => p.folder && (p.folder === real || p.folder.startsWith(real + sep))))
-    throw new AgentError('A project uses this folder; change or delete the project first', 409)
   await deleteAgentFolder(real)
   cache = null
 }

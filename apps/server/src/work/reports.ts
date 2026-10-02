@@ -1,5 +1,5 @@
 import type { WorkReport } from '@after-office/shared'
-import { agentsRepo, projectsRepo, reportsRepo } from '../db'
+import { agentsRepo, reportsRepo } from '../db'
 import { AgentError } from '../agents/manager'
 import { agentFiles } from '../agents/files'
 import { mentionedPaths } from '@after-office/shared'
@@ -8,7 +8,7 @@ import { publishWork } from './work'
 // Reports: the manager's notes to the owner, and marking reports read or tagged.
 
 /** Something the manager wants the user to see outside the chat: filed as an unread report. */
-export function notifyUser(managerId: string, title: string, text: string, projectId?: string | null, tags?: string[]) {
+export function notifyUser(managerId: string, title: string, text: string, tags?: string[], folder?: string) {
   const now = Date.now()
   const report: WorkReport = {
     id: crypto.randomUUID(),
@@ -21,10 +21,10 @@ export function notifyUser(managerId: string, title: string, text: string, proje
     startedAt: now,
     finishedAt: now,
     read: false,
-    ...(projectId ? { projectId } : {}),
     ...(tags?.length ? { tags } : {}),
+    ...(folder ? { folder } : {}),
   }
-  // files it points at (its team's work, the projects folder) become the note's attachments
+  // files it points at (its team's work, the office's folders) become the note's attachments
   const row = agentsRepo.get(managerId)
   const files = row ? agentFiles(row, mentionedPaths(report.text)) : []
   if (files.length) report.files = files
@@ -40,16 +40,6 @@ export function setReportTags(id: string, tags: string[] | undefined) {
   if (!r) throw new AgentError('No such report', 404)
   const { tags: _, ...rest } = r
   reportsRepo.put(tags?.length ? { ...rest, tags } : rest)
-  publishWork('reports')
-}
-
-/** The owner moved a report to another project (or out of any): the task it came from keeps its own. */
-export function setReportProject(id: string, projectId: string | null) {
-  const r = reportsRepo.get(id)
-  if (!r) throw new AgentError('No such report', 404)
-  if (projectId && !projectsRepo.all().some((p) => p.id === projectId)) throw new AgentError('No such project', 400)
-  const { projectId: _, ...rest } = r
-  reportsRepo.put(projectId ? { ...rest, projectId } : rest)
   publishWork('reports')
 }
 

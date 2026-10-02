@@ -1,5 +1,6 @@
 import type { FollowUpDecision, LiveFollowUp, LiveMode, OfficeTask, TaskStatus } from '@after-office/shared'
-import { agentsRepo, commentsRepo, projectsRepo, queueRepo, tasksRepo } from '../db'
+import { agentsRepo, commentsRepo, queueRepo, tasksRepo } from '../db'
+import { cleanFolder } from './folders'
 import { AgentError } from '../agents/manager'
 import { addPending, getPending, publish, resolvePending, runtimeOf } from '../agents/registry'
 import { bossMode, countBoss, officeSettings } from './settings'
@@ -21,7 +22,8 @@ export interface DelegateInput {
   mode?: LiveMode
   /** task ids to wait for; the new task starts on its own when they are finished */
   after?: string[]
-  projectId?: string | null
+  /** where the agent works (unset: its own folder) */
+  folder?: string | null
   /** tag ids (existing tags only) */
   tags?: string[]
 }
@@ -41,7 +43,7 @@ export async function delegateTask(managerId: string, input: DelegateInput) {
     title: input.title.trim().slice(0, 200),
     description: input.description.trim().slice(0, 20_000),
     agentId: target.id,
-    projectId: input.projectId && projectsRepo.get(input.projectId) ? input.projectId : null,
+    ...(cleanFolder(input.folder) ? { folder: cleanFolder(input.folder) } : {}),
     deadline: input.deadline ?? Date.now() + 24 * 3_600_000,
     priority: input.priority ?? 'medium',
     status: 'todo',
@@ -105,7 +107,7 @@ export function requestApproval(task: OfficeTask, reason?: string) {
       description: task.description ?? '',
       after: blockers,
       mode: task.mode ?? null,
-      project: task.projectId ? (projectsRepo.get(task.projectId)?.name ?? null) : null,
+      folder: task.folder ?? null,
       ...(reason ? { reason } : {}),
     },
     createdAt: Date.now(),
@@ -176,7 +178,8 @@ export interface ManagerTaskPatch {
   /** in_progress is the office's to set (by starting the task) */
   status?: Exclude<TaskStatus, 'in_progress'>
   agentId?: string | null
-  projectId?: string | null
+  /** '' / null: back to the agent's own folder */
+  folder?: string | null
   blockedBy?: string[]
   /** '' clears it */
   check?: string
@@ -227,10 +230,12 @@ export async function managerUpdateTask(managerId: string, taskId: string, patch
     next.tags = patch.tags.length ? patch.tags : undefined
     changed.push('tags')
   }
-  if (patch.projectId !== undefined) {
-    if (patch.projectId && !projectsRepo.get(patch.projectId)) throw new AgentError('No such project; see list_projects', 404)
-    next.projectId = patch.projectId
-    changed.push('project')
+  if (patch.folder !== undefined) {
+    if (busy) throw new AgentError(`"${t.title}" is in progress; change its folder once it's done`, 409)
+    const folder = cleanFolder(patch.folder)
+    if (folder) next.folder = folder
+    else delete next.folder
+    changed.push('folder')
   }
   if (patch.agentId !== undefined) {
     if (busy) throw new AgentError(`"${t.title}" is in progress; wait for its report before moving it to someone else`, 409)

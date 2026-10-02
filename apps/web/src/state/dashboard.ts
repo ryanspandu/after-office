@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { api } from './auth'
 import { useOffice } from './store'
-import type { Tag, CronJob, FollowUp, OfficeTask, Project, SystemMetrics, TaskPriority, TaskStatus, TokenUsage, WorkReport } from '@after-office/shared'
+import type { Tag, CronJob, FollowUp, OfficeTask, SystemMetrics, TaskPriority, TaskStatus, TokenUsage, WorkReport } from '@after-office/shared'
 
 // Dashboard data (cron jobs, tasks, follow-ups, metrics, token usage). Mock for now; Phase 2 loads it from Hono.
 
@@ -24,18 +24,9 @@ const INITIAL_CRONS: CronJob[] = [
   { id: 'cron-5', name: 'Clean stale branches', prompt: 'Delete merged branches older than 14 days', times: ['18:00'], days: [5], agentId: 'agent-1', enabled: false },
 ]
 
-const PROJECT_COLORS = ['#f07a1d', '#3b82f6', '#2f8f57', '#a855f7', '#e0558f', '#0ea5a4', '#d4a017', '#64748b']
-
-const INITIAL_PROJECTS: Project[] = [
-  { id: 'proj-api', name: 'api', color: PROJECT_COLORS[0] },
-  { id: 'proj-web', name: 'web-app', color: PROJECT_COLORS[1] },
-  { id: 'proj-infra', name: 'infra', color: PROJECT_COLORS[2] },
-  { id: 'proj-docs', name: 'docs', color: PROJECT_COLORS[3] },
-]
-
 function initialTasks(now: number): OfficeTask[] {
-  const t = (id: string, title: string, agentId: string | null, projectId: string, deadline: number, priority: TaskPriority, status: TaskStatus): OfficeTask => ({
-    id, title, agentId, projectId, deadline, priority, status,
+  const t = (id: string, title: string, agentId: string | null, _area: string, deadline: number, priority: TaskPriority, status: TaskStatus): OfficeTask => ({
+    id, title, agentId, deadline, priority, status,
   })
   return [
     t('task-1', 'Fix checkout race condition', 'agent-2', 'proj-api', now - 3 * HOUR, 'high', 'in_progress'),
@@ -142,14 +133,11 @@ export type RangePreset = 'today' | '7d' | '30d' | 'custom'
 interface DashboardStore {
   crons: CronJob[]
   tasks: OfficeTask[]
-  projects: Project[]
   reviews: FollowUp[]
   /** Finished task / cron reports, newest first */
   reports: WorkReport[]
   markReport: (id: string, read: boolean) => void
   setReportTags: (id: string, tags: string[]) => void
-  /** move a report to another project (null: none); its task keeps its own */
-  setReportProject: (id: string, projectId: string | null) => void
   /** the owner's labels for tasks and reports */
   tags: Tag[]
   /** create or change a tag (returns its id) */
@@ -167,10 +155,6 @@ interface DashboardStore {
   updateCron: (id: string, patch: Partial<CronJob>) => void
   removeCron: (id: string) => void
   addTask: (t: Omit<OfficeTask, 'id' | 'status'> & { status?: TaskStatus }) => void
-  addProject: (name: string, extra?: Partial<Omit<Project, 'id' | 'name'>>, opts?: { createFolder?: boolean }) => string
-  updateProject: (id: string, patch: Partial<Project>) => void
-  /** Tasks in it keep their other fields and lose the project. */
-  removeProject: (id: string, opts?: { folder?: boolean }) => void
   toggleTask: (id: string) => void
   updateTask: (id: string, patch: Partial<OfficeTask>) => void
   removeTask: (id: string) => void
@@ -186,7 +170,7 @@ interface DashboardStore {
 
 const today = () => ymd(new Date())
 
-// ── live mode: tasks, projects and cron jobs live on the server ──
+// ── live mode: tasks and cron jobs live on the server ──
 // Actions update local state right away (snappy UI), then PUT the changed document; the server broadcasts the
 // canonical lists back over SSE (state/live.ts applyWork), which replaces what we have.
 
@@ -245,7 +229,6 @@ export const useDashboard = create<DashboardStore>((set, get) => {
   return {
     crons: demo ? INITIAL_CRONS : [],
     tasks: demo ? initialTasks(now) : [],
-    projects: demo ? INITIAL_PROJECTS : [],
     reviews: demo ? initialReviews(now) : [],
     reports: demo ? initialReports(now) : [],
     usage: demo ? mockUsage(now) : [],
@@ -272,24 +255,6 @@ export const useDashboard = create<DashboardStore>((set, get) => {
       const id = newId('task')
       set((s) => ({ tasks: [...s.tasks, { status: 'todo', ...t, id }] }))
       saveTask(id)
-    },
-    addProject: (name, extra, opts) => {
-      const id = newId('proj')
-      const project: Project = { id, name, color: PROJECT_COLORS[get().projects.length % PROJECT_COLORS.length], ...extra }
-      set((s) => ({ projects: [...s.projects, project] }))
-      // createFolder: the server makes <agents dir>/project/<name> and sends the project back with it
-      push(`/api/projects/${id}`, id, () => (opts?.createFolder && !project.folder ? { ...project, createFolder: true } : project))
-      return id
-    },
-    updateProject: (id, patch) => {
-      set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) }))
-      push(`/api/projects/${id}`, id, () => get().projects.find((p) => p.id === id) ?? null, 'PUT', 400)
-    },
-    removeProject: (id, opts) => {
-      const orphans = get().tasks.filter((t) => t.projectId === id)
-      set((s) => ({ projects: s.projects.filter((p) => p.id !== id), tasks: s.tasks.map((t) => (t.projectId === id ? { ...t, projectId: null } : t)) }))
-      push(`/api/projects/${id}${opts?.folder ? '?folder=1' : ''}`, id, () => undefined, 'DELETE')
-      for (const t of orphans) saveTask(t.id)
     },
     updateTask: (id, patch) => {
       set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
@@ -320,10 +285,6 @@ export const useDashboard = create<DashboardStore>((set, get) => {
       set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, tags } : r)) }))
       push(`/api/reports/${id}/tags`, `${id}:tags`, () => ({ tags }))
     },
-    setReportProject: (id, projectId) => {
-      set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, projectId: projectId ?? undefined } : r)) }))
-      push(`/api/reports/${id}/project`, `${id}:project`, () => ({ projectId }))
-    },
     markReport: (id, read) => {
       set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, read } : r)) }))
       push(`/api/reports/${id}/read`, id, () => ({ read }), 'POST')
@@ -342,7 +303,7 @@ export const useDashboard = create<DashboardStore>((set, get) => {
     toggleFullscreen: () => set((s) => ({ fullscreen: !s.fullscreen })),
     loadDemoWork: () => {
       const t = Date.now()
-      set({ crons: INITIAL_CRONS, tasks: initialTasks(t), projects: INITIAL_PROJECTS, reviews: initialReviews(t), reports: initialReports(t), usage: mockUsage(t), syncError: null })
+      set({ crons: INITIAL_CRONS, tasks: initialTasks(t), reviews: initialReviews(t), reports: initialReports(t), usage: mockUsage(t), syncError: null })
     },
   }
 })

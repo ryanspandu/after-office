@@ -168,7 +168,7 @@
 .fd__actions button { justify-content: center; }
 .fd__main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .fd__main > .fb { flex: 1; }
-.fd__panel { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; min-height: 0; padding: 2px 2px 8px; }
+.fd__panel { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; overflow-x: hidden; min-height: 0; padding: 2px 2px 8px; }
 .fd__trash-head { display: flex; align-items: center; gap: 10px; }
 .fd__trash { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .fd__trash li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
@@ -332,9 +332,7 @@
   /* a panel taller than what's left scrolls instead of running under the buttons */
   .fd__main { overflow-y: auto; }
   /* the notes' toolbar: one row that scrolls sideways, so the text box keeps its height */
-  .fnotes__tools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .fnotes__tools::-webkit-scrollbar { display: none; }
-  .fnotes__group { flex: none; }
+    .fnotes__group { flex: none; }
   .fnotes__editor { min-height: 120px; }
   .fnotes__editor .tiptap { padding: 12px 14px 12px 30px; }
   .kb-open .fd__actions { display: none; }

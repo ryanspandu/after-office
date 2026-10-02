@@ -80,9 +80,9 @@ Needs `tmux` and `claude` on the server's PATH (`TMUX_BIN` / `CLAUDE_BIN` to ove
 
 ### Tasks and cron (live)
 
-Tasks, projects, cron jobs and the office timezone are stored on the server and pushed to every open dashboard.
+Tasks, cron jobs, notes and the office timezone are stored on the server and pushed to every open dashboard.
 
-- **Start on agent** (task detail) types the task into the agent's session: title, project, priority, deadline and description.
+- **Start on agent** (task detail) types the task into the agent's session: title, folder, priority, deadline and description.
   - The task moves to *In progress*, then to *Review* when the agent finishes its turn.
   - *Done* is always set by you.
 - **Cron jobs** are run by the server in the office timezone, even with no dashboard open.

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useReducer, useRef } from 'react'
 import { flip, offset, shift } from '@floating-ui/dom'
 import { Tooltip, type TooltipRefProps } from 'react-tooltip'
 import { useMediaQuery } from '../state/useMediaQuery'
@@ -40,6 +40,13 @@ export function TooltipLayer() {
 }
 
 function HoverTooltip() {
+  // a tip that changes while it's shown (a switch turned on under the pointer): shown again with the new words
+  const [, redraw] = useReducer((n: number) => n + 1, 0)
+  useEffect(() => {
+    const seen = new MutationObserver(redraw)
+    seen.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-tip', 'data-tip-title'] })
+    return () => seen.disconnect()
+  }, [])
   return (
     <Tooltip
       id="ao-tip"

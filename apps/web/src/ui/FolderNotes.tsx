@@ -25,6 +25,7 @@ import {
   LuMinus,
   LuSquareCheck,
   LuCode,
+  LuEllipsis,
   LuHeading1,
   LuHeading2,
   LuItalic,
@@ -38,53 +39,9 @@ import {
   LuUnderline,
   LuUndo2,
 } from 'react-icons/lu'
-import { api } from '../state/auth'
 
-// The owner's own notes on a folder (the folder details' Notes): a rich text editor (TipTap), kept as HTML in the
-// dashboard's database, never written into the folder (so no agent reads them, and nothing ends up in its git). Saved
-// as you type. Loaded only when Notes is opened.
-
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-/** Notes written before the editor (plain text): one paragraph per line. */
-const asHtml = (text: string) =>
-  !text.trim() || text.trimStart().startsWith('<')
-    ? text
-    : text
-        .split('\n')
-        .map((l) => `<p>${esc(l)}</p>`)
-        .join('')
-
-export default function FolderNotes({ path }: { path: string }) {
-  const [loaded, setLoaded] = useState<{
-    html: string
-    at: number | null
-  } | null>(null)
-  useEffect(() => {
-    void api(`/api/workspaces/notes?${new URLSearchParams({ path })}`)
-      .then((r) => (r.ok ? r.json() : { text: '', updatedAt: null }))
-      .then((r: { text: string; updatedAt: number | null }) => setLoaded({ html: asHtml(r.text), at: r.updatedAt }))
-      .catch(() => setLoaded({ html: '', at: null }))
-  }, [path])
-  if (loaded === null)
-    return (
-      <div className="fd__panel muted">
-        <LuLoader className="spin" />
-      </div>
-    )
-  return (
-    <RichNotes
-      key={path}
-      initial={loaded.html}
-      initialAt={loaded.at}
-      placeholder="Your notes on this folder: ideas, todos, links… Kept in the dashboard, not in the folder, so the agents don’t read them."
-      save={async (html) => {
-        const r = await api('/api/workspaces/notes', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, text: html }) })
-        if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? 'Could not save')
-        return ((await r.json().catch(() => null)) as { updatedAt?: number | null } | null)?.updatedAt ?? null
-      }}
-    />
-  )
-}
+// The rich text editor (TipTap) of the owner's notes (ui/OwnerNotes.tsx: Docs → Notes, a folder's details → Notes).
+// Loaded only when a note is opened.
 
 /**
  * The rich text editor with its toolbar, saved as you type (a folder's notes, the owner's notes in Reports). `save`
@@ -183,8 +140,7 @@ export function RichNotes({
             error
           ) : (
             <>
-              <LuCheck /> Saved{' '}
-              {savedAt !== null && <span className="fnotes__at">· {dateTime(savedAt)}</span>}
+              <LuCheck /> Saved {savedAt !== null && <span className="fnotes__at">· {dateTime(savedAt)}</span>}
             </>
           )}
         </span>
@@ -266,61 +222,61 @@ function Toolbar({ editor }: { editor: Editor }) {
       {icon}
     </button>
   )
-  return (
-    <div className="fnotes__tools" role="toolbar" aria-label="Formatting">
-      <span className="fnotes__group">
-        <select
-          className="fnotes__size"
-          aria-label="Font size"
-          data-tip="Font size"
-          value={on.size}
-          onChange={(e) => run((c) => (e.target.value ? c.setFontSize(e.target.value) : c.unsetFontSize()))}
-        >
-          {SIZES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </span>
-      <span className="fnotes__group">
-        {btn('Bold', <LuBold />, on.bold, () => run((c) => c.toggleBold()))}
-        {btn('Italic', <LuItalic />, on.italic, () => run((c) => c.toggleItalic()))}
-        {btn('Underline', <LuUnderline />, on.underline, () => run((c) => c.toggleUnderline()))}
-        {btn('Strikethrough', <LuStrikethrough />, on.strike, () => run((c) => c.toggleStrike()))}
-        <Swatches label="Text colour" icon={<LuBaseline />} value={on.color} onPick={(color) => run((c) => (color ? c.setColor(color) : c.unsetColor()))} />
-        <Swatches
-          label="Highlight"
-          icon={<LuHighlighter />}
-          value={on.mark === 'on' ? '' : on.mark}
-          marker
-          onPick={(color) => run((c) => (color ? c.setHighlight({ color }) : c.unsetHighlight()))}
-        />
-      </span>
-      <span className="fnotes__group">
-        {btn('Heading', <LuHeading1 />, on.h1, () => run((c) => c.toggleHeading({ level: 1 })))}
-        {btn('Subheading', <LuHeading2 />, on.h2, () => run((c) => c.toggleHeading({ level: 2 })))}
-        {btn('Small heading', <LuHeading3 />, on.h3, () => run((c) => c.toggleHeading({ level: 3 })))}
-      </span>
-      <span className="fnotes__group">
-        {btn('Align left', <LuAlignLeft />, on.left, () => run((c) => c.setTextAlign('left')))}
-        {btn('Align centre', <LuAlignCenter />, on.center, () => run((c) => c.setTextAlign('center')))}
-        {btn('Align right', <LuAlignRight />, on.right, () => run((c) => c.setTextAlign('right')))}
-      </span>
-      <span className="fnotes__group">
-        {btn('Bulleted list', <LuList />, on.bullet, () => run((c) => c.toggleBulletList()))}
-        {btn('Numbered list', <LuListOrdered />, on.ordered, () => run((c) => c.toggleOrderedList()))}
-        {btn('Checkbox list', <LuSquareCheck />, on.task, () => run((c) => c.toggleTaskList()))}
-      </span>
-      <span className="fnotes__group">
-        {btn('Quote', <LuQuote />, on.quote, () => run((c) => c.toggleBlockquote()))}
-        {btn('Code block', <LuCode />, on.code, () => run((c) => c.toggleCodeBlock()))}
-        {btn('Collapsible section', <LuChevronsDownUp />, on.details, () => run((c) => (on.details ? c.unsetDetails() : c.setDetails())))}
-        {btn('Divider', <LuMinus />, false, () => run((c) => c.setHorizontalRule()))}
-        {btn('Link', <LuLink />, on.link, link)}
-      </span>
-    </div>
-  )
+  // the toolbar's groups, in order: what doesn't fit the width goes behind "⋯" at the end
+  const groups = [
+    <>
+      <select
+        className="fnotes__size"
+        aria-label="Font size"
+        data-tip="Font size"
+        value={on.size}
+        onChange={(e) => run((c) => (e.target.value ? c.setFontSize(e.target.value) : c.unsetFontSize()))}
+      >
+        {SIZES.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+    </>,
+    <>
+      {btn('Bold', <LuBold />, on.bold, () => run((c) => c.toggleBold()))}
+      {btn('Italic', <LuItalic />, on.italic, () => run((c) => c.toggleItalic()))}
+      {btn('Underline', <LuUnderline />, on.underline, () => run((c) => c.toggleUnderline()))}
+      {btn('Strikethrough', <LuStrikethrough />, on.strike, () => run((c) => c.toggleStrike()))}
+      <Swatches label="Text colour" icon={<LuBaseline />} value={on.color} onPick={(color) => run((c) => (color ? c.setColor(color) : c.unsetColor()))} />
+      <Swatches
+        label="Highlight"
+        icon={<LuHighlighter />}
+        value={on.mark === 'on' ? '' : on.mark}
+        marker
+        onPick={(color) => run((c) => (color ? c.setHighlight({ color }) : c.unsetHighlight()))}
+      />
+    </>,
+    <>
+      {btn('Heading', <LuHeading1 />, on.h1, () => run((c) => c.toggleHeading({ level: 1 })))}
+      {btn('Subheading', <LuHeading2 />, on.h2, () => run((c) => c.toggleHeading({ level: 2 })))}
+      {btn('Small heading', <LuHeading3 />, on.h3, () => run((c) => c.toggleHeading({ level: 3 })))}
+    </>,
+    <>
+      {btn('Align left', <LuAlignLeft />, on.left, () => run((c) => c.setTextAlign('left')))}
+      {btn('Align centre', <LuAlignCenter />, on.center, () => run((c) => c.setTextAlign('center')))}
+      {btn('Align right', <LuAlignRight />, on.right, () => run((c) => c.setTextAlign('right')))}
+    </>,
+    <>
+      {btn('Bulleted list', <LuList />, on.bullet, () => run((c) => c.toggleBulletList()))}
+      {btn('Numbered list', <LuListOrdered />, on.ordered, () => run((c) => c.toggleOrderedList()))}
+      {btn('Checkbox list', <LuSquareCheck />, on.task, () => run((c) => c.toggleTaskList()))}
+    </>,
+    <>
+      {btn('Quote', <LuQuote />, on.quote, () => run((c) => c.toggleBlockquote()))}
+      {btn('Code block', <LuCode />, on.code, () => run((c) => c.toggleCodeBlock()))}
+      {btn('Collapsible section', <LuChevronsDownUp />, on.details, () => run((c) => (on.details ? c.unsetDetails() : c.setDetails())))}
+      {btn('Divider', <LuMinus />, false, () => run((c) => c.setHorizontalRule()))}
+      {btn('Link', <LuLink />, on.link, link)}
+    </>,
+  ]
+  return <FittingToolbar groups={groups} />
 }
 
 /** Undo / redo, outside the formatting toolbar. */
@@ -344,6 +300,99 @@ function History({ editor }: { editor: Editor }) {
     </span>
   )
 }
+
+/**
+ * One row, never wrapped: the groups that fit the width are shown, the rest open from "⋯" at the end (a narrow
+ * window or a phone). Widths are measured as they're shown, and kept for when they're tucked away.
+ */
+function FittingToolbar({ groups }: { groups: React.ReactNode[] }) {
+  const bar = useRef<HTMLDivElement>(null)
+  const widths = useRef<number[]>([])
+  const [fit, setFit] = useState(groups.length)
+  const [open, setOpen] = useState(false)
+  const more = useRef<HTMLSpanElement>(null)
+
+  const measure = useRef(() => {})
+  measure.current = () => {
+    const el = bar.current
+    // not on screen (a minimized window, a hidden section): measured when it shows
+    if (!el?.clientWidth) return
+    el.querySelectorAll<HTMLElement>(':scope > .fnotes__group').forEach((g, i) => {
+      if (g.offsetWidth) widths.current[i] = g.offsetWidth
+    })
+    // a group never measured yet: show them all once, to measure
+    if (widths.current.filter(Boolean).length < groups.length) return setFit(groups.length)
+    const room = el.clientWidth - 8
+    let n = 0
+    let used = 0
+    for (; n < groups.length; n++) {
+      // the last ones only fit if "⋯" isn't needed after them
+      const rest = n < groups.length - 1 ? MORE_WIDTH : 0
+      if (used + widths.current[n] + rest > room) break
+      used += widths.current[n]
+    }
+    setFit(n)
+  }
+  useLayoutEffect(() => {
+    const el = bar.current
+    if (!el) return
+    const ro = new ResizeObserver(() => measure.current())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  // after showing more or fewer: measured again (settles at once)
+  useLayoutEffect(() => measure.current(), [fit])
+
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => {
+      const t = e.target as HTMLElement
+      // a colour palette opened from the menu sits on <body>: part of it
+      if (!more.current?.contains(t) && !t.closest?.('.fnotes__palette')) setOpen(false)
+    }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
+  useEffect(() => {
+    if (fit >= groups.length) setOpen(false)
+  }, [fit, groups.length])
+
+  return (
+    <div className="fnotes__tools" role="toolbar" aria-label="Formatting" ref={bar}>
+      {groups.map((g, i) => (
+        <span key={i} className="fnotes__group" hidden={i >= fit}>
+          {g}
+        </span>
+      ))}
+      {fit < groups.length && (
+        <span className="fnotes__more" ref={more}>
+          <button
+            type="button"
+            className={`fnotes__btn${open ? ' is-on' : ''}`}
+            aria-label="More formatting"
+            aria-expanded={open}
+            data-tip="More"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <LuEllipsis />
+          </button>
+          {open && (
+            <span className="fnotes__menu" role="group" aria-label="More formatting">
+              {groups.slice(fit).map((g, i) => (
+                <span key={i} className="fnotes__group">
+                  {g}
+                </span>
+              ))}
+            </span>
+          )}
+        </span>
+      )}
+    </div>
+  )
+}
+/** Room kept for "⋯" (its button and the gap before it). */
+const MORE_WIDTH = 40
 
 const SIZES = [
   { value: '', label: 'Normal' },

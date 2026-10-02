@@ -38,12 +38,11 @@ export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [
 /** Task timelines, loaded per task when one is opened (useTaskComments) and kept current by the SSE stream. */
 export const useComments = create<{ byTask: Record<string, TaskComment[]> }>(() => ({ byTask: {} }))
 
-/** Server-owned tasks, projects, cron jobs and office timezone replace the local copies. */
+/** Server-owned tasks, cron jobs and office timezone replace the local copies. */
 function applyWork(work: Partial<WorkState>) {
   const local = useDashboard.getState()
   const patch: Partial<typeof local> = {}
   if (work.tasks) patch.tasks = mergeServer(work.tasks, local.tasks)
-  if (work.projects) patch.projects = mergeServer(work.projects, local.projects)
   if (work.crons) patch.crons = mergeServer(work.crons, local.crons)
   if (work.reports) patch.reports = mergeServer(work.reports, local.reports)
   if (work.tags) patch.tags = mergeServer(work.tags, local.tags)
@@ -282,10 +281,10 @@ export const liveApi = {
     return r.ok ? r.json() : { folder: '', deletable: false, entries: 0 }
   },
   /** `uploads`: ids of files attached (staged) for this message; the server moves them into the agent's folder */
-  /** `ctx`: the project and tags picked above the message box (optional) */
+  /** `ctx`: the folder and tags picked above the message box (optional) */
   /** `session`: one of its side sessions (s2, s3…; unset: its main session) */
-  prompt: (id: string, text: string, uploads: string[] = [], ctx?: { projectId: string; tags: string[] }, session?: string) =>
-    call(`/api/agents/${id}/prompt${session ? `?session=${session}` : ''}`, { text, ...(uploads.length ? { uploads } : {}), ...(ctx?.projectId ? { projectId: ctx.projectId } : {}), ...(ctx?.tags.length ? { tags: ctx.tags } : {}) }),
+  prompt: (id: string, text: string, uploads: string[] = [], ctx?: { folder: string; tags: string[] }, session?: string) =>
+    call(`/api/agents/${id}/prompt${session ? `?session=${session}` : ''}`, { text, ...(uploads.length ? { uploads } : {}), ...(ctx?.folder ? { folder: ctx.folder } : {}), ...(ctx?.tags.length ? { tags: ctx.tags } : {}) }),
   /** Attach a file in the chat: staged on the server until the message is sent (then it goes into the agent's folder). */
   upload: async (id: string, file: File): Promise<StagedUpload> => {
     // raw bytes + the name in a header (the server's one exception to JSON-only writes, see auth.ts)
@@ -368,12 +367,6 @@ export const liveApi = {
     const res = await api(`/api/workspaces${fresh ? '?fresh=1' : ''}`)
     if (!res.ok) throw new Error(`Could not read the agents' folders (${res.status})`)
     return res.json()
-  },
-  /** Whether a project's folder can be deleted with it (one the office made), and how many entries it holds. */
-  projectFolder: async (id: string): Promise<{ folder: string | null; deletable: boolean; entries: number }> => {
-    const r = await api(`/api/projects/${id}/folder`)
-    if (!r.ok) return { folder: null, deletable: false, entries: 0 }
-    return r.json()
   },
   commits: async (path: string): Promise<GitCommit[]> => {
     const res = await api(`/api/workspaces/commits?${new URLSearchParams({ path })}`)

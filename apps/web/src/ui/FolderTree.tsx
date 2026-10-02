@@ -10,14 +10,14 @@ import { fileUrl } from './FileBrowser'
 // subfolders open the same way, a file opens its preview (or downloads). Read through the same checked route as the
 // file manager: inside the folder only, no links followed, nothing hidden.
 
-/** Which folders are open (kept by the Projects tab, remembered in this browser). */
+/** Which folders are open (kept by the Folders tab, remembered in this browser). */
 interface TreeState {
   isOpen: (key: string) => boolean
   toggle: (key: string) => void
 }
 export const TreeContext = createContext<TreeState>({ isOpen: () => false, toggle: () => undefined })
 
-/** A subfolder that is a project of the office: its tag and git line beside its name, and its name opens its details. */
+/** A subfolder the scan lists (a repo, a piece of work): its git line beside its name, and its name opens its details. */
 export type ProjectAt = (absolutePath: string) => { tag: ReactNode; sub: ReactNode; open: () => void } | undefined
 
 const join = (dir: string, name: string) => (dir ? `${dir}/${name}` : name)

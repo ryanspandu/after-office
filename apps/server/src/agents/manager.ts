@@ -206,8 +206,9 @@ people, follow up, and report back. You don't do the hands-on work yourself.
   \`get_task\` (timeline), so check it before sending work back.
 - If a result says "on hold" (quota brake), the plan is nearly used up: don't retry, tell the owner; the task starts
   on its own when usage drops.
-- Link tasks to a project (\`project\` in \`delegate_task\`, see \`list_projects\`): the agent gets the project's brief, and
-  the project's quality check runs when they finish. A report that says the check failed means the work isn't done.
+- Work that belongs somewhere else than the agent's own folder (a repo, a folder the owner named): pass that folder
+  (absolute path) as \`folder\` in \`delegate_task\`; the agent gets access and works there. Group work with \`tags\`.
+  A task's own quality check (\`check\`) runs when they finish: a report that says it failed means the work isn't done.
 - Recurring work (every morning, every Monday…) is a daily job: \`list_daily_jobs\`, \`create_daily_job\`,
   \`update_daily_job\` (enabled:false pauses it), \`delete_daily_job\`. They follow the same approval rules as your tasks.
 - Tags: when the owner names a tag ("tag it SEO"), put it on the work: \`tags\` in \`delegate_task\` / \`update_task\`
@@ -238,11 +239,14 @@ people, follow up, and report back. You don't do the hands-on work yourself.
   mode trusts you, not what agents wrote. Hires, connector writes and quality checks still need the owner.
 - Check progress with \`list_tasks\` / \`get_task\` instead of guessing.
 - \`notify_user\` puts a note in the owner's Reports: use it for results or problems they must not miss.
+- The owner's Notes (\`list_notes\`, \`read_note\`): plans, decisions and references they shared with the team. Check
+  them when work touches what they cover; when a worker needs one, put what matters in the task brief. \`write_note\`
+  / \`edit_note\` when the owner asks (or to keep something the team should know); \`delete_note\` only when asked.
 - When a job the owner gave you is finished (every task in it reported, checked and accepted), file the result
   in their Reports with \`notify_user\`: a clear title, the outcome in a few lines, and where the files are (full
   paths). Then tell them here too. The agents' own reports are raw material; yours is the one the owner reads.
-- If that work belongs to a project (see \`list_projects\`), pass \`project\` to \`notify_user\`: the summary then also shows
-  in the project's reports, next to the reports of the agents who worked on it.
+- If that work was in one folder, pass it as \`folder\` to \`notify_user\`: the summary then also shows in that folder's
+  reports, next to the reports of the agents who worked there.
 - An agent's "still working / waiting on its helpers" message is not a result. The office already waits for its
   background helpers before filing a report, so a report you get is its final one; judge it on what it delivered.
 - Ask the owner first when a request is ambiguous or risky (deleting data, deploying, spending money, anything
@@ -255,11 +259,19 @@ people, follow up, and report back. You don't do the hands-on work yourself.
 `
 }
 
-/**
- * Connect a manager's folder to the office: .mcp.json with the after-office server (identity via the session's
- * AO_* env), pre-approved in .claude/settings.local.json, and its tools allowed without prompts.
- */
+/** A manager's folder: the office's tools (writeOfficeMcp) and its CLAUDE.md when it has none. */
 export function writeManagerFiles(cwd: string, name?: string) {
+  writeOfficeMcp(cwd)
+  const claudeMd = join(cwd, 'CLAUDE.md')
+  if (!existsSync(claudeMd)) writeInFolder(cwd, claudeMd, managerClaudeMd(name))
+}
+
+/**
+ * Connect an agent's folder to the office: .mcp.json with the after-office server (identity via the session's AO_*
+ * env), pre-approved in .claude/settings.local.json, and its tools allowed without prompts. The manager gets all of
+ * the office's tools there, every other agent the shared notes only (src/mcp.ts).
+ */
+export function writeOfficeMcp(cwd: string) {
   const mcpFile = join(cwd, '.mcp.json')
   const mcp = readJson(cwd, mcpFile)
   const servers = (mcp.mcpServers as Json) ?? {}
@@ -285,9 +297,6 @@ export function writeManagerFiles(cwd: string, name?: string) {
   settings.permissions = permissions
   mkdirSync(dirname(settingsFile), { recursive: true })
   writeInFolder(cwd, settingsFile, JSON.stringify(settings, null, 2) + '\n')
-
-  const claudeMd = join(cwd, 'CLAUDE.md')
-  if (!existsSync(claudeMd)) writeInFolder(cwd, claudeMd, managerClaudeMd(name))
 }
 
 /** A new worker's CLAUDE.md when it comes without a brief of its own. */
@@ -337,23 +346,22 @@ function claudeArgs(row: AgentRow, resume: boolean, sessionId = row.session_id) 
     ...(isEffort(row.effort) ? ['--effort', row.effort] : []),
     // a fixed session id lets us find the transcript and resume the same conversation after restarts
     ...(resume ? ['--resume', sessionId] : ['--session-id', sessionId]),
-    // project folders outside its own it was given (grantProjectDir): readable/editable like its own folder
+    // folders outside its own it was given (grantFolder): readable/editable like its own folder
     ...extraDirsOf(row).filter((d) => existsSync(d)).flatMap((d) => ['--add-dir', d]),
   ]
 }
 
-// ── project folders outside the agent's own ──
+// ── folders outside the agent's own ──
 
 /** `dir` is the agent's folder or inside it: nothing to add. */
 const insideOwn = (row: AgentRow, dir: string) => dir === row.cwd || dir.startsWith(row.cwd.endsWith('/') ? row.cwd : row.cwd + '/')
 
 /**
- * Let an agent work in a project folder outside its own (a task of a project linked to that folder is about to be
- * handed over). Only folders of the owner's dashboard projects get here, and they are checked against OFFICE_ROOT
- * again. Remembered (the session starts with --add-dir after restarts) and added to the running session with
+ * Let an agent work in a folder outside its own (a task, or a chat message, set in that folder is about to reach
+ * it). Only folders the owner or the manager picked get here, and they are checked against OFFICE_ROOT again. Remembered (the session starts with --add-dir after restarts) and added to the running session with
  * /add-dir ("Yes, for this session"), so there are no permission prompts for it.
  */
-export async function grantProjectDir(agentId: string, folder: string) {
+export async function grantFolder(agentId: string, folder: string) {
   const row = agentsRepo.get(agentId)
   if (!row) return
   const dir = resolveCwd(folder)
@@ -384,8 +392,8 @@ export async function grantProjectDir(agentId: string, folder: string) {
 /** Folders added to each running session (a restart starts with all of them via --add-dir). */
 const sessionDirs = new Map<string, Set<string>>()
 
-/** Take a project folder away from an agent; the session restarts (conversation kept) so it really loses access. */
-export async function revokeProjectDir(agentId: string, dir: string) {
+/** Take a folder away from an agent; the session restarts (conversation kept) so it really loses access. */
+export async function revokeFolder(agentId: string, dir: string) {
   const row = agentsRepo.get(agentId)
   if (!row) throw new AgentError('No such agent', 404)
   const dirs = extraDirsOf(row)
@@ -403,6 +411,12 @@ async function spawn(row: AgentRow, resume: boolean) {
 
 /** One Claude Code process of the agent in tmux: its main session, or a side session (key s2, s3…). */
 async function startProcess(row: AgentRow, p: { tmuxName: string; sessionId: string; resume: boolean; key: string }) {
+  // the office's tools (agents from before workers had any get them on their next start)
+  try {
+    writeOfficeMcp(row.cwd)
+  } catch (e) {
+    console.warn(`[agents] could not connect ${row.name}'s folder to the office's tools:`, (e as Error).message)
+  }
   const gitEnvFor = await gitEnv(row)
   await tmux.newSession({
     name: p.tmuxName,
@@ -413,7 +427,7 @@ async function startProcess(row: AgentRow, p: { tmuxName: string; sessionId: str
       AO_HOOK_TOKEN: agentToken(row.id),
       // which of its sessions this is (hooks, status line and MCP calls say so)
       AO_SESSION_KEY: p.key,
-      // CLAUDE.md of the project folders added with --add-dir / /add-dir is read too (the project's own rules)
+      // CLAUDE.md of the folders added with --add-dir / /add-dir is read too (that repo's own rules)
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
       // one Claude account's folder for every agent, when set (fsroots.ts)
       ...(CLAUDE_CONFIG_DIR ? { CLAUDE_CONFIG_DIR } : {}),
@@ -600,7 +614,10 @@ export async function createAgent(input: CreateAgentInput) {
   mkdirSync(cwd, { recursive: true })
   writeAgentSettings(cwd)
   if (kind === 'manager') writeManagerFiles(cwd, name)
-  else writeWorkerClaudeMd(cwd, name, input.role, input.profile?.claudeMd, Array.isArray(input.rules) ? cleanPacks(input.rules) : defaultRulePacks(input.role))
+  else {
+    writeOfficeMcp(cwd)
+    writeWorkerClaudeMd(cwd, name, input.role, input.profile?.claudeMd, Array.isArray(input.rules) ? cleanPacks(input.rules) : defaultRulePacks(input.role))
+  }
   writeProfileFiles(cwd, input.profile)
 
   const row: AgentRow = {

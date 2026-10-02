@@ -178,7 +178,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   }
 
   const pending = usePendingFiles(agent.id)
-  // the project and tags sent with each message (optional, kept per agent): the row shows while open or set
+  // the folder and tags sent with each message (optional, kept per agent): the row shows while open or set
   const context = useChatContext(agent.id)
   const [contextOpen, setContextOpen] = useState(false)
   // phones: the row only while opened (the + button shows a dot when something is picked); elsewhere also while set
@@ -530,7 +530,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
           if (i.kind === 'user') {
             // files the owner attached: previews under the bubble, like the agent's own files
             const { text: withCtx, paths } = splitAttachments(i.text)
-            const { text: said, project, tags } = splitContext(withCtx)
+            const { text: said, folder, tags } = splitContext(withCtx)
             const files = paths.map((p) => ownerFiles.get(p)).filter((f) => !!f)
             return (
               <div key={i.id} data-mid={i.id} className={`msg-user${isNew(i.id)}`}>
@@ -540,7 +540,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
                   </div>
                 )}
                 {said && <div className={`msg msg--user${i.id === current ? ' msg--hit' : ''}`}>{said}</div>}
-                <ContextChips project={project} tags={tags} />
+                <ContextChips folder={folder} tags={tags} />
               </div>
             )
           }
@@ -619,7 +619,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
               onClick={() => setContextOpen((v) => !v)}
               disabled={offline}
               aria-expanded={contextOpen || context.active}
-              {...tip(context.active ? 'Project and tags for this chat' : 'Pick a project or tags (optional)')}
+              {...tip(context.active ? 'Folder and tags for this chat' : 'Pick a folder or tags (optional)')}
             >
               <LuTag />
             </button>
@@ -660,7 +660,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   )
 }
 
-/** Phones: attach and project / tags behind one + button, its menu opening upwards. */
+/** Phones: attach and folder / tags behind one + button, its menu opening upwards. */
 function ComposerMenu({ disabled, contextActive, contextOpen, onAttach, onContext }: { disabled: boolean; contextActive: boolean; contextOpen: boolean; onAttach: () => void; onContext: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -681,7 +681,7 @@ function ComposerMenu({ disabled, contextActive, contextOpen, onAttach, onContex
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
         aria-expanded={open}
-        aria-label="Attach, project and tags"
+        aria-label="Attach, folder and tags"
       >
         <LuPlus />
         {contextActive && <i className="composer-menu__dot" />}
@@ -691,7 +691,7 @@ function ComposerMenu({ disabled, contextActive, contextOpen, onAttach, onContex
           <LuPaperclip /> Attach files
         </button>
         <button role="menuitem" className={contextActive ? 'is-on' : ''} onClick={pick(onContext)}>
-          <LuTag /> {contextOpen ? 'Hide project & tags' : contextActive ? 'Project & tags (set)' : 'Project & tags'}
+          <LuTag /> {contextOpen ? 'Hide folder & tags' : contextActive ? 'Folder & tags (set)' : 'Folder & tags'}
         </button>
       </div>
     </div>

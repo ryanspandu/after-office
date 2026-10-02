@@ -1,5 +1,5 @@
 import type { FollowUpDecision, LiveFollowUp, OfficeTask, WorkReport } from '@after-office/shared'
-import { agentsRepo, projectsRepo, tasksRepo } from '../db'
+import { agentsRepo, tasksRepo } from '../db'
 import { addPending, resolvePending } from '../agents/registry'
 import { runCheck } from './checks'
 import { notify } from '../notify'
@@ -13,9 +13,9 @@ import { addComment, deliver, forwardToManager, markTask, publishWork, taskFolde
 /** Automatic fix rounds after a failed check, before it goes to review anyway. */
 export const MAX_FIX_ROUNDS = 2
 
-/** The check command for a task: its own, else its project's. */
+/** The check command for a task, if it has one. */
 export function checkFor(t: OfficeTask) {
-  return t.check?.trim() || (t.projectId ? projectsRepo.get(t.projectId)?.check?.trim() : undefined) || undefined
+  return t.check?.trim() || undefined
 }
 
 export async function runGate(taskId: string, agentId: string, cmd: string, report: WorkReport | null) {

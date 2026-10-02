@@ -12,7 +12,7 @@ import { DateTimeField } from './pickers'
 import { TaskReports } from './Reports'
 import { TaskRunFields } from './TaskRun'
 import { Select } from './Select'
-import { AgentSelect, dueInfo, PRIORITY_OPTIONS, ProjectSelect, STATUS_BY_ID, StatusSelect, WaitsForSelect, waitingOn } from './taskMeta'
+import { AgentSelect, dueInfo, PRIORITY_OPTIONS, FolderSelect, STATUS_BY_ID, StatusSelect, WaitsForSelect, waitingOn } from './taskMeta'
 import { TaskTimeline } from './TaskTimeline'
 import { TaskDiff } from './TaskDiff'
 import { TagPicker } from './tags'
@@ -31,10 +31,8 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
   const [feedback, setFeedback] = useState('')
   const [sending, setSending] = useState(false)
   const tasks = useDashboard((s) => s.tasks)
-  const projects = useDashboard((s) => s.projects)
   if (!task) return null
   const waiting = waitingOn(task, tasks)
-  const projectCheck = projects.find((p) => p.id === task.projectId)?.check
   const blocks = tasks.filter((t) => t.blockedBy?.includes(task.id))
 
   const inReview = live && task.status === 'review'
@@ -116,8 +114,8 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
           <Field label="Priority">
             <Select ariaLabel="Priority" value={task.priority} options={PRIORITY_OPTIONS} onChange={(v) => set({ priority: v })} />
           </Field>
-          <Field label="Project">
-            <ProjectSelect value={task.projectId ?? ''} onChange={(v) => set({ projectId: v || null })} />
+          <Field label="Folder">
+            <FolderSelect value={task.folder} onChange={(folder) => set({ folder })} />
           </Field>
           <Field label="Agent">
             <AgentSelect value={task.agentId ?? ''} onChange={(v) => set({ agentId: v || null })} />
@@ -148,13 +146,9 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
         {live && (
           <Field
             label="Quality check"
-            hint={
-              projectCheck && !task.check
-                ? `Uses the project's check: ${projectCheck}. Type a command to override it for this task.`
-                : "Optional. Runs in the agent's folder when it finishes; a failure goes back to the agent to fix (twice) before review."
-            }
+            hint="Optional. Runs in the task's folder when the agent finishes; a failure goes back to the agent to fix (twice) before review."
           >
-            <input className="mono" value={task.check ?? ''} maxLength={1000} onChange={(e) => set({ check: e.target.value || undefined })} placeholder={projectCheck ?? 'e.g. npm test'} />
+            <input className="mono" value={task.check ?? ''} maxLength={1000} onChange={(e) => set({ check: e.target.value || undefined })} placeholder="e.g. npm test" />
           </Field>
         )}
         {live && blocks.length > 0 && (

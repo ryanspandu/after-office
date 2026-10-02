@@ -2,12 +2,12 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { agentsRepo, projectsRepo, queueRepo, tasksRepo } from '../db'
+import { agentsRepo, queueRepo, tasksRepo } from '../db'
 import { workRoutes } from '../routes/work'
 import { startTask, taskFolder } from './work'
 import { addFolder, addFolderFile, recentCommits, searchFolders, workspaces } from './workspaces'
 
-// The Projects tab reads the agents' folders: a repo folder is one project; any other folder holds several.
+// The Folders tab reads the agents' folders: a repo folder is one piece of work; any other folder holds several.
 
 const home = mkdtempSync(join(tmpdir(), 'ao-ws-'))
 afterAll(() => rmSync(home, { recursive: true, force: true }))
@@ -42,14 +42,10 @@ describe('workspaces', () => {
     agentsRepo.remove('ws-a')
   })
 
-  test('a project linked to a folder: the scan shows it, tasks are told to work there, checks run there', async () => {
+  test('a task in a folder: told to work there; the Changes view and checks run there', async () => {
     const shop = join(home, 'shop')
     agentsRepo.insert({ id: 'ws-b', name: 'WB', tmux_session: 'ao-wb', cwd: home, desk: 992, role: '', model: 'haiku', permission_mode: 'default', session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'worker' })
-    projectsRepo.put({ id: 'ws-p', name: 'Shop', color: '#ff0000', folder: shop })
-    const ws = (await workspaces(true)).find((w) => w.path === home)!
-    expect(ws.projects.find((p) => p.name === 'shop')!.projectId).toBe('ws-p')
-
-    tasksRepo.put({ id: 'ws-t', title: 'Fix cart', agentId: 'ws-b', projectId: 'ws-p', deadline: Date.now(), priority: 'low', status: 'todo' })
+    tasksRepo.put({ id: 'ws-t', title: 'Fix cart', agentId: 'ws-b', folder: shop, deadline: Date.now(), priority: 'low', status: 'todo' })
     expect(taskFolder(tasksRepo.get('ws-t')!)).toBe(shop)
     await startTask('ws-t')
     let prompt = ''
@@ -58,54 +54,50 @@ describe('workspaces', () => {
       queueRepo.remove(q.id)
     }
     expect(prompt).toContain(`Folder: ${shop}`)
+    // no folder (or one that's gone): the agent's own
+    tasksRepo.put({ ...tasksRepo.get('ws-t')!, folder: join(home, 'gone') })
+    expect(taskFolder(tasksRepo.get('ws-t')!)).toBe(home)
     agentsRepo.remove('ws-b')
   })
 
-  test('a project folder must be one agents may use', async () => {
-    const res = await workRoutes.request('/projects/ws-bad', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Bad', folder: '/etc' }) })
+  test("a task's folder must be one agents may use", async () => {
+    const res = await workRoutes.request('/tasks/ws-bad', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Bad', agentId: null, folder: '/etc', deadline: Date.now(), priority: 'low', status: 'todo' }),
+    })
     expect(res.status).toBe(400)
   })
 })
 
-describe('project folders', () => {
-  const put = (id: string, body: unknown) =>
-    workRoutes.request(`/projects/${id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+describe("folders in the office's own folder", () => {
+  const make = (name: string) => workRoutes.request('/folders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) })
 
-  test('a new project gets <agents dir>/project/<name>; a taken name gets a number', async () => {
+  test('a new folder is <agents dir>/project/<name>; a taken name gets a number; listed in the Folders tab', async () => {
     const { PROJECTS_DIR } = await import('../fsroots')
     expect(PROJECTS_DIR).toContain('after-office-test-home-') // never the real ~/after-office (test-setup.ts)
-    const a = (await (await put('proj-seo', { name: 'SEO Research', createFolder: true })).json()) as { folder: string }
+    const a = (await (await make('SEO Research')).json()) as { folder: string }
     expect(a.folder).toBe(join(PROJECTS_DIR, 'seo-research'))
-    const b = (await (await put('proj-seo2', { name: 'SEO research', createFolder: true })).json()) as { folder: string }
+    const b = (await (await make('SEO research')).json()) as { folder: string }
     expect(b.folder).toBe(join(PROJECTS_DIR, 'seo-research-2'))
-    // one name for a project with a folder: the folder's (a different name sent is not kept)
-    await put('proj-seo', { name: 'SEO', folder: a.folder })
-    expect(projectsRepo.get('proj-seo')).toMatchObject({ name: 'seo-research', folder: a.folder })
-    // and it's listed in the Projects tab, under the projects folder
     const shared = (await workspaces(true)).find((w) => w.shared)!
     expect(shared.path).toBe(PROJECTS_DIR)
-    expect(shared.projects.map((p) => p.name).sort()).toEqual(['seo-research', 'seo-research-2'])
-    expect(shared.projects.find((p) => p.name === 'seo-research')!.projectId).toBe('proj-seo')
+    expect(shared.projects.map((p) => p.name)).toEqual(expect.arrayContaining(['seo-research', 'seo-research-2']))
   })
 
-  test('deleting with ?folder=1 removes only a folder the office made', async () => {
-    const folder = projectsRepo.get('proj-seo')!.folder!
+  test('deleting removes only a folder the office made (or one whose agent is gone)', async () => {
+    const { PROJECTS_DIR, AGENTS_DIR } = await import('../fsroots')
+    const folder = join(PROJECTS_DIR, 'seo-research')
     writeFileSync(join(folder, 'keywords.md'), '# kw')
-    const info = (await (await workRoutes.request('/projects/proj-seo/folder')).json()) as { deletable: boolean; entries: number }
-    expect(info).toMatchObject({ deletable: true, entries: 1 })
-    expect((await workRoutes.request('/projects/proj-seo?folder=1', { method: 'DELETE' })).status).toBe(200)
-    expect(projectsRepo.get('proj-seo')).toBeNull()
+    expect((await workRoutes.request(`/workspaces/folder?path=${encodeURIComponent(folder)}`, { method: 'DELETE' })).status).toBe(200)
     expect(require('node:fs').existsSync(folder)).toBe(false)
-
-    // a project on an agent's folder: the folder stays, and asking to delete it is refused
-    const { AGENTS_DIR } = await import('../fsroots')
+    // an agent's folder: refused, and it stays
     const agentHome = join(AGENTS_DIR, 'nova')
-    mkdirSync(agentHome)
-    expect((await put('proj-agent', { name: 'Agent home', folder: agentHome })).status).toBe(200)
-    expect((await (await workRoutes.request('/projects/proj-agent/folder')).json()) as { deletable: boolean }).toMatchObject({ deletable: false })
-    expect((await workRoutes.request('/projects/proj-agent?folder=1', { method: 'DELETE' })).status).toBe(400)
-    expect(projectsRepo.get('proj-agent')).not.toBeNull()
+    mkdirSync(agentHome, { recursive: true })
+    agentsRepo.insert({ id: 'ws-nova', name: 'Nova', tmux_session: 'ao-nova', cwd: agentHome, desk: 994, role: '', model: 'haiku', permission_mode: 'default', session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'worker' })
+    expect((await workRoutes.request(`/workspaces/folder?path=${encodeURIComponent(agentHome)}`, { method: 'DELETE' })).status).toBe(403)
     expect(require('node:fs').existsSync(agentHome)).toBe(true)
+    agentsRepo.remove('ws-nova')
   })
 })
 
@@ -255,34 +247,25 @@ describe('searching folders', () => {
   })
 })
 
-describe('one name for a project and its folder', () => {
-  test('a project with a folder takes its name (once, at start); one without a folder keeps its own', async () => {
-    const { syncProjectNames } = await import('./projectFolders')
-    projectsRepo.put({ id: 'sync-a', name: 'project b', color: '#f07a1d', folder: '/x/y/testproject' })
-    projectsRepo.put({ id: 'sync-b', name: 'Loose idea', color: '#f07a1d' })
-    expect(syncProjectNames()).toBeGreaterThanOrEqual(1)
-    expect(projectsRepo.get('sync-a')!.name).toBe('testproject')
-    expect(projectsRepo.get('sync-b')!.name).toBe('Loose idea')
-    projectsRepo.remove('sync-a')
-    projectsRepo.remove('sync-b')
-  })
-})
-
-describe('renaming a project folder', () => {
-  test('only folders in the projects folder; the linked project follows; never over another folder', async () => {
+describe("renaming a folder in the office's own folder", () => {
+  test('only those; its tasks and reports follow; never over another folder', async () => {
     const { PROJECTS_DIR } = await import('../fsroots')
     const { renameProjectFolder } = await import('./projectFolders')
     mkdirSync(join(PROJECTS_DIR, 'rn-old'), { recursive: true })
     mkdirSync(join(PROJECTS_DIR, 'rn-taken'), { recursive: true })
-    projectsRepo.put({ id: 'rn-p', name: 'rn-old', color: '#f07a1d', folder: join(PROJECTS_DIR, 'rn-old') })
+    const { reportsRepo } = await import('../db')
+    tasksRepo.put({ id: 'rn-t', title: 'T', agentId: null, folder: join(PROJECTS_DIR, 'rn-old'), deadline: 1, priority: 'low', status: 'done' })
+    reportsRepo.put({ id: 'rn-r', kind: 'task', refId: 'rn-t', title: 'R', agentId: 'x', text: 't', ok: true, startedAt: 1, finishedAt: 1, read: true, folder: join(PROJECTS_DIR, 'rn-old', 'sub') })
     expect(() => renameProjectFolder(join(PROJECTS_DIR, 'rn-old'), 'rn-taken')).toThrow('already a folder')
     expect(() => renameProjectFolder(join(PROJECTS_DIR, 'rn-old'), '!!!')).toThrow('Give it a name')
     expect(() => renameProjectFolder(home, 'x')).toThrow('Only folders in the projects folder')
     const r = renameProjectFolder(join(PROJECTS_DIR, 'rn-old'), 'Static Bloom')
     expect(r.folder).toBe(join(PROJECTS_DIR, 'static-bloom'))
     expect(statSync(r.folder).isDirectory()).toBe(true)
-    expect(projectsRepo.get('rn-p')).toMatchObject({ name: 'static-bloom', folder: r.folder })
-    projectsRepo.remove('rn-p')
+    expect(tasksRepo.get('rn-t')!.folder).toBe(r.folder)
+    expect(reportsRepo.get('rn-r')!.folder).toBe(join(r.folder, 'sub'))
+    tasksRepo.remove('rn-t')
+    reportsRepo.remove('rn-r')
     rmSync(r.folder, { recursive: true, force: true })
     rmSync(join(PROJECTS_DIR, 'rn-taken'), { recursive: true, force: true })
   })
@@ -343,20 +326,17 @@ describe('reports: view all', () => {
   })
 })
 
-describe('reports by project', () => {
-  test("the manager's notes and task reports carry their project; the view can filter by it", async () => {
+describe('reports by folder', () => {
+  test("the manager's notes and task reports carry their folder; a folder's view shows its reports (and those inside)", async () => {
     const { reportsRepo } = await import('../db')
     const { notifyUser } = await import('./work')
-    projectsRepo.put({ id: 'rp-seo', name: 'SEO', color: '#e8762c' })
-    const note = notifyUser('some-manager', 'SEO week', 'Done: 3 articles', 'rp-seo')
-    expect(note.projectId).toBe('rp-seo')
+    const note = notifyUser('some-manager', 'SEO week', 'Done: 3 articles', undefined, '/x/seo')
+    expect(note.folder).toBe('/x/seo')
+    const deeper = notifyUser('some-manager', 'Deeper', 'In a subfolder', undefined, '/x/seo/blog')
     const plain = notifyUser('some-manager', 'Other', 'Nothing to do with SEO')
-    expect(plain.projectId).toBeUndefined()
+    expect(plain.folder).toBeUndefined()
     const get = async (q: string) => ((await (await workRoutes.request(`/reports?${q}`)).json()) as { items: { id: string }[] }).items.map((r) => r.id)
-    expect(await get('project=rp-seo')).toEqual([note.id])
-    expect(await get('project=none&q=Nothing')).toEqual([plain.id])
-    reportsRepo.remove(note.id)
-    reportsRepo.remove(plain.id)
-    projectsRepo.remove('rp-seo')
+    expect((await get(`folder=${encodeURIComponent('/x/seo')}`)).sort()).toEqual([note.id, deeper.id].sort())
+    for (const r of [note, deeper, plain]) reportsRepo.remove(r.id)
   })
 })

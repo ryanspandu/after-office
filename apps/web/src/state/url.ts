@@ -4,9 +4,9 @@ import { create } from 'zustand'
 // yourself, or reopened after a reload). The URL is the source of truth: buttons set a parameter, ui/UrlModals.tsx
 // shows what the parameters ask for, and Back closes what was opened last.
 //
-//   ?task=<id>  ?report=<id>  ?reports=<filter>&project=&q=&range=&from=&to=&page=&per=  ?tasks=1  ?archive=1  ?projects=1
-//   ?folder=<path>  ?newproject=1  ?newtask=1&nt_agent=&nt_project=&nt_status=  ?daily=<id>|new  ?addagent=1|manager
-//   ?agent=<id>&tab=<tab>  ?manager=1&mtab=chat|team  ?automation=1  ?profile=1  ?settings=1 (project settings)  ?password=1  ?twofa=1  ?activity=1
+//   ?task=<id>  ?report=<id>  ?reports=<filter>&folder=&q=&range=&from=&to=&page=&per=  ?tasks=1  ?archive=1
+//   ?folder=<path>  ?newfolder=1  ?newtask=1&nt_agent=&nt_folder=&nt_status=  ?note=<id>|new&nfolder=  ?notes=1  ?daily=<id>|new  ?addagent=1|manager
+//   ?agent=<id>&tab=<tab>  ?manager=1&mtab=chat|team  ?automation=1  ?profile=1  ?settings=1 (office branding)  ?password=1  ?twofa=1  ?activity=1
 //   reports view also: &tag=<id,id>
 //   phones: ?sheet=attention|cron|tasks|reports|agents (the dock's bottom sheets, ui/MobileDock.tsx)
 

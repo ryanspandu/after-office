@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Workspace, WorkspaceFolder } from '@after-office/shared'
+import type { Workspace } from '@after-office/shared'
 import { liveApi } from './live'
 import { useOffice } from './store'
 
@@ -32,9 +32,3 @@ export const useWorkspaces = create<WorkspaceStore>((set, get) => ({
     }
   },
 }))
-
-/** Every folder that is a project: agent folders that are one, and the projects inside the others. */
-export function projectFolders(data: Workspace[] | null): WorkspaceFolder[] {
-  if (!data) return []
-  return data.flatMap((w) => (w.isProject ? [w] : w.projects))
-}

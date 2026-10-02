@@ -14,7 +14,7 @@ const BODIES: Record<RulePackId, string> = {
   result: what you did, what you found, the files you made (full paths), and open questions. Not "working on it".
 - Finish the task within your turn. If you hand parts to subagents, wait for all of them, combine their results
   (in the file and in your final message), then end your turn.
-- Save deliverables in your folder, or in the project folder the task names, and mention their paths.
+- Save deliverables in your folder, or in the folder the task names, and mention their paths.
 - Stuck or unsure? Ask instead of guessing. Never publish, deploy, delete data or spend money without the owner's
   approval.`,
   engineering: `## Software engineering
@@ -23,7 +23,7 @@ const BODIES: Record<RulePackId, string> = {
   with \`docker compose up -d\`. Publish container ports on 127.0.0.1 only. Only development credentials, in the
   project's \`.env\` (never production ones).
 - Run an app you're working on (a dev server) on a free preview port, 3000–3009, on localhost (other agents use them
-  too: check with \`ss -ltn\` or \`lsof -i\` first); the owner opens it from the dashboard (Projects → Running now).
+  too: check with \`ss -ltn\` or \`lsof -i\` first); the owner opens it from the dashboard (Folders → Running now).
   Say which port in your report.
 - Anything that must keep running after your turn (a dev server, a worker) goes in the project's
   \`docker-compose.yml\` (\`restart: unless-stopped\`) or runs with \`nohup … &\` and a log file; stop what you no

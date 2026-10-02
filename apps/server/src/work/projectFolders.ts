@@ -1,14 +1,15 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
-import { agentsRepo, extraDirsOf, folderNotesRepo, projectsRepo, tasksRepo } from '../db'
+import { dirname, join } from 'node:path'
+import { agentsRepo, extraDirsOf, folderNotesRepo, ownerNotesRepo, reportsRepo, tasksRepo } from '../db'
 import { AgentError } from '../agents/errors'
-import { revokeProjectDir } from '../agents/manager'
+import { revokeFolder } from '../agents/manager'
 import { runAsAgent } from '../agents/asagent'
 import { AGENTS_DIR, PROJECTS_DIR } from '../fsroots'
 import type { AgentRow } from '../db'
 
-// Project folders the office makes: <AGENTS_DIR>/project/<name>. Only these can be deleted from the dashboard; a
-// project may also point at an agent's folder or a repo, which are never deleted from here.
+// Folders the office makes for work: <AGENTS_DIR>/project/<name> (the Folders tab → New folder). Only these (and the
+// folders of removed agents) can be deleted from the dashboard; a task may also work in an agent's folder or a repo,
+// which are never deleted from here.
 
 const slug = (s: string) =>
   s
@@ -17,9 +18,9 @@ const slug = (s: string) =>
     .replace(/^-|-$/g, '')
     .slice(0, 40)
 
-/** A new, empty folder for a project called `name` (seo, seo-2, … if taken). */
+/** A new, empty folder called `name` (seo, seo-2, … if taken). */
 export function makeProjectFolder(name: string) {
-  const base = slug(name) || 'project'
+  const base = slug(name) || 'folder'
   mkdirSync(PROJECTS_DIR, { recursive: true })
   for (let i = 1; i < 100; i++) {
     const path = join(PROJECTS_DIR, i === 1 ? base : `${base}-${i}`)
@@ -27,10 +28,10 @@ export function makeProjectFolder(name: string) {
     mkdirSync(path)
     return path
   }
-  throw new AgentError('Could not find a free folder name for this project', 409)
+  throw new AgentError('Could not find a free folder name', 409)
 }
 
-/** The folder is one the office made for a project: directly in PROJECTS_DIR, a real folder (not a symlink). */
+/** The folder is one the office made: directly in PROJECTS_DIR, a real folder (not a symlink). */
 export function isOwnProjectFolder(folder: string | undefined) {
   if (!folder) return false
   try {
@@ -41,8 +42,8 @@ export function isOwnProjectFolder(folder: string | undefined) {
 }
 
 /**
- * Rename a folder in the projects folder (the Projects tab): the dashboard project linked to it follows (its folder,
- * and its name: the folder's). Not while one of its tasks is being worked on (the agent would lose its place).
+ * Rename a folder in the office's own folder (the Folders tab): its tasks, reports and notes follow. Not while one of
+ * its tasks is being worked on (the agent would lose its place).
  */
 export function renameProjectFolder(folder: string, name: string) {
   if (!isOwnProjectFolder(folder)) throw new AgentError('Only folders in the projects folder can be renamed here', 403)
@@ -52,27 +53,16 @@ export function renameProjectFolder(folder: string, name: string) {
   const next = join(PROJECTS_DIR, base)
   if (next === old) return { folder: old }
   if (existsSync(next)) throw new AgentError(`There is already a folder called ${base}`, 409)
-  const linked = projectsRepo.all().filter((p) => p.folder && (p.folder === folder || p.folder === old))
-  const busy = tasksRepo.active().some((t) => t.status === 'in_progress' && linked.some((p) => p.id === t.projectId))
+  const inside = (f?: string) => !!f && (f === old || f === folder || f.startsWith(`${old}/`))
+  const busy = tasksRepo.active().some((t) => t.status === 'in_progress' && inside(t.folder))
   if (busy) throw new AgentError('One of its tasks is being worked on right now: rename it once that is done', 409)
   renameSync(old, next)
   folderNotesRepo.move(old, next)
-  for (const p of linked) projectsRepo.put({ ...p, folder: next, name: base })
+  ownerNotesRepo.moveFolder(old, next)
+  const moved = (f: string) => next + (f.startsWith(old) ? f.slice(old.length) : '')
+  for (const t of tasksRepo.all()) if (inside(t.folder)) tasksRepo.put({ ...t, folder: moved(t.folder!) })
+  for (const r of reportsRepo.all()) if (inside(r.folder)) reportsRepo.put({ ...r, folder: moved(r.folder!) })
   return { folder: next }
-}
-
-/** Once (at start): a project with a folder is called like its folder (one name for both, as the dashboard shows it). */
-export function syncProjectNames() {
-  let changed = 0
-  for (const p of projectsRepo.all()) {
-    if (!p.folder) continue
-    const name = basename(p.folder)
-    if (name && p.name !== name) {
-      projectsRepo.put({ ...p, name })
-      changed++
-    }
-  }
-  return changed
 }
 
 /** How many files and folders are in it (shown before deleting), up to a limit. */
@@ -130,7 +120,7 @@ export async function deleteProjectFolder(folder: string) {
   if (!isOwnProjectFolder(folder)) throw new AgentError(`Only project folders in ${PROJECTS_DIR} can be deleted here`, 400)
   const path = realpathSync(folder)
   for (const a of agentsRepo.all()) {
-    if (extraDirsOf(a).includes(path)) await revokeProjectDir(a.id, path).catch(() => {})
+    if (extraDirsOf(a).includes(path)) await revokeFolder(a.id, path).catch(() => {})
   }
   try {
     rmSync(path, { recursive: true, force: true })

@@ -454,7 +454,7 @@ agent, **Overview → Git**.
 | Browser tests, screenshots | Playwright / Puppeteer (system libraries installed) |
 | React Native / Expo, Flutter (Android side) | `--android`; Flutter through mise |
 | Linux builds of desktop apps (Electron; Tauri with `--apt "libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev"`) | Node / Rust through mise |
-| Trying what it built | Projects → Running now (preview ports) |
+| Trying what it built | Folders → Running now (preview ports) |
 
 | Doesn't | Instead |
 |---|---|
@@ -475,7 +475,7 @@ Let them push to branches and deploy through your CI after you merge.
 ### Previews
 
 Agents run the app they're working on (a dev server) on a preview port, 3000–3009 by default (`--preview-ports`
-changes the range). **Projects → Running now** in the dashboard lists what's running, with a link to each.
+changes the range). **Folders → Running now** in the dashboard lists what's running, with a link to each.
 
 - **On the server** the link is `https://<office host>:<port>` with Tailscale's own name, and
   `https://<your domain>:<port + 10000>` (e.g. `:13000` for an app on 3000) with a domain: Caddy holds the port it
@@ -649,23 +649,23 @@ After changing `apps/web/public/logo.png`, run `bun run icons` in `apps/web` (ne
   - Pick which events are pushed, and send a test, from the bell icon in the navbar.
 - **Quota brake.** At a set share of the 5-hour or weekly plan limit (default 80%), automatic work waits: auto-start tasks, tasks waiting on others, the manager's new tasks. Cron runs in that time are skipped and reported. Held work starts on its own once usage drops. Anything you start by hand still runs.
 
-## Projects, checks and hand-offs
+## Folders, checks and hand-offs
 
-- **Project brief** (Tasks → Projects) is added to the prompt of every task in that project, and the manager can read it (`list_projects`).
-- **Quality check** is a project or task setting, for example `pnpm lint && pnpm test`.
-  - It runs in the agent's folder **as the agents' user**, never as the dashboard, when the agent finishes a task. It has a 10-minute limit.
+- **A task's folder** (task form / task detail → Folder; the manager's `folder` in `delegate_task`) is where its agent works: an agent's folder, a repo, or one in the office folder (Folders tab → New folder). Outside the agent's own folder, the agent is given access when the task starts. Its reports carry that folder and show in the folder's details → Reports. Group work with tags.
+- **Quality check** is a task setting, for example `pnpm lint && pnpm test`.
+  - It runs in the task's folder **as the agents' user**, never as the dashboard, when the agent finishes a task. It has a 10-minute limit.
   - If it fails, the output goes back to the agent to fix, up to 2 times. After that the task goes to review marked "check failed".
   - You set it in the dashboard. The manager can propose one (`update_task`), but it only applies once you approve the command in "Needs your attention".
   - The Changes view's git commands also run as the agents' user, with repo-configured helpers (hooks, fsmonitor, textconv) switched off.
 - **Changes view** in a task shows what the agent changed since the task started. It needs the agent's folder to be a git repo. Read-only: it takes a `git stash create` snapshot and never touches the index or your stash list.
 - **Approval** (bell icon → Automation) holds the manager's new tasks in "Needs your attention". Rejecting one removes it and tells the manager.
 - **Auto-assign** (same place) hands out auto-start tasks that have no agent: the manager picks someone with `assign_task`; without a manager, a free agent takes it.
-- **The manager's powers** (MCP tools, manager only; workers get 403):
+- **The manager's powers** (MCP tools, manager only; other agents only get the shared notes tools):
   - propose hires with `create_agent`. **Every hire waits for your approval**, and the card shows its name, role, model, permission mode, folder and brief.
     - Folders: `OFFICE_AGENTS_DIR/<name>` by default, or one the manager names inside `OFFICE_ROOT`.
     - Symlinks are resolved first; hidden folders (`~/.claude`, `~/.ssh`), the After Office install and folders already in use are refused.
     - The office holds at most `OFFICE_MAX_AGENTS` agents (default 12).
-  - edit tasks with `update_task`: title, description, priority, deadline, agent, project, dependencies, check, and status todo/review/done.
+  - edit tasks with `update_task`: title, description, priority, deadline, agent, folder, dependencies, check, and status todo/review/done.
   - delete tasks with `delete_task`. Tasks in progress can't be reassigned or deleted. You get a note when one of your own tasks is deleted.
 - **Stuck work:**
   - a task whose agent goes offline for 2 minutes goes back to To do;

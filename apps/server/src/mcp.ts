@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 import { DEFAULT_MODEL, divisionOf, MODEL_CHOICES, RULE_PACKS, type OfficeTask, type RulePackId } from '@after-office/shared'
-import { agentsRepo, commentsRepo, connectorsOf, cronsRepo, projectsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
+import { agentsRepo, commentsRepo, connectorsOf, cronsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
 import { knownConnectors, listConnectors } from './agents/connectors'
 import { diffSince } from './work/git'
 import { AgentError } from './agents/manager'
@@ -13,6 +13,8 @@ import { noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
 import { isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone } from './work/work'
 import { listTags, tagIdsByName, tagNames } from './work/tags'
+import { cleanFolder } from './work/folders'
+import { agentDeleteNote, agentEditNote, agentNotes, agentReadNote, agentWriteNote, noteForAgent } from './work/notes'
 import { cleanPacks } from './agents/rules'
 
 // The after-office MCP server: the manager agent's hands. Its Claude Code session reaches it over loopback
@@ -28,7 +30,6 @@ const json = (v: unknown) => text(JSON.stringify(v, null, 2))
 
 const iso = (ms?: number) => (ms ? new Date(ms).toISOString() : undefined)
 
-/** A project by id or name (case-insensitive). */
 /** Connector names an agent may use ("all" for agents set up before connectors were managed). */
 function connectorNames(a: AgentRow) {
   const allowed = connectorsOf(a)
@@ -46,12 +47,6 @@ function connectorPrefixes(names?: string[]) {
     .filter((p): p is string => !!p)
 }
 
-function resolveProject(ref: string) {
-  const key = ref.trim().toLowerCase()
-  const p = projectsRepo.get(ref.trim()) ?? projectsRepo.all().find((x) => x.name.toLowerCase() === key)
-  if (!p) throw new AgentError(`No project "${ref}"; see list_projects`, 404)
-  return p
-}
 
 async function changedFiles(t: OfficeTask) {
   const cwd = taskFolder(t)
@@ -72,7 +67,7 @@ function describeTask(t: OfficeTask, withTimeline = false) {
     priority: t.priority,
     deadline: iso(t.deadline),
     delegatedByYou: !!t.delegatedBy,
-    project: t.projectId ? (projectsRepo.get(t.projectId)?.name ?? null) : null,
+    folder: t.folder ?? null,
     tags: t.tags?.length ? tagNames(t.tags) : undefined,
     waitingForOwnerApproval: t.awaitingApproval || undefined,
     qualityCheck: checkFor(t) ? { command: checkFor(t), state: t.checkState ?? 'not run yet', fixRounds: t.checkAttempts ?? 0 } : undefined,
@@ -170,7 +165,7 @@ function buildServer(managerId: string) {
         priority: z.enum(['low', 'medium', 'high']).optional(),
         deadlineHours: z.number().positive().max(24 * 60).optional().describe('hours from now; default 24'),
         mode: z.enum(['default', 'acceptEdits', 'auto']).optional().describe("permission mode for this task; default: the agent's current mode"),
-        project: z.string().optional().describe('project id or name from list_projects; its brief is added to the prompt and its quality check runs when done'),
+        folder: z.string().max(1000).optional().describe("absolute path of the folder to work in (an agent's folder, a repo, or one in the office's folder); the agent is given access when the task starts. Unset: the agent's own folder"),
         after: z
           .array(z.string())
           .max(20)
@@ -179,13 +174,13 @@ function buildServer(managerId: string) {
         tags: z.array(z.string().max(40)).max(10).optional().describe('tag names the owner made (see list_tags), e.g. ["SEO"]; only existing tags'),
       },
     },
-    async ({ agent, title, description, priority, deadlineHours, mode, after, project, tags }) => {
+    async ({ agent, title, description, priority, deadlineHours, mode, after, folder, tags }) => {
       try {
         const target = resolveAgent(agent, managerId)
         const out = await delegateTask(managerId, {
           agent: target.id,
           after,
-          projectId: project ? resolveProject(project).id : null,
+          folder: folder ?? null,
           tags: tagIdsByName(tags),
           title,
           description,
@@ -326,15 +321,6 @@ function buildServer(managerId: string) {
     async () => {
       const { list } = await listConnectors()
       return json(list.map((c) => ({ name: c.name, status: c.status, source: c.source })))
-    },
-  )
-
-  server.registerTool(
-    'list_projects',
-    { description: 'Projects in the dashboard: id, name, brief (goal / repo / conventions) and quality check command.' },
-    async () => {
-      const list = projectsRepo.all().map((p) => ({ id: p.id, name: p.name, folder: p.folder ?? null, brief: p.brief ?? null, check: p.check ?? null }))
-      return list.length ? json(list) : text('No projects yet.')
     },
   )
 
@@ -539,7 +525,7 @@ function buildServer(managerId: string) {
     'update_task',
     {
       description:
-        'Edit a task: title, description, priority, deadline, agent, project, what it waits for, quality check, or status ' +
+        'Edit a task: title, description, priority, deadline, agent, folder, what it waits for, quality check, or status ' +
         '(todo / review / done; "done" accepts it). Tasks in progress can only get text/priority/deadline changes. Changes show on its timeline.',
       inputSchema: {
         task: z.string().describe('task id'),
@@ -549,7 +535,7 @@ function buildServer(managerId: string) {
         deadlineHours: z.number().positive().max(24 * 60).optional().describe('new deadline, hours from now'),
         status: z.enum(['todo', 'review', 'done']).optional(),
         agent: z.string().optional().describe('agent id or name; "none" to unassign'),
-        project: z.string().optional().describe('project id or name; "none" to clear'),
+        folder: z.string().max(1000).optional().describe('absolute path of the folder to work in; "none" for the agent\'s own'),
         after: z.array(z.string()).max(20).optional().describe('task ids it waits for (replaces the list; [] = none)'),
         tags: z.array(z.string().max(40)).max(10).optional().describe('tag names (replaces the list; [] = none); ' + 'tag names the owner made (see list_tags), e.g. ["SEO"]; only existing tags'),
         check: z
@@ -559,7 +545,7 @@ function buildServer(managerId: string) {
           .describe('quality check command for this task (runs in the agent\'s folder when it finishes); a new command waits for the owner\'s approval; "" clears it'),
       },
     },
-    async ({ task, title, description, priority, deadlineHours, status, agent, project, after, check, tags }) => {
+    async ({ task, title, description, priority, deadlineHours, status, agent, folder, after, check, tags }) => {
       try {
         const none = (v?: string) => v !== undefined && /^(none|null|)$/i.test(v.trim())
         const t = await managerUpdateTask(managerId, task, {
@@ -569,7 +555,7 @@ function buildServer(managerId: string) {
           deadline: deadlineHours ? Date.now() + deadlineHours * 3_600_000 : undefined,
           status,
           agentId: agent === undefined ? undefined : none(agent) ? null : resolveAgent(agent, managerId).id,
-          projectId: project === undefined ? undefined : none(project) ? null : resolveProject(project).id,
+          folder: folder === undefined ? undefined : none(folder) ? null : folder,
           blockedBy: after,
           check,
           tags: tags === undefined ? undefined : (tagIdsByName(tags) ?? []),
@@ -631,35 +617,130 @@ function buildServer(managerId: string) {
     'notify_user',
     {
       description:
-        'Put a note in the dashboard’s Reports (unread badge, and a push notification to their phone if set up), for things the owner should see even if they are not reading this chat. When it is about a project (its tasks, its results), give `project`: the note then also shows in that project\'s reports.',
+        'Put a note in the dashboard’s Reports (unread badge, and a push notification to their phone if set up), for things the owner should see even if they are not reading this chat. When it is about the work in a folder, give `folder`: the note then also shows in that folder\'s reports.',
       inputSchema: {
         title: z.string().min(1).max(200),
         text: z.string().min(1).max(20_000),
-        project: z.string().max(100).optional().describe('project id or name (see list_projects) the note is about'),
+        folder: z.string().max(1000).optional().describe('absolute path of the folder the note is about'),
         tags: z.array(z.string().max(40)).max(10).optional().describe("tag names the owner made (see list_tags), e.g. [\"SEO\"]; only existing tags"),
       },
     },
-    async ({ title, text: body, project, tags }) => {
+    async ({ title, text: body, folder, tags }) => {
       try {
-        const p = project?.trim() ? resolveProject(project) : null
-        notifyUser(managerId, title, body, p?.id ?? null, tagIdsByName(tags))
-        return text(p ? `Posted to Reports, under project "${p.name}".` : 'Posted to Reports.')
+        const where = cleanFolder(folder)
+        notifyUser(managerId, title, body, tagIdsByName(tags), where)
+        return text(where ? `Posted to Reports, with the folder ${where}.` : 'Posted to Reports.')
       } catch (e) {
         return fail(e)
       }
     },
   )
 
+  registerNoteTools(server, managerId)
   return server
 }
 
-/** POST /mcp (and GET/DELETE, which stateless mode answers itself). Only the manager agent may connect. */
+/**
+ * The owner's notes that are shared with the agents (Reports → Notes, "Share with agents"): every agent can list, read,
+ * write, change and delete them. Notes the owner didn't share don't exist here.
+ */
+function registerNoteTools(server: McpServer, agentId: string) {
+  const wrap = <A,>(fn: (a: A) => Text | Promise<Text>) => async (a: A) => {
+    try {
+      return await fn(a)
+    } catch (e) {
+      return fail(e)
+    }
+  }
+  server.registerTool(
+    'list_notes',
+    {
+      description:
+        "The owner's notes shared with the agents (pinned first, then the owner's order): id, title, folder, tags, who wrote it, " +
+        'a preview. Ideas, decisions, plans and references the owner keeps for the team. read_note for the whole text.',
+      inputSchema: {
+        query: z.string().optional().describe('words to find in the title or text'),
+        folder: z.string().optional().describe('only notes about this folder (absolute path; folders inside it too)'),
+      },
+    },
+    wrap(({ query, folder }: { query?: string; folder?: string }) => {
+      const notes = agentNotes({ query, folder: cleanFolder(folder) })
+      if (!notes.length) return text(query || folder ? 'No shared note matches.' : 'The owner has not shared any notes yet.')
+      return json(notes.map((n) => noteForAgent(n, false)))
+    }),
+  )
+  server.registerTool(
+    'read_note',
+    { description: 'One shared note, its whole text as Markdown.', inputSchema: { id: z.string().describe('the note id (list_notes)') } },
+    wrap(({ id }: { id: string }) => json(noteForAgent(agentReadNote(id), true))),
+  )
+  server.registerTool(
+    'write_note',
+    {
+      description:
+        "Add a note to the owner's Notes (shared, so the team can read it too). Markdown: # headings, - lists, " +
+        '- [ ] checklists, **bold**, *italic*, `code`, [links](https://…), > quotes, ``` code blocks.',
+      inputSchema: {
+        title: z.string().describe('a short title'),
+        markdown: z.string().describe('the text'),
+        folder: z.string().optional().describe('absolute path of the folder it is about'),
+        tags: z.array(z.string()).optional().describe('existing tag names'),
+      },
+    },
+    wrap(({ title, markdown, folder, tags }: { title: string; markdown: string; folder?: string; tags?: string[] }) => {
+      const n = agentWriteNote(agentId, { title, markdown, folder, tags: tagIdsByName(tags) })
+      return text(`Added the note "${n.title}" (${n.id}).`)
+    }),
+  )
+  server.registerTool(
+    'edit_note',
+    {
+      description:
+        'Change a shared note: its title, its whole text (markdown: replaces it, losing colours and other formatting the ' +
+        'owner added), or add to its end (append: keeps everything before). Also its folder or tags.',
+      inputSchema: {
+        id: z.string().describe('the note id'),
+        title: z.string().optional(),
+        markdown: z.string().optional().describe('the new whole text'),
+        append: z.string().optional().describe('Markdown added at the end'),
+        folder: z.string().optional().describe('absolute path of the folder it is about; empty string: none'),
+        tags: z.array(z.string()).optional().describe('the tag names it should have (empty: none)'),
+      },
+    },
+    wrap(({ id, title, markdown, append, folder, tags }: { id: string; title?: string; markdown?: string; append?: string; folder?: string; tags?: string[] }) => {
+      const n = agentEditNote(agentId, id, { title, markdown, append, folder: folder === undefined ? undefined : folder.trim() || null, tags: tags === undefined ? undefined : (tagIdsByName(tags) ?? []) })
+      return text(`Updated the note "${n.title}".`)
+    }),
+  )
+  server.registerTool(
+    'delete_note',
+    { description: 'Delete a shared note for good. Only when the owner asked for it, or the note is clearly yours and obsolete.', inputSchema: { id: z.string() } },
+    wrap(({ id }: { id: string }) => text(`Deleted the note "${agentDeleteNote(id).title || 'Untitled'}".`)),
+  )
+}
+
+/** Every other agent: the owner's shared notes only. */
+function buildWorkerServer(agentId: string) {
+  const me = agentsRepo.get(agentId)
+  const server = new McpServer(
+    { name: 'after-office', version: '1.0.0' },
+    {
+      instructions:
+        `Tools of the After Office dashboard for ${me?.name ?? 'an agent'}: the notes the owner shares with the team ` +
+        '(ideas, decisions, plans, references). Check them when a task touches what they cover; add or update one when ' +
+        'the owner asks, or when what you learned is worth keeping for the team.',
+    },
+  )
+  registerNoteTools(server, agentId)
+  return server
+}
+
+/** POST /mcp (and GET/DELETE, which stateless mode answers itself): the manager's tools, or the others' notes tools. */
 export async function handleMcp(c: Context) {
   const id = c.req.header('x-ao-agent')
   const row = id ? agentsRepo.get(id) : null
   if (!row) return c.json({ error: 'Unknown agent' }, 401)
-  if (row.kind !== 'manager') return c.json({ error: 'Only the manager agent can use these tools' }, 403)
-  const server = buildServer(row.id)
+  const server = row.kind === 'manager' ? buildServer(row.id) : buildWorkerServer(row.id)
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
   await server.connect(transport)
   try {

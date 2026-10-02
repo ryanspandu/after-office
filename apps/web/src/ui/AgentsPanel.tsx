@@ -338,7 +338,7 @@ function AgentRow({
                             hint: (
                               <span className="danger-text">
                                 {items ? `${items >= 10_000 ? '10,000+' : items} item${items === 1 ? '' : 's'} (its CLAUDE.md, skills and everything it made)` : 'It is empty.'}{' '}
-                                are deleted for good. Back up or download anything you still need first (Projects tab → its folder → Files).
+                                are deleted for good. Back up or download anything you still need first (Folders tab → its folder → Files).
                               </span>
                             ),
                           }

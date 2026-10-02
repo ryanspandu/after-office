@@ -12,8 +12,7 @@ import { useAutomationModal } from './AutomationModal'
 import { CronModal, TaskModal } from './LeftSidebar'
 import { useManagerPanel } from './ManagerPanel'
 import { useProfileModal } from './ProfileModal'
-import { ProjectsModal } from './ProjectsModal'
-import { NewProjectModal, ProjectFolderModal, type Open } from './ProjectsTab'
+import { NewFolderModal, ProjectFolderModal, type Open } from './ProjectsTab'
 import { ProjectSettingsModal } from './ProjectSettings'
 import { ChangePasswordModal } from './ChangePassword'
 import { TwoFactorModal } from './TwoFactor'
@@ -27,7 +26,7 @@ import { TasksModal } from './TasksModal'
 // Every modal, shown from the address bar (state/url.ts). Stacking follows the order below: lists first, then what
 // is opened from them (a task, a report), then forms and settings on top.
 
-const REPORTS_VIEW = ['reports', 'q', 'range', 'from', 'to', 'page', 'per', 'project', 'tag', 'by']
+const REPORTS_VIEW = ['reports', 'q', 'range', 'from', 'to', 'page', 'per', 'folder', 'tag', 'by']
 const clear = (keys: string[]) => () => setUrl(Object.fromEntries(keys.map((k) => [k, null])))
 
 export function UrlModals() {
@@ -37,17 +36,17 @@ export function UrlModals() {
     <>
       {p.tasks && <TasksModal onClose={clear(['tasks', 'tq'])} />}
       {p.archive && <ArchiveModal onClose={clear(['archive'])} />}
-      {p.projects && <ProjectsModal onClose={clear(['projects'])} />}
       {p.reports && <ReportsModal onClose={clear(REPORTS_VIEW)} />}
       <FolderWindows current={p.folder} />
-      <NoteWindows current={p.note} />
       <MinimizedChips current={p.folder} currentNote={p.note} />
-      {p.newproject && (
-        <NewProjectModal onClose={clear(['newproject'])} onCreated={(folder) => setUrl({ newproject: null, folder: folder.path }, 'push')} />
+      {p.newfolder && (
+        <NewFolderModal onClose={clear(['newfolder'])} onCreated={(folder) => setUrl({ newfolder: null, folder: folder.path }, 'push')} />
       )}
       {p.task && <TaskDetailModal key={p.task} taskId={p.task} onClose={clear(['task'])} />}
       {p.report && <ReportModal key={p.report} id={p.report} onClose={clear(['report'])} />}
       {p.notes && <NotesModal onClose={clear(['notes'])} />}
+      {/* a note opened from the list: above it */}
+      <NoteWindows current={p.note} />
       {p.newtask && <NewTaskFromUrl />}
       {p.daily && <CronFromUrl id={p.daily} />}
       {p.settings && <ProjectSettingsModal onClose={clear(['settings'])} />}
@@ -75,7 +74,7 @@ function FolderWindows({ current }: { current?: string }) {
   )
 }
 
-/** A folder of the Projects tab, found in the scan (read if it isn't loaded yet). */
+/** A folder of the Folders tab, found in the scan (read if it isn't loaded yet). */
 function FolderFromUrl({ path, hidden }: { path: string; hidden: boolean }) {
   const data = useWorkspaces((s) => s.data)
   const load = useWorkspaces((s) => s.load)
@@ -113,6 +112,8 @@ function FolderFromUrl({ path, hidden }: { path: string; hidden: boolean }) {
  */
 function NoteWindows({ current }: { current?: string }) {
   const minimized = useMinimized((s) => s.folders)
+  // a new note from a folder's details: that folder
+  const nfolder = useUrl((s) => s.params.nfolder)
   // a note made in a window opened as "new": the key that window had
   const born = useRef(new Map<string, string>())
   const fresh = useRef<string | null>(null)
@@ -129,19 +130,20 @@ function NoteWindows({ current }: { current?: string }) {
             // the note itself (a window that was opened as "new" keeps its key, but loads the note when it opens again)
             id={id}
             hidden={id !== current}
+            defaults={id === 'new' ? { folder: nfolder ?? undefined } : undefined}
             onCreated={(nid) => {
               born.current.set(nid, key)
               fresh.current = null
-              setUrl({ note: nid })
+              setUrl({ note: nid, nfolder: null })
             }}
             onClose={() => {
               born.current.delete(id)
               useMinimized.getState().remove(id)
-              if (id === current) setUrl({ note: null })
+              if (id === current) setUrl({ note: null, nfolder: null })
             }}
             onMinimize={(nid, title) => {
               useMinimized.getState().addNote(nid, title)
-              setUrl({ note: null })
+              setUrl({ note: null, nfolder: null })
             }}
           />
         )
@@ -154,12 +156,12 @@ const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
 
 function NewTaskFromUrl() {
   const p = useUrl((s) => s.params)
-  const defaults: Partial<Pick<OfficeTask, 'agentId' | 'projectId' | 'status'>> = {
+  const defaults: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status'>> = {
     ...(p.nt_agent ? { agentId: p.nt_agent } : {}),
-    ...(p.nt_project ? { projectId: p.nt_project } : {}),
+    ...(p.nt_folder ? { folder: p.nt_folder } : {}),
     ...(STATUSES.includes(p.nt_status as TaskStatus) ? { status: p.nt_status as TaskStatus } : {}),
   }
-  return <TaskModal defaults={defaults} onClose={clear(['newtask', 'nt_agent', 'nt_project', 'nt_status'])} />
+  return <TaskModal defaults={defaults} onClose={clear(['newtask', 'nt_agent', 'nt_folder', 'nt_status'])} />
 }
 
 function CronFromUrl({ id }: { id: string }) {

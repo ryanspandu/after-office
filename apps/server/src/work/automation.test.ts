@@ -26,7 +26,7 @@ const task = (id: string, patch: Partial<OfficeTask> = {}): OfficeTask => ({
   id,
   title: id,
   agentId: 'dep-w',
-  projectId: null,
+ 
   deadline: Date.now() + 3_600_000,
   priority: 'medium',
   status: 'todo',

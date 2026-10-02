@@ -1,8 +1,8 @@
 import { closeSync, existsSync, fstatSync, openSync, readSync, realpathSync } from 'node:fs'
 import { sep } from 'node:path'
 import type { CronJob, LiveMode, OfficeTask, TaskComment, TaskStatus, WorkReport, WorkState } from '@after-office/shared'
-import { agentsRepo, commentsRepo, cronsRepo, projectsRepo, queueRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
-import { AgentError, grantProjectDir, sendPrompt, setMode } from '../agents/manager'
+import { agentsRepo, commentsRepo, cronsRepo, queueRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
+import { AgentError, grantFolder, sendPrompt, setMode } from '../agents/manager'
 import { currentRateLimits, publish, runtimeOf, setWorkProvider, updateRuntime } from '../agents/registry'
 import { agentFiles } from '../agents/files'
 import { mentionedPaths } from '@after-office/shared'
@@ -13,7 +13,7 @@ import { tmux } from '../agents/tmux'
 import { transcriptPath, unwrapPaste } from '../agents/transcripts'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
 import { listTags } from './tags'
-import { noteSummaries } from './notes'
+import { moveFolderNotes, noteSummaries } from './notes'
 import { trackTurnOrigin } from './origin'
 import { checkFor, runGate } from './gate'
 import { restoreApprovals } from './managerTasks'
@@ -21,8 +21,7 @@ import { tickCrons } from './crons'
 import { endBossMode } from './bossMode'
 import { publicAccess, watchPublicAccess } from './publicAccess'
 import { chatReport, putChatReport, type ChatContext } from './chatContext'
-import { dropProjectSessions } from './dropSessions'
-import { syncProjectNames } from './projectFolders'
+import { moveProjectsToFolders } from './folders'
 
 
 // Tasks, cron jobs and the prompt queue. Handing work to an agent is just typing a prompt into its session; if the
@@ -46,7 +45,6 @@ export function workState(): WorkState {
   return {
     tasks: tasksRepo.active(),
     archivedTasks: tasksRepo.archivedCount(),
-    projects: projectsRepo.all(),
     crons: withTriggers(cronsRepo.all()),
     timezone: timezone(),
     queued,
@@ -107,7 +105,7 @@ const replyTo = new Map<string, string>()
 export const expectReply = (agentId: string, managerId: string) => void replyTo.set(agentId, managerId)
 
 /**
- * The owner's chat message with a project or tags (to an agent other than the manager): its answer is kept as a report
+ * The owner's chat message with a folder or tags (to an agent other than the manager): its answer is kept as a report
  * (work/chatContext.ts). Waits for that message's UserPromptSubmit, then for the turn's end.
  */
 interface ChatTurn {
@@ -157,10 +155,10 @@ async function sendNow(agentId: string, text: string, clearFirst: boolean, ref: 
       console.warn(`[task] could not switch ${agentId} to ${wanted}:`, e instanceof Error ? e.message : e)
     }
   }
-  // a task in a project folder outside the agent's own: give the agent that folder first (no permission prompts)
+  // a task in a folder outside the agent's own: give the agent that folder first (no permission prompts)
   const folder = task ? taskFolder(task, agentId) : undefined
   if (folder && folder !== agentsRepo.get(agentId)?.cwd) {
-    await grantProjectDir(agentId, folder).catch((e) => console.warn(`[task] could not add ${folder} for ${agentId}:`, e.message))
+    await grantFolder(agentId, folder).catch((e) => console.warn(`[task] could not add ${folder} for ${agentId}:`, e.message))
   }
   // a fresh start: remember where the repo stood (Changes view) and clear the last run's check state
   if (task && text.startsWith('New task:')) {
@@ -250,7 +248,7 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
   active.delete(agentId)
   const manager = replyTo.get(agentId)
   replyTo.delete(agentId)
-  // the answer to the owner's chat message with a project / tags: kept in Reports
+  // the answer to the owner's chat message with a folder / tags: kept in Reports
   const chat = !a && fileChatTurn(agentId, '', finalMessage, failed)
   // after a server restart the in-memory link is gone: fall back to the agent's task in progress
   const t = a?.taskId ? tasksRepo.get(a.taskId) : a || chat ? null : tasksRepo.active().find((x) => x.agentId === agentId && x.status === 'in_progress')
@@ -277,7 +275,7 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
   })()
 }
 
-/** The chat answer a turn ended with, kept as a report when the owner sent its message with a project / tags. */
+/** The chat answer a turn ended with, kept as a report when the owner sent its message with a folder / tags. */
 function fileChatTurn(agentId: string, key: string, finalMessage: string | undefined, failed: boolean) {
   const chat = chatTurns.get(turnKey(agentId, key))
   if (!chat?.submitted) return false
@@ -291,7 +289,7 @@ function fileChatTurn(agentId: string, key: string, finalMessage: string | undef
 
 /**
  * A side session's turn ended. Side sessions are the owner's chats: no task, queue, mode restore or manager reply is
- * ever theirs. Only a chat answer the owner asked to keep (project / tags) becomes a report.
+ * ever theirs. Only a chat answer the owner asked to keep (folder / tags) becomes a report.
  */
 export function onSideStopped(agentId: string, key: string, finalMessage?: string, failed = false) {
   fileChatTurn(agentId, key, finalMessage, failed)
@@ -352,9 +350,10 @@ export function fileReport(agentId: string, ref: Omit<Active, 'restoreMode' | 's
     finishedAt: Date.now(),
     read: false,
     ...(files.length ? { files } : {}),
-    ...(ref.taskId && tasksRepo.get(ref.taskId)?.projectId ? { projectId: tasksRepo.get(ref.taskId)!.projectId } : {}),
     // the task's tags come along, so the report is found under them too
     ...(ref.taskId && tasksRepo.get(ref.taskId)?.tags?.length ? { tags: tasksRepo.get(ref.taskId)!.tags } : {}),
+    // and its folder: the report shows in that folder's details
+    ...(ref.taskId && tasksRepo.get(ref.taskId)?.folder ? { folder: tasksRepo.get(ref.taskId)!.folder } : {}),
   }
   reportsRepo.put(report)
   reportsRepo.prune()
@@ -474,10 +473,9 @@ function forwardReply(agentId: string, managerId: string, answer?: string) {
 
 // ── where a task happens ──
 
-/** The folder a task works in: its project's folder (if linked and still there), else its agent's folder. */
+/** The folder a task works in: its own (if set and still there), else its agent's folder. */
 export function taskFolder(t: OfficeTask, agentId = t.agentId) {
-  const folder = t.projectId ? projectsRepo.get(t.projectId)?.folder : undefined
-  if (folder && existsSync(folder)) return folder
+  if (t.folder && existsSync(t.folder)) return t.folder
   return agentId ? agentsRepo.get(agentId)?.cwd : undefined
 }
 
@@ -500,13 +498,11 @@ export async function startTask(taskId: string, agentId?: string) {
   if (!task) throw new AgentError('No such task', 404)
   const target = agentId ?? task.agentId
   if (!target || !agentsRepo.get(target)) throw new AgentError('Assign the task to an agent first')
-  const project = task.projectId ? projectsRepo.get(task.projectId) : null
+  const folder = task.folder && existsSync(task.folder) ? task.folder : null
   const deadline = new Intl.DateTimeFormat('en-GB', { timeZone: timezone(), dateStyle: 'medium', timeStyle: 'short' }).format(task.deadline)
   const prompt = [
     `New task: ${task.title}`,
-    project ? `Project: ${project.name}` : null,
-    project?.folder ? `Folder: ${project.folder} (work there)` : null,
-    project?.brief ? `\nProject context:\n${project.brief}\n` : null,
+    folder ? `Folder: ${folder} (work there)` : null,
     `Priority: ${task.priority} · Deadline: ${deadline}`,
     task.description?.trim() ? `\n${task.description.trim()}` : null,
     '\nWhen you are done, give a short summary of what you changed and anything I should review.',
@@ -638,12 +634,12 @@ async function autoAssign(t: OfficeTask, now: number) {
     ).catch((e) => console.error('[assign]', e.message))
     return
   }
-  // no manager: the idle worker who has worked on this project most, else anyone idle
+  // no manager: the idle worker who has worked in this folder most, else anyone idle
   const idle = agentsRepo
     .all()
     .filter((a) => a.kind !== 'manager' && runtimeOf(a.id).status === 'idle' && !queueRepo.countFor(a.id))
   if (!idle.length) return
-  const done = tasksRepo.all().filter((x) => x.projectId && x.projectId === t.projectId && x.agentId)
+  const done = tasksRepo.all().filter((x) => x.folder && x.folder === t.folder && x.agentId)
   const score = (id: string) => done.filter((x) => x.agentId === id).length
   const pick = idle.sort((a, b) => score(b.id) - score(a.id))[0]
   markTask(t.id, { agentId: pick.id })
@@ -706,8 +702,10 @@ function watchStuck(now: number) {
 
 
 export function startWorkJobs() {
-  dropProjectSessions()
-  syncProjectNames()
+  // tasks, reports and notes of the old projects: their folder instead (once)
+  moveProjectsToFolders()
+  // a folder's one note → notes of their own (once)
+  moveFolderNotes()
   restoreApprovals()
   void import('./hires').then((m) => m.restoreHires())
   void import('./managerCrons').then((m) => m.restoreCronChanges())
@@ -727,5 +725,4 @@ export * from './crons'
 export * from './bossMode'
 export * from './publicAccess'
 export * from './managerCrons'
-export * from './dropSessions'
 export * from './chatContext'

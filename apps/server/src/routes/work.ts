@@ -1,7 +1,8 @@
+import { existsSync } from 'node:fs'
 import { basename } from 'node:path'
 import { Hono } from 'hono'
-import type { CronJob, LiveMode, OfficeTask, Project, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
-import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, folderNotesRepo, ownerNotesRepo, projectsRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
+import type { CronJob, LiveMode, OfficeTask, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
+import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, ownerNotesRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
 import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
@@ -13,8 +14,8 @@ import { updateSettings } from '../work/settings'
 import { cleanTagIds, deleteTag, putTag } from '../work/tags'
 import { listPreviews, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
-import { createNote, deleteNote, updateNote } from '../work/notes'
-import { setReportProject } from '../work/reports'
+import { createNote, deleteNote, reorderNotes, updateNote } from '../work/notes'
+import { cleanFolder } from '../work/folders'
 import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
@@ -52,7 +53,7 @@ function cleanTask(id: string, b: Partial<OfficeTask>, prev: OfficeTask | null):
     id,
     title: str(b.title, 200, 'Title'),
     agentId: typeof b.agentId === 'string' ? b.agentId : null,
-    projectId: typeof b.projectId === 'string' ? b.projectId : null,
+    ...(cleanFolder(b.folder) ? { folder: cleanFolder(b.folder) } : {}),
     deadline: b.deadline,
     priority: b.priority as TaskPriority,
     status: b.status as TaskStatus,
@@ -92,48 +93,11 @@ function autoStartFields(b: Partial<OfficeTask>, prev: OfficeTask | null): Parti
   return { autoStart: autoStart || undefined, startAt, mode: b.mode, autoStartedAt: keep ? prev!.autoStartedAt : undefined }
 }
 
-// ── projects ──
-workRoutes.put('/projects/:id', async (c) => {
-  const id = c.req.param('id')
-  if (!ID_RE.test(id)) throw bad('Invalid id')
-  const b = await c.req.json<Partial<Project> & { createFolder?: boolean }>()
-  const prev = projectsRepo.get(id)
-  const color = typeof b.color === 'string' && /^#[0-9a-f]{6}$/i.test(b.color) ? b.color : '#9a9a96'
-  const opt = (v: unknown, max: number, field: string) => {
-    if (v === undefined || v === null || v === '') return undefined
-    if (typeof v !== 'string' || v.length > max) throw bad(`${field} is too long (max ${max} characters)`)
-    return v.trim() || undefined
-  }
-  // a folder must be one agents may work in (inside OFFICE_ROOT, symlinks resolved)
-  const folderIn = opt(b.folder, 1000, 'Folder')
-  const name = str(b.name, 60, 'Name')
-  // createFolder (a new project, or one without a folder): it gets <agents dir>/project/<name>
-  // an edit that doesn't mention the folder keeps it ("" removes it)
-  const folder = folderIn
-    ? resolveCwd(folderIn)
-    : !prev?.folder && b.createFolder === true
-      ? makeProjectFolder(name)
-      : prev && !('folder' in b)
-        ? prev.folder
-        : undefined
-  // one name for a project with a folder: the folder's (renaming the folder renames the project, work/projectFolders.ts)
-  projectsRepo.put({ id, name: folder ? basename(folder) : name, color, brief: opt(b.brief, 5000, 'Brief'), check: opt(b.check, 1000, 'Check command'), folder })
-  publishWork('projects')
-  return c.json({ ok: true, folder: folder ?? null })
-})
-/** Can the project's folder be deleted with it (one the office made), and how much is in it. */
-workRoutes.get('/projects/:id/folder', (c) => {
-  const folder = projectsRepo.get(c.req.param('id'))?.folder
-  const deletable = isOwnProjectFolder(folder)
-  return c.json({ folder: folder ?? null, deletable, entries: deletable ? countEntries(folder!) : 0 })
-})
-workRoutes.delete('/projects/:id', async (c) => {
-  const p = projectsRepo.get(c.req.param('id'))
-  // ?folder=1: its folder goes too (only one the office made in the projects folder)
-  if (p?.folder && c.req.query('folder') === '1') await deleteProjectFolder(p.folder)
-  projectsRepo.remove(c.req.param('id'))
-  publishWork('projects')
-  return c.json({ ok: true })
+// ── folders in the office's own folder (the Folders tab → New folder) ──
+workRoutes.post('/folders', async (c) => {
+  const b = await c.req.json<{ name?: unknown }>().catch(() => ({}) as { name?: unknown })
+  const path = makeProjectFolder(str(b.name, 60, 'Name'))
+  return c.json({ folder: path })
 })
 
 // ── tasks ──
@@ -226,8 +190,8 @@ workRoutes.get('/reports', (c) => {
   const page = Math.max(1, Math.floor(Number(c.req.query('page')) || 1))
   const agents = new Map(agentsRepo.all().map((a) => [a.id, a]))
   const isManager = (r: WorkReport) => r.kind === 'note' || agents.get(r.agentId)?.kind === 'manager'
-  // project: its id, or "none" for reports about no project
-  const project = c.req.query('project') ?? ''
+  // folder: the reports of the work in it (or in a folder inside it)
+  const folder = c.req.query('folder') ?? ''
   // tags: comma-separated ids, a report with any of them matches
   const tags = (c.req.query('tag') ?? '').split(',').filter(Boolean)
   // by: one agent's id, or "removed" for agents no longer in the office
@@ -240,7 +204,7 @@ workRoutes.get('/reports', (c) => {
     if (filter === 'manager' && !isManager(r)) return false
     if (filter === 'agents' && isManager(r)) return false
     if ((filter === 'task' || filter === 'cron') && r.kind !== filter) return false
-    if (project && (project === 'none' ? !!r.projectId : r.projectId !== project)) return false
+    if (folder && r.folder !== folder && !r.folder?.startsWith(`${folder}/`)) return false
     if (tags.length && !r.tags?.some((t) => tags.includes(t))) return false
     if (q && !`${r.title}\n${r.text}\n${agents.get(r.agentId)?.name ?? ''}`.toLowerCase().includes(q)) return false
     return true
@@ -261,18 +225,15 @@ workRoutes.get('/reports/:id/file', (c) => {
   if (!f) return c.json({ error: 'This file no longer exists' }, 404)
   return fileResponse(f.real, f.size, c.req.query('inline') === '1')
 })
-workRoutes.put('/reports/:id/project', async (c) => {
-  const { projectId } = await c.req.json<{ projectId?: unknown }>().catch(() => ({ projectId: undefined }))
-  if (projectId !== null && typeof projectId !== 'string') throw bad('Pick a project, or none')
-  setReportProject(c.req.param('id'), projectId || null)
-  return c.json({ ok: true })
-})
-
 // the owner's own notes (Reports → Notes): the list comes with the work state, a note's text from here
 workRoutes.get('/notes/:id', (c) => {
   const n = ownerNotesRepo.get(c.req.param('id'))
   if (!n) return c.json({ error: 'This note no longer exists' }, 404)
   return c.json(n)
+})
+workRoutes.put('/notes/order', async (c) => {
+  reorderNotes(((await c.req.json().catch(() => ({}))) as { ids?: unknown }).ids)
+  return c.json({ ok: true })
 })
 workRoutes.post('/notes', async (c) => c.json(createNote(await c.req.json().catch(() => ({})))))
 workRoutes.put('/notes/:id', async (c) => c.json(updateNote(c.req.param('id'), await c.req.json().catch(() => ({})))))
@@ -408,26 +369,12 @@ workRoutes.get(
   },
   shellSocket,
 )
-// the owner's notes on a folder (in the database, never in the folder)
-const NOTES_MAX = 200_000
-workRoutes.get('/workspaces/notes', (c) => {
-  const note = folderNotesRepo.get(folderOf(c.req.query('path') ?? ''))
-  return c.json({ text: note?.text ?? '', updatedAt: note?.updated_at ?? null })
-})
-workRoutes.put('/workspaces/notes', async (c) => {
-  const b = await c.req.json<{ path?: unknown; text?: unknown }>().catch(() => ({}) as { path?: unknown; text?: unknown })
-  if (typeof b.text !== 'string') throw bad('Notes are text')
-  if (b.text.length > NOTES_MAX) throw bad(`Notes are limited to ${NOTES_MAX / 1000}k characters`)
-  folderNotesRepo.set(folderOf(typeof b.path === 'string' ? b.path : ''), b.text)
-  // emptied: the note is gone, so no time
-  return c.json({ ok: true, updatedAt: b.text.trim() ? Date.now() : null })
-})
 // a new folder inside the folder on screen
 // a folder in the projects folder gets a new name (its dashboard project follows)
 workRoutes.post('/workspaces/rename', async (c) => {
   const b = await c.req.json<{ path?: unknown; name?: unknown }>().catch(() => ({}) as { path?: unknown; name?: unknown })
   const r = renameProjectFolder(typeof b.path === 'string' ? b.path : '', typeof b.name === 'string' ? b.name : '')
-  publishWork('projects')
+  publishWork('tasks', 'reports', 'notes')
   return c.json(r)
 })
 workRoutes.post('/workspaces/folders', async (c) => {
@@ -439,9 +386,11 @@ workRoutes.get('/workspaces/file', (c) => {
   const f = folderFile(c.req.query('root') ?? '', c.req.query('path') ?? '')
   return fileResponse(f.real, f.size, c.req.query('inline') === '1')
 })
-// a folder whose agent was removed: delete it with everything in it (only those)
+// a folder whose agent was removed, or one made in the office's own folder: delete it with everything in it (only those)
 workRoutes.delete('/workspaces/folder', async (c) => {
-  await deleteOrphanFolder(c.req.query('path') ?? '')
+  const path = c.req.query('path') ?? ''
+  if (isOwnProjectFolder(path)) await deleteProjectFolder(path)
+  else await deleteOrphanFolder(path)
   return c.json({ ok: true })
 })
 // several at once: POST (the list can be long) → one ZIP
