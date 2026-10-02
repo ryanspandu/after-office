@@ -80,6 +80,8 @@ export function NotesModal({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState('')
   const [project, setProject] = useState('')
   const [tags, setTags] = useState<string[]>([])
+  // full size (remembered), like the dock's sheets
+  const max = useModalMaximize(720, 'after-office:sheet-max:Notes list')
   const shown = notes.filter(
     (n) =>
       (!q.trim() || matches(n, q)) &&
@@ -92,14 +94,17 @@ export function NotesModal({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       title="Notes"
       description="Your own notes. Only you write them, and they're never given to the agents."
-      width={720}
+      {...max.modalProps}
       actions={
-        <button className="small" onClick={() => openUrl({ note: 'new' })}>
-          <LuPlus /> New note
-        </button>
+        <>
+          <button className="small" onClick={() => openUrl({ note: 'new' })}>
+            <LuPlus /> New note
+          </button>
+          {max.modalProps.actions}
+        </>
       }
     >
-      <div className="modal__body reports-modal">
+      <div className="modal__body reports-modal notes-modal" ref={max.bodyRef}>
         <div className="reports-modal__bar notes-modal__bar">
           <label className="search-box grow">
             <LuSearch />

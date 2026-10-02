@@ -48,3 +48,6 @@
 @media (max-width: 768px) {
   .notes-modal__bar > .search-box { flex-basis: 100%; }
 }
+/* full size: the list takes the rest of the window */
+.modal--full .notes-modal { flex: 1; min-height: 0; }
+.modal--full .notes-modal .reports-modal__list { max-height: none; flex: 1; min-height: 0; overflow-y: auto; }
