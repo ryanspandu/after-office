@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, openSync, readSync, closeSync, statSync } from 'node:fs'
+import { accessSync, constants, openSync, readSync, closeSync, statSync } from 'node:fs'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
 import { join } from 'node:path'
 import { ISOLATED } from './env'
@@ -71,14 +71,17 @@ function unlock(path: string) {
   void runAsAgent(['chmod', '-R', 'g+rX', CLAUDE_PROJECTS_DIR], { cwd: CLAUDE_PROJECTS_DIR, timeoutMs: 15_000 }).catch(() => {})
 }
 
-/** Can the dashboard read this transcript? (If not because of its mode: asks the agents' user to fix it.) */
+/**
+ * Can the dashboard read this transcript? (If not because of its mode: asks the agents' user to fix it.) A new agent's
+ * folder of transcripts can be the one locked (Claude Code makes it 0700): then the file looks missing (existsSync is
+ * false), but access() says EACCES, which is what asks for the fix.
+ */
 function readable(path: string) {
-  if (!existsSync(path)) return false
   try {
     accessSync(path, constants.R_OK)
     return true
-  } catch {
-    unlock(path)
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EACCES') unlock(path)
     return false
   }
 }

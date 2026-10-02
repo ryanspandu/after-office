@@ -51,7 +51,8 @@ export function MobileDock() {
   const openTasks = useMemo(() => tasks.filter((t) => t.status !== 'done'), [tasks])
   const urgent = openTasks.filter((t) => t.deadline - now < 24 * 3_600_000).length
   const unreadReports = useDashboard((s) => s.reports.filter((r) => !r.read).length)
-  const agents = useOffice((s) => s.agents.length)
+  // unread chat replies across the agents (the manager's have their own button)
+  const unreadChats = useOffice((s) => s.agents.reduce((n, a) => n + (a.kind === 'manager' ? 0 : (a.unread ?? 0)), 0))
   const waiting = useOffice((s) => s.agents.some((a) => a.status === 'waiting'))
   const manager = useManager()
   const openManager = useManagerPanel((s) => s.setOpen)
@@ -63,7 +64,7 @@ export function MobileDock() {
         <DockButton icon={<LuCalendarClock />} label="Daily" count={activeCrons} onClick={() => setSheet('cron')} />
         <DockButton icon={<LuListTodo />} label="Tasks" count={urgent || openTasks.length} alert={urgent > 0} onClick={() => setSheet('tasks')} />
         <DockButton icon={<LuFileText />} label="Reports" count={unreadReports} onClick={() => setSheet('reports')} />
-        <DockButton icon={<LuBot />} label="Agents" count={agents} alert={waiting} onClick={() => setSheet('agents')} />
+        <DockButton icon={<LuBot />} label="Agents" count={unreadChats} alert={waiting} onClick={() => setSheet('agents')} />
         {manager && (
           <DockButton icon={<LuCrown />} label="Manager" count={manager.unread ?? 0} alert={!!manager.unread} onClick={() => openManager(true)} />
         )}
