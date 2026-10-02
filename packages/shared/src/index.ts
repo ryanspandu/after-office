@@ -242,6 +242,22 @@ export interface PublicAccess {
   until?: number
 }
 
+/** The owner's own note (Reports → Notes): rich text written in the dashboard, never given to the agents. */
+export interface OwnerNoteSummary {
+  id: string
+  title: string
+  /** the start of its text, plain (for lists and search) */
+  excerpt: string
+  projectId?: string
+  tags?: string[]
+  createdAt: number
+  updatedAt: number
+}
+export interface OwnerNote extends Omit<OwnerNoteSummary, 'excerpt'> {
+  /** TipTap's HTML */
+  html: string
+}
+
 export interface WorkState {
   tasks: OfficeTask[]
   projects: Project[]
@@ -261,6 +277,8 @@ export interface WorkState {
   /** on (until when), or null */
   bossMode: BossMode | null
   publicAccess: PublicAccess
+  /** the owner's notes, newest first (without their text: GET /api/notes/:id) */
+  notes: OwnerNoteSummary[]
 }
 
 /** An archived task, with when it was last touched (≈ when it was finished). */

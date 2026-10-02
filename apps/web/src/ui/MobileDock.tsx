@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode, useEffect } from 'react'
-import { LuBot, LuCalendarClock, LuCrown, LuFileText, LuInbox, LuListTodo } from 'react-icons/lu'
+import { LuBot, LuBriefcase, LuCalendarClock, LuCrown, LuInbox, LuLibrary } from 'react-icons/lu'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
 import { useOffice } from '../state/store'
@@ -62,8 +62,8 @@ export function MobileDock() {
       <nav className={`dock${manager ? ' dock--six' : ''}`} aria-label="Panels">
         <DockButton icon={<LuInbox />} label="Attention" count={attention} alert={attention > 0} onClick={() => setSheet('attention')} />
         <DockButton icon={<LuCalendarClock />} label="Daily" count={activeCrons} onClick={() => setSheet('cron')} />
-        <DockButton icon={<LuListTodo />} label="Tasks" count={urgent || openTasks.length} alert={urgent > 0} onClick={() => setSheet('tasks')} />
-        <DockButton icon={<LuFileText />} label="Reports" count={unreadReports} onClick={() => setSheet('reports')} />
+        <DockButton icon={<LuBriefcase />} label="Work" count={urgent || openTasks.length} alert={urgent > 0} onClick={() => setSheet('tasks')} />
+        <DockButton icon={<LuLibrary />} label="Docs" count={unreadReports} onClick={() => setSheet('reports')} />
         <DockButton icon={<LuBot />} label="Agents" count={unreadChats} alert={waiting} onClick={() => setSheet('agents')} />
         {manager && (
           <DockButton icon={<LuCrown />} label="Manager" count={manager.unread ?? 0} alert={!!manager.unread} onClick={() => openManager(true)} />
@@ -76,10 +76,10 @@ export function MobileDock() {
       <DockSheet open={sheet === 'cron'} onClose={close} title="Daily" bodyClass="dock-sheet">
         <CronPanel />
       </DockSheet>
-      <DockSheet open={sheet === 'tasks'} onClose={close} title="Tasks" bodyClass="dock-sheet">
+      <DockSheet open={sheet === 'tasks'} onClose={close} title="Work" bodyClass="dock-sheet">
         <TaskPanel />
       </DockSheet>
-      <DockSheet open={sheet === 'reports'} onClose={close} title="Reports" bodyClass="dock-sheet">
+      <DockSheet open={sheet === 'reports'} onClose={close} title="Docs" bodyClass="dock-sheet">
         <ReportsPanel />
       </DockSheet>
       <DockSheet open={sheet === 'agents'} onClose={close} title="Agents" bodyClass="dock-sheet agents-modal">

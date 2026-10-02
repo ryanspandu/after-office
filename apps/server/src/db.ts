@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { chmodSync, existsSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { ActivityEntry, AgentKind, CronJob, LiveMode, OfficeTask, Project, TaskComment, WorkReport } from '@after-office/shared'
+import type { ActivityEntry, AgentKind, CronJob, LiveMode, OfficeTask, OwnerNote, Project, TaskComment, WorkReport } from '@after-office/shared'
 
 // Persistent state lives in one SQLite file (OFFICE_DATA_DIR, default apps/server/data).
 // Runtime state (status, current tool, pending approvals) stays in memory and is rebuilt from hooks.
@@ -59,6 +59,12 @@ CREATE TABLE IF NOT EXISTS crons (
 CREATE TABLE IF NOT EXISTS folder_notes (
   path        TEXT PRIMARY KEY,     -- the folder's real path
   text        TEXT NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+-- the owner's own notes (Reports → Notes): rich text, written in the dashboard only
+CREATE TABLE IF NOT EXISTS owner_notes (
+  id          TEXT PRIMARY KEY,
+  data        TEXT NOT NULL,        -- OwnerNote JSON
   updated_at  INTEGER NOT NULL
 );
 -- an agent's side sessions: extra Claude Code processes in its folder, opened by the owner to chat in parallel
@@ -498,6 +504,20 @@ export interface QueuedPrompt {
   task_id: string | null
   cron_id: string | null
   created_at: number
+}
+
+export const ownerNotesRepo = {
+  /** Newest first. */
+  latest: (limit = 500) =>
+    db.query<{ data: string }, [number]>('SELECT data FROM owner_notes ORDER BY updated_at DESC LIMIT ?').all(limit).map((r) => JSON.parse(r.data) as OwnerNote),
+  all: () => db.query<{ data: string }, []>('SELECT data FROM owner_notes').all().map((r) => JSON.parse(r.data) as OwnerNote),
+  get: (id: string) => {
+    const r = db.query<{ data: string }, [string]>('SELECT data FROM owner_notes WHERE id = ?').get(id)
+    return r ? (JSON.parse(r.data) as OwnerNote) : null
+  },
+  put: (n: OwnerNote) =>
+    db.query('INSERT INTO owner_notes (id, data, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET data = ?2, updated_at = ?3').run(n.id, JSON.stringify(n), n.updatedAt),
+  remove: (id: string) => db.query('DELETE FROM owner_notes WHERE id = ?').run(id),
 }
 
 export const folderNotesRepo = {

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useActivityLive } from './activity'
 import { create } from 'zustand'
-import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, WorkState, Workspace, GitCommit } from '@after-office/shared'
+import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OwnerNoteSummary, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, WorkState, Workspace, GitCommit } from '@after-office/shared'
 import { api, useAuth } from './auth'
 import { mergeServer, useDashboard, ymd } from './dashboard'
 import { useOffice } from './store'
@@ -29,9 +29,11 @@ interface LiveStore {
   /** Boss mode: the manager works without approvals until then (null: off) */
   bossMode: BossMode | null
   publicAccess: PublicAccess
+  /** the owner's notes (Reports → Notes), newest first, without their text */
+  notes: OwnerNoteSummary[]
 }
 
-export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null, publicAccess: { supported: false, public: false } }))
+export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null, publicAccess: { supported: false, public: false }, notes: [] }))
 
 /** Task timelines, loaded per task when one is opened (useTaskComments) and kept current by the SSE stream. */
 export const useComments = create<{ byTask: Record<string, TaskComment[]> }>(() => ({ byTask: {} }))
@@ -54,6 +56,7 @@ function applyWork(work: Partial<WorkState>) {
   if (work.automation) useLive.setState({ automation: work.automation })
   if (work.bossMode !== undefined) useLive.setState({ bossMode: work.bossMode })
   if (work.publicAccess) useLive.setState({ publicAccess: work.publicAccess })
+  if (work.notes) useLive.setState({ notes: work.notes })
 }
 
 const BRIEFING_MS = 8000
@@ -65,7 +68,7 @@ function apply(e: OfficeEvent) {
       office.setLiveAgents(e.agents)
       useLive.setState({ followUps: e.followUps, rateLimits: e.rateLimits, ready: true })
       // a snapshot is the whole truth: anything it leaves out is empty (never keep demo samples in live mode)
-      applyWork({ ...e.work, reports: e.work.reports ?? [], queued: e.work.queued ?? {} })
+      applyWork({ ...e.work, reports: e.work.reports ?? [], queued: e.work.queued ?? {}, notes: e.work.notes ?? [] })
       break
     case 'work':
       applyWork(e.work)

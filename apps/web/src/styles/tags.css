@@ -12,7 +12,9 @@
 .tag-filter { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .tag-filter .rs { min-width: 150px; max-width: 280px; }
 .reports-modal__tags .rs { width: 170px; }
-.report__tags { margin: 0 0 2px; width: 260px; max-width: 100%; }
+.report__tags { margin: 0 0 2px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.report__tags > .rs { width: 260px; max-width: 100%; }
+.report__tags > .report__project { width: 200px; }
 .report__tags .rs--multi .rs__control { min-height: 30px !important; padding-top: 1px; padding-bottom: 1px; font-size: 12.5px; }
 .task-table__title { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .task-table__title > .truncate { flex: 1 1 auto; min-width: 40px; }

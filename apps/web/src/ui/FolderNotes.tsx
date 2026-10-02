@@ -71,10 +71,41 @@ export default function FolderNotes({ path }: { path: string }) {
         <LuLoader className="spin" />
       </div>
     )
-  return <NotesEditor key={path} path={path} initial={loaded.html} initialAt={loaded.at} />
+  return (
+    <RichNotes
+      key={path}
+      initial={loaded.html}
+      initialAt={loaded.at}
+      placeholder="Your notes on this folder: ideas, todos, links… Kept in the dashboard, not in the folder, so the agents don’t read them."
+      save={async (html) => {
+        const r = await api('/api/workspaces/notes', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path, text: html }) })
+        if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? 'Could not save')
+        return ((await r.json().catch(() => null)) as { updatedAt?: number | null } | null)?.updatedAt ?? null
+      }}
+    />
+  )
 }
 
-function NotesEditor({ path, initial, initialAt }: { path: string; initial: string; initialAt: number | null }) {
+/**
+ * The rich text editor with its toolbar, saved as you type (a folder's notes, the owner's notes in Reports). `save`
+ * stores the HTML ('' when empty) and says when it was saved.
+ */
+export function RichNotes({
+  initial,
+  initialAt,
+  placeholder,
+  save: store,
+  autofocus = true,
+  onEdit,
+}: {
+  initial: string
+  initialAt: number | null
+  placeholder: string
+  save: (html: string) => Promise<number | null>
+  autofocus?: boolean
+  /** every change, right away (the save waits a moment): whether the text is empty now */
+  onEdit?: (empty: boolean) => void
+}) {
   const [state, setState] = useState<'saved' | 'saving' | 'error'>('saved')
   // when they were last saved (none yet: nothing written)
   const [savedAt, setSavedAt] = useState(initialAt)
@@ -85,19 +116,7 @@ function NotesEditor({ path, initial, initialAt }: { path: string; initial: stri
   const save = async (html: string) => {
     setState('saving')
     try {
-      const r = await api('/api/workspaces/notes', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ path, text: html }),
-      })
-      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? 'Could not save')
-      setSavedAt(
-        (
-          (await r.json().catch(() => null)) as {
-            updatedAt?: number | null
-          } | null
-        )?.updatedAt ?? null,
-      )
+      setSavedAt(await store(html))
       setError(null)
       if (pending.current === html) pending.current = null
       setState(pending.current ? 'saving' : 'saved')
@@ -124,14 +143,15 @@ function NotesEditor({ path, initial, initialAt }: { path: string; initial: stri
       DetailsSummary,
       DetailsContent,
       Placeholder.configure({
-        placeholder: 'Your notes on this folder: ideas, todos, links… Kept in the dashboard, not in the folder, so the agents don’t read them.',
+        placeholder,
       }),
     ],
     content: initial,
-    autofocus: initial.trim() ? false : 'end',
+    autofocus: autofocus && !initial.trim() ? 'end' : false,
     onUpdate: ({ editor: e }) => {
       // an empty editor is "<p></p>": nothing
       const html = e.isEmpty ? '' : e.getHTML()
+      onEdit?.(e.isEmpty)
       pending.current = html
       setState('saving')
       if (timer.current) clearTimeout(timer.current)
@@ -163,7 +183,7 @@ function NotesEditor({ path, initial, initialAt }: { path: string; initial: stri
             error
           ) : (
             <>
-              <LuCheck /> Saved
+              <LuCheck /> Saved{' '}
               {savedAt !== null && <span className="fnotes__at">· {dateTime(savedAt)}</span>}
             </>
           )}

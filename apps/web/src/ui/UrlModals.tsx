@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { OfficeTask, TaskStatus } from '@after-office/shared'
 import { useDashboard } from '../state/dashboard'
 import { useOffice } from '../state/store'
@@ -20,6 +20,7 @@ import { TwoFactorModal } from './TwoFactor'
 import { EditProfileModal } from './EditProfile'
 import { ActivityModal } from './Activity'
 import { ReportModal, ReportsModal } from './Reports'
+import { NoteModal, NotesModal } from './OwnerNotes'
 import { TaskDetailModal } from './TaskDetail'
 import { TasksModal } from './TasksModal'
 
@@ -39,11 +40,14 @@ export function UrlModals() {
       {p.projects && <ProjectsModal onClose={clear(['projects'])} />}
       {p.reports && <ReportsModal onClose={clear(REPORTS_VIEW)} />}
       <FolderWindows current={p.folder} />
+      <NoteWindows current={p.note} />
+      <MinimizedChips current={p.folder} currentNote={p.note} />
       {p.newproject && (
         <NewProjectModal onClose={clear(['newproject'])} onCreated={(folder) => setUrl({ newproject: null, folder: folder.path }, 'push')} />
       )}
       {p.task && <TaskDetailModal key={p.task} taskId={p.task} onClose={clear(['task'])} />}
       {p.report && <ReportModal key={p.report} id={p.report} onClose={clear(['report'])} />}
+      {p.notes && <NotesModal onClose={clear(['notes'])} />}
       {p.newtask && <NewTaskFromUrl />}
       {p.daily && <CronFromUrl id={p.daily} />}
       {p.settings && <ProjectSettingsModal onClose={clear(['settings'])} />}
@@ -60,14 +64,13 @@ export function UrlModals() {
 /** The folder on screen (?folder=) and the ones minimized: those stay mounted, hidden, so each comes back as it was. */
 function FolderWindows({ current }: { current?: string }) {
   const minimized = useMinimized((s) => s.folders)
-  const paths = minimized.map((m) => m.path)
+  const paths = minimized.filter((m) => m.kind !== 'note').map((m) => m.path)
   if (current && !paths.includes(current)) paths.push(current)
   return (
     <>
       {paths.map((path) => (
         <FolderFromUrl key={path} path={path} hidden={path !== current} />
       ))}
-      <MinimizedChips current={current} />
     </>
   )
 }
@@ -101,6 +104,47 @@ function FolderFromUrl({ path, hidden }: { path: string; hidden: boolean }) {
       onClose={() => (useMinimized.getState().remove(path), setUrl({ folder: null }))}
       onMinimize={(section) => (useMinimized.getState().add(path, section), setUrl({ folder: null }))}
     />
+  )
+}
+
+/**
+ * The note on screen (?note=<id>, or new) and the ones minimized: those stay mounted, hidden, so each comes back as it
+ * was. A new note gets its id on its first save: its window stays the same one (same key) after that.
+ */
+function NoteWindows({ current }: { current?: string }) {
+  const minimized = useMinimized((s) => s.folders)
+  // a note made in a window opened as "new": the key that window had
+  const born = useRef(new Map<string, string>())
+  const fresh = useRef<string | null>(null)
+  if (current === 'new' && !fresh.current) fresh.current = `new-${crypto.randomUUID()}`
+  const ids = minimized.filter((m) => m.kind === 'note').map((m) => m.path)
+  if (current && !ids.includes(current)) ids.push(current)
+  return (
+    <>
+      {ids.map((id) => {
+        const key = id === 'new' ? fresh.current! : (born.current.get(id) ?? id)
+        return (
+          <NoteModal
+            key={key}
+            id={key.startsWith('new-') ? 'new' : id}
+            hidden={id !== current}
+            onCreated={(nid) => {
+              born.current.set(nid, key)
+              fresh.current = null
+              setUrl({ note: nid })
+            }}
+            onClose={() => {
+              useMinimized.getState().remove(id)
+              if (id === current) setUrl({ note: null })
+            }}
+            onMinimize={(nid, title) => {
+              useMinimized.getState().addNote(nid, title)
+              setUrl({ note: null })
+            }}
+          />
+        )
+      })}
+    </>
   )
 }
 

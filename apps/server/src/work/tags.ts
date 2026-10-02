@@ -1,5 +1,5 @@
 import type { Tag } from '@after-office/shared'
-import { reportsRepo, settingsRepo, tasksRepo } from '../db'
+import { ownerNotesRepo, reportsRepo, settingsRepo, tasksRepo } from '../db'
 import { AgentError } from '../agents/errors'
 
 // Tags: the owner's own coloured labels for tasks and reports (e.g. "SEO", "Urgent"), to find them again and filter
@@ -42,6 +42,7 @@ export function deleteTag(id: string) {
   save(listTags().filter((t) => t.id !== id))
   for (const t of tasksRepo.all()) if (t.tags?.includes(id)) tasksRepo.put({ ...t, tags: t.tags.filter((x) => x !== id) })
   for (const r of reportsRepo.all()) if (r.tags?.includes(id)) reportsRepo.put({ ...r, tags: r.tags.filter((x) => x !== id) })
+  for (const n of ownerNotesRepo.all()) if (n.tags?.includes(id)) ownerNotesRepo.put({ ...n, tags: n.tags.filter((x) => x !== id) })
 }
 
 /** Tag ids as sent by a client: only existing tags, each once, at most MAX_TAGS_PER_ITEM. */

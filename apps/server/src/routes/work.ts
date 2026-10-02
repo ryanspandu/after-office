@@ -1,7 +1,7 @@
 import { basename } from 'node:path'
 import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, Project, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
-import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, folderNotesRepo, projectsRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
+import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, folderNotesRepo, ownerNotesRepo, projectsRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
 import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
@@ -13,6 +13,8 @@ import { updateSettings } from '../work/settings'
 import { cleanTagIds, deleteTag, putTag } from '../work/tags'
 import { listPreviews, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
+import { createNote, deleteNote, updateNote } from '../work/notes'
+import { setReportProject } from '../work/reports'
 import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
@@ -258,6 +260,25 @@ workRoutes.get('/reports/:id/file', (c) => {
   const f = r ? reportFile(r, c.req.query('path') ?? '') : null
   if (!f) return c.json({ error: 'This file no longer exists' }, 404)
   return fileResponse(f.real, f.size, c.req.query('inline') === '1')
+})
+workRoutes.put('/reports/:id/project', async (c) => {
+  const { projectId } = await c.req.json<{ projectId?: unknown }>().catch(() => ({ projectId: undefined }))
+  if (projectId !== null && typeof projectId !== 'string') throw bad('Pick a project, or none')
+  setReportProject(c.req.param('id'), projectId || null)
+  return c.json({ ok: true })
+})
+
+// the owner's own notes (Reports → Notes): the list comes with the work state, a note's text from here
+workRoutes.get('/notes/:id', (c) => {
+  const n = ownerNotesRepo.get(c.req.param('id'))
+  if (!n) return c.json({ error: 'This note no longer exists' }, 404)
+  return c.json(n)
+})
+workRoutes.post('/notes', async (c) => c.json(createNote(await c.req.json().catch(() => ({})))))
+workRoutes.put('/notes/:id', async (c) => c.json(updateNote(c.req.param('id'), await c.req.json().catch(() => ({})))))
+workRoutes.delete('/notes/:id', (c) => {
+  deleteNote(c.req.param('id'))
+  return c.json({ ok: true })
 })
 workRoutes.put('/reports/:id/tags', async (c) => {
   const { tags } = await c.req.json<{ tags?: unknown }>().catch(() => ({ tags: undefined }))

@@ -1,5 +1,5 @@
 import type { WorkReport } from '@after-office/shared'
-import { agentsRepo, reportsRepo } from '../db'
+import { agentsRepo, projectsRepo, reportsRepo } from '../db'
 import { AgentError } from '../agents/manager'
 import { agentFiles } from '../agents/files'
 import { mentionedPaths } from '@after-office/shared'
@@ -40,6 +40,16 @@ export function setReportTags(id: string, tags: string[] | undefined) {
   if (!r) throw new AgentError('No such report', 404)
   const { tags: _, ...rest } = r
   reportsRepo.put(tags?.length ? { ...rest, tags } : rest)
+  publishWork('reports')
+}
+
+/** The owner moved a report to another project (or out of any): the task it came from keeps its own. */
+export function setReportProject(id: string, projectId: string | null) {
+  const r = reportsRepo.get(id)
+  if (!r) throw new AgentError('No such report', 404)
+  if (projectId && !projectsRepo.all().some((p) => p.id === projectId)) throw new AgentError('No such project', 400)
+  const { projectId: _, ...rest } = r
+  reportsRepo.put(projectId ? { ...rest, projectId } : rest)
   publishWork('reports')
 }
 

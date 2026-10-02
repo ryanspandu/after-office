@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuSlidersHorizontal, LuCheckCheck, LuChevronLeft, LuChevronRight, LuCircleAlert, LuClock, LuCrown, LuFileText, LuListTodo, LuMessageSquareText, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
+import { LuSlidersHorizontal, LuCheckCheck, LuChevronLeft, LuChevronRight, LuCircleAlert, LuClock, LuCrown, LuFileText, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
 import type { WorkReport } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
@@ -18,6 +18,7 @@ import { openUrl, setUrl, useUrl } from '../state/url'
 import { RangePicker, type PickedRange } from './DateRangePicker'
 import { Select } from './Select'
 import { TagChips, TagFilter, TagPicker } from './tags'
+import { NotesList } from './OwnerNotes'
 
 // Reports: what an agent said when it finished a task or a cron run (its final message), kept apart from the chat
 // so finished work can be reviewed later. Written by the server on the agent's Stop hook; no LLM involved.
@@ -77,7 +78,24 @@ export function ReportRow({ r, now, onOpen }: { r: WorkReport; now: number; onOp
 }
 
 type PanelTab = 'manager' | 'agents'
+type PanelView = 'reports' | 'notes'
 const TAB_KEY = 'ao-reports-tab'
+const VIEW_KEY = 'ao-reports-view'
+const remembered = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
+  try {
+    const v = localStorage.getItem(key) as T | null
+    return v && allowed.includes(v) ? v : fallback
+  } catch {
+    return fallback
+  }
+}
+const remember = (key: string, v: string) => {
+  try {
+    localStorage.setItem(key, v)
+  } catch {
+    /* this visit only */
+  }
+}
 /**
  * Reports that belong under "Manager": the manager's own notes, and anything the manager itself ran (a cron job or
  * a task assigned to it). Everything else is an agent's.
@@ -87,66 +105,80 @@ function useIsManagerReport() {
   return (r: WorkReport) => r.kind === 'note' || managerIds.includes(r.agentId)
 }
 
+/** The card: Reports (the manager's summaries, the agents' reports) | Notes (the owner's own). */
 export function ReportsPanel() {
   const ready = useWorkReady()
   const reports = useDashboard((s) => s.reports)
   const now = useNow(60_000).getTime()
+  const [view, setView] = useState<PanelView>(() => remembered(VIEW_KEY, ['reports', 'notes'] as const, 'reports'))
   // the manager's summaries apart from the agents' own task and cron reports
-  const [tab, setTab] = useState<PanelTab>(() => {
-    try {
-      return localStorage.getItem(TAB_KEY) === 'agents' ? 'agents' : 'manager'
-    } catch {
-      return 'manager'
-    }
-  })
-  const pick = (t: PanelTab) => {
-    setTab(t)
-    try {
-      localStorage.setItem(TAB_KEY, t)
-    } catch {
-      /* this visit only */
-    }
-  }
+  const [tab, setTab] = useState<PanelTab>(() => remembered(TAB_KEY, ['manager', 'agents'] as const, 'manager'))
+  const pickView = (v: PanelView) => (setView(v), remember(VIEW_KEY, v))
+  const pick = (t: PanelTab) => (setTab(t), remember(TAB_KEY, t))
   const isManagerReport = useIsManagerReport()
   const fromManager = reports.filter(isManagerReport)
   const fromAgents = reports.filter((r) => !isManagerReport(r))
   const shown = tab === 'manager' ? fromManager : fromAgents
   const unreadOf = (list: WorkReport[]) => list.filter((r) => !r.read).length
+  const unread = unreadOf(reports)
   return (
     <section className="card card--reports">
       <header className="card__head">
-        <h2>
-          <LuFileText /> Reports
-        </h2>
-        <button className="small" onClick={() => openUrl({ reports: tab === 'manager' ? 'manager' : 'agents', page: null, q: null })}>
-          View all
-        </button>
-      </header>
-      <div className="seg task-tabs reports-tabs" role="tablist" aria-label="Reports from">
-        {(
-          [
-            ['manager', <LuCrown key="i" />, 'Manager', fromManager],
-            ['agents', <LuListTodo key="i" />, 'Agents', fromAgents],
-          ] as const
-        ).map(([id, icon, label, list]) => (
-          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => pick(id)}>
-            {icon} {label}
-            {unreadOf(list) > 0 && (
-              <span className="badge badge--accent reports-tabs__count" {...tip(`${unreadOf(list)} unread`)}>
-                {unreadOf(list)}
-              </span>
-            )}
+        <div className="card__titletabs" role="tablist" aria-label="Reports or notes">
+          <button role="tab" aria-selected={view === 'reports'} className={view === 'reports' ? 'is-on' : ''} onClick={() => pickView('reports')}>
+            <LuFileText /> Reports
+            {view !== 'reports' && unread > 0 && <span className="badge badge--accent reports-tabs__count">{unread}</span>}
           </button>
-        ))}
-      </div>
-      <ul className="list">
-        {shown.slice(0, 20).map((r) => (
-          <ReportRow key={r.id} r={r} now={now} onOpen={() => openUrl({ report: r.id })} />
-        ))}
-        {!shown.length && ready && (
-          <li className="empty">{tab === 'manager' ? "The manager's summaries of finished work show up here." : 'Finished tasks and daily runs show up here.'}</li>
-        )}
-      </ul>
+          <span className="card__titletabs-sep" aria-hidden>
+            |
+          </span>
+          <button role="tab" aria-selected={view === 'notes'} className={view === 'notes' ? 'is-on' : ''} onClick={() => pickView('notes')}>
+            <LuNotebookPen /> Notes
+          </button>
+        </div>
+        <span className="grow" />
+        <span className="card__actions">
+          {view === 'notes' && (
+            <button className="icon-btn small" onClick={() => openUrl({ note: 'new' })} aria-label="New note" data-tip="New note">
+              <LuPlus />
+            </button>
+          )}
+          <button className="small" onClick={() => (view === 'notes' ? openUrl({ notes: '1' }) : openUrl({ reports: tab, page: null, q: null }))}>
+            View all
+          </button>
+        </span>
+      </header>
+      {view === 'notes' ? (
+        <NotesList />
+      ) : (
+        <>
+          <div className="seg task-tabs reports-tabs" role="tablist" aria-label="Reports from">
+            {(
+              [
+                ['manager', <LuCrown key="i" />, 'Manager', fromManager],
+                ['agents', <LuListTodo key="i" />, 'Agents', fromAgents],
+              ] as const
+            ).map(([id, icon, label, list]) => (
+              <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => pick(id)}>
+                {icon} {label}
+                {unreadOf(list) > 0 && (
+                  <span className="badge badge--accent reports-tabs__count" {...tip(`${unreadOf(list)} unread`)}>
+                    {unreadOf(list)}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          <ul className="list">
+            {shown.slice(0, 20).map((r) => (
+              <ReportRow key={r.id} r={r} now={now} onOpen={() => openUrl({ report: r.id })} />
+            ))}
+            {!shown.length && ready && (
+              <li className="empty">{tab === 'manager' ? "The manager's summaries of finished work show up here." : 'Finished tasks and daily runs show up here.'}</li>
+            )}
+          </ul>
+        </>
+      )}
     </section>
   )
 }
@@ -394,7 +426,10 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
 /** One report. Opening it marks it read. */
 export function ReportModal({ id, onClose }: { id: string; onClose: () => void }) {
   const r = useDashboard((s) => s.reports.find((x) => x.id === id))
-  const { markReport, removeReport, setReportTags } = useDashboard(useShallow((s) => ({ markReport: s.markReport, removeReport: s.removeReport, setReportTags: s.setReportTags })))
+  const { markReport, removeReport, setReportTags, setReportProject } = useDashboard(
+    useShallow((s) => ({ markReport: s.markReport, removeReport: s.removeReport, setReportTags: s.setReportTags, setReportProject: s.setReportProject })),
+  )
+  const projects = useDashboard((s) => s.projects)
   const taskExists = useDashboard((s) => !!r && r.kind === 'task' && s.tasks.some((t) => t.id === r.refId))
   const agent = useOffice((s) => s.agents.find((a) => a.id === r?.agentId))
   // attachments through the report itself: still there after its agent was removed, "gone" once deleted
@@ -422,6 +457,16 @@ export function ReportModal({ id, onClose }: { id: string; onClose: () => void }
           <span>took {duration(r.finishedAt - r.startedAt)}</span>
         </div>
         <div className="report__tags">
+          {/* the owner can file it under another project (its task keeps its own) */}
+          <Select
+            ariaLabel="Project"
+            searchable
+            size="sm"
+            className="report__project"
+            value={r.projectId ?? ''}
+            options={[{ value: '', label: 'No project' }, ...projects.map((p) => ({ value: p.id, label: p.name }))]}
+            onChange={(v) => setReportProject(r.id, v || null)}
+          />
           <TagPicker size="sm" value={r.tags ?? []} onChange={(tags) => setReportTags(r.id, tags)} />
         </div>
         <div className="report__text">

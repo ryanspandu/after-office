@@ -1,0 +1,43 @@
+/* ── the owner's notes (ui/OwnerNotes.tsx): Reports → Notes, and a note's window ── */
+.card__actions { display: inline-flex; align-items: center; gap: 6px; }
+.note-modal { display: flex; flex-direction: column; gap: 12px; height: min(72vh, 760px); min-height: 0; }
+.modal--full .note-modal { flex: 1; height: auto; }
+.note-modal__fields { display: flex; flex-direction: column; gap: 8px; flex: none; }
+.note-modal__title {
+  all: unset; box-sizing: border-box; width: 100%; padding: 2px 2px 4px; font-size: 20px; font-weight: 600; color: var(--text);
+  border-bottom: 1px solid transparent;
+}
+.note-modal__title::placeholder { color: var(--muted); }
+.note-modal__title:focus { outline: none; box-shadow: none; border-bottom-color: var(--line); }
+.note-modal__meta { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+/* the folder button as tall as the tags box beside it */
+.note-modal__meta > .chat-ctx__project { height: auto; min-height: 30px; flex: 0 1 220px; }
+.note-modal__meta > .chat-ctx__project > .chat-ctx__pick { flex: 1; max-width: none; font-size: 12.5px; }
+.note-modal__meta > .note-modal__project { width: 200px; max-width: 100%; }
+.note-modal__meta > .rs--multi, .note-modal__meta > .rs:not(.note-modal__project) { flex: 1 1 220px; min-width: 0; }
+.note-modal .fnotes { flex: 1; min-height: 0; }
+.note-modal .modal__foot { flex: none; }
+@media (max-width: 768px) {
+  .note-modal { height: calc(var(--vvh, 100dvh) - 200px); }
+  /* typing on a phone: the editor takes the screen (sheet.css / projects.css focus mode); the title row steps aside */
+  .kb-open .modal:has(.fnotes:focus-within) :is(.note-modal__fields, .note-modal .modal__foot) { display: none; }
+  .kb-open .modal:has(.fnotes:focus-within) .note-modal { height: calc(var(--vvh, 100dvh) - 20px - env(safe-area-inset-top)); }
+}
+/* the Reports card's title: "Reports | Notes", the one shown in full, the other muted */
+.card__titletabs { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.card__titletabs > button {
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 7px; padding: 3px 6px; border-radius: 8px;
+  font-size: 14px; font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap;
+}
+.card__titletabs > button svg { font-size: 14px; }
+.card__titletabs > button:hover { color: var(--text); background: var(--card-2); }
+.card__titletabs > button.is-on { color: var(--text); }
+.card__titletabs > button:focus-visible { outline: 2px solid var(--hl); outline-offset: 1px; }
+.card__titletabs-sep { color: var(--muted); opacity: .55; font-size: 14px; user-select: none; }
+/* a narrow card: the buttons keep one line, the title tabs give way (their words cut short, never wrapped) */
+.card--reports .card__head { gap: 6px; }
+.card__actions { flex: none; }
+.card__actions > button { white-space: nowrap; }
+.card__titletabs { flex: 0 1 auto; overflow: hidden; }
+.card__titletabs > button { min-width: 0; flex: 0 1 auto; padding: 3px 4px; }
+.card__titletabs > button > svg { flex: none; }

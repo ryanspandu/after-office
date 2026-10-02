@@ -109,7 +109,7 @@ export function ContextChips({ project, tags }: { project?: string; tags: string
  * The chat's project: picked as a folder (the folder picker, however deep). The project linked to that folder, or a new
  * one named after it.
  */
-function ProjectFolderButton({ value, onChange }: { value: string; onChange: (projectId: string) => void }) {
+export function ProjectFolderButton({ value, onChange, tip = 'Choose the folder this chat is about' }: { value: string; onChange: (projectId: string) => void; tip?: string }) {
   const projects = useDashboard((s) => s.projects)
   const addProject = useDashboard((s) => s.addProject)
   const [browsing, setBrowsing] = useState(false)
@@ -122,7 +122,7 @@ function ProjectFolderButton({ value, onChange }: { value: string; onChange: (pr
     <>
       {browsing && <ProjectFolderPicker onPick={pick} onClose={() => setBrowsing(false)} />}
       <span className="chat-ctx__project">
-        <button type="button" className="chat-ctx__pick" onClick={() => setBrowsing(true)} data-tip={project?.folder ?? 'Choose the folder this chat is about'}>
+        <button type="button" className="chat-ctx__pick" onClick={() => setBrowsing(true)} data-tip={project?.folder ?? tip}>
           {project ? (
             <>
               <span className="chip__dot" style={{ background: project.color }} />

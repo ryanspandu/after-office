@@ -1,13 +1,18 @@
 import { create } from 'zustand'
 
-// Folder windows put aside (minimized): a chip each at the bottom right, one click opens it again as it was left. The
+// Folder and note windows put aside (minimized): a chip each at the bottom right, one click opens it again as it was left. The
 // window stays mounted while minimized (hidden), so its files view, a terminal or unsaved notes are kept. The list
 // (and the section each was on) is remembered in this browser, so after a reload the chips are still there.
 
 const STORAGE_KEY = 'after-office:minimized-folders'
 
 export interface MinimizedFolder {
+  /** a folder's path, or a note's id (kind 'note') */
   path: string
+  /** unset: a folder window; 'note': one of the owner's notes (Reports → Notes) */
+  kind?: 'note'
+  /** a note's title when it was put aside (the list's own title wins when there is one) */
+  label?: string
   /** the sidebar section it was on (Files, Notes, Terminal…) */
   section?: string
 }
@@ -24,6 +29,8 @@ function load(): MinimizedFolder[] {
 interface MinimizedStore {
   folders: MinimizedFolder[]
   add: (path: string, section?: string) => void
+  /** a note's window put aside */
+  addNote: (id: string, label: string) => void
   remove: (path: string) => void
   /** what a folder's window is showing, kept for when it opens again */
   setSection: (path: string, section: string) => void
@@ -42,6 +49,11 @@ export const useMinimized = create<MinimizedStore>((set, get) => {
     add: (path, section) => {
       const known = get().folders.find((f) => f.path === path)
       set({ folders: known ? get().folders.map((f) => (f.path === path ? { ...f, section: section ?? f.section } : f)) : [...get().folders, { path, section }] })
+      save()
+    },
+    addNote: (id, label) => {
+      const known = get().folders.some((f) => f.path === id)
+      set({ folders: known ? get().folders.map((f) => (f.path === id ? { ...f, label } : f)) : [...get().folders, { path: id, kind: 'note', label }] })
       save()
     },
     remove: (path) => {

@@ -148,6 +148,8 @@ interface DashboardStore {
   reports: WorkReport[]
   markReport: (id: string, read: boolean) => void
   setReportTags: (id: string, tags: string[]) => void
+  /** move a report to another project (null: none); its task keeps its own */
+  setReportProject: (id: string, projectId: string | null) => void
   /** the owner's labels for tasks and reports */
   tags: Tag[]
   /** create or change a tag (returns its id) */
@@ -317,6 +319,10 @@ export const useDashboard = create<DashboardStore>((set, get) => {
     setReportTags: (id, tags) => {
       set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, tags } : r)) }))
       push(`/api/reports/${id}/tags`, `${id}:tags`, () => ({ tags }))
+    },
+    setReportProject: (id, projectId) => {
+      set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, projectId: projectId ?? undefined } : r)) }))
+      push(`/api/reports/${id}/project`, `${id}:project`, () => ({ projectId }))
     },
     markReport: (id, read) => {
       set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, read } : r)) }))

@@ -13,6 +13,7 @@ import { tmux } from '../agents/tmux'
 import { transcriptPath, unwrapPaste } from '../agents/transcripts'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
 import { listTags } from './tags'
+import { noteSummaries } from './notes'
 import { trackTurnOrigin } from './origin'
 import { checkFor, runGate } from './gate'
 import { restoreApprovals } from './managerTasks'
@@ -55,6 +56,7 @@ export function workState(): WorkState {
     tags: listTags(),
     bossMode: ((b) => (b ? { since: b.since, until: b.until } : null))(bossMode()),
     publicAccess: publicAccess(),
+    notes: noteSummaries(),
   }
 }
 
