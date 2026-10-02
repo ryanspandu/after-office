@@ -291,6 +291,11 @@
   background: none; border: 0; color: var(--muted); cursor: pointer;
 }
 .fmin__close:hover, .fmin__open:hover { color: var(--text); }
+.fmin__more {
+  all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, .22); color: var(--text); font-size: 16px; cursor: pointer;
+}
+.fmin__more[aria-expanded='true'] { background: var(--text); color: var(--card); }
 .fmin__close:hover { background: var(--accent-soft); }
 /* phones: a round button on the stage, right above the menu button (.nav-burger: right 12px, bottom 12px, 42px) */
 .fmin-fab {
