@@ -1,6 +1,6 @@
 import { accessSync, constants, openSync, readSync, closeSync, statSync } from 'node:fs'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { ISOLATED } from './env'
 import { runAsAgent } from './asagent'
 import type { ChatItem, LiveMode } from '@after-office/shared'
@@ -64,11 +64,20 @@ export const unwrapPaste = (t: string) =>
 // sometimes writes one with mode 0600, and a file's group bits cap its ACL (the "mask"), so the dashboard can't read
 // it: that agent's chat stays empty and its tokens aren't counted. The agents' user opens the folder up again
 // (g+rX lifts the mask); the next poll reads it.
+// Only that agent's folder of transcripts (and the projects folder itself): the whole tree of every agent's history
+// can be large enough to run past the time limit before it reaches the one that's locked.
 const unlocking = new Map<string, number>()
 function unlock(path: string) {
   if (!ISOLATED || Date.now() - (unlocking.get(path) ?? 0) < 30_000) return
   unlocking.set(path, Date.now())
-  void runAsAgent(['chmod', '-R', 'g+rX', CLAUDE_PROJECTS_DIR], { cwd: CLAUDE_PROJECTS_DIR, timeoutMs: 15_000 }).catch(() => {})
+  const dir = dirname(path)
+  if (dirname(dir) !== CLAUDE_PROJECTS_DIR) return // not one of the agents' transcript folders
+  void runAsAgent(['sh', '-c', 'chmod g+rX "$1" && chmod -R g+rX "$2"', 'unlock', CLAUDE_PROJECTS_DIR, dir], { cwd: CLAUDE_PROJECTS_DIR, timeoutMs: 30_000, mergeStderr: true })
+    .then((r) => {
+      if (r.code !== 0) console.warn(`[transcripts] could not open ${dir} to the dashboard (exit ${r.code}${r.timedOut ? ', timed out' : ''}): ${r.out.trim().slice(0, 300)}`)
+      else console.log(`[transcripts] opened ${dir} to the dashboard`)
+    })
+    .catch((e) => console.warn(`[transcripts] could not open ${dir} to the dashboard:`, (e as Error).message))
 }
 
 /**
