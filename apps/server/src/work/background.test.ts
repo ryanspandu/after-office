@@ -111,6 +111,26 @@ describe('background subagents', () => {
   })
 })
 
+describe('prompts added to a running turn', () => {
+  test("a subagent's result handed back mid-turn isn't the user moving on", async () => {
+    idle('bg-w')
+    tasksRepo.put(task('bg-2', { title: 'Market research' }))
+    await startTask('bg-2')
+    await until(() => tasksRepo.get('bg-2')!.status === 'in_progress')
+    onPromptSubmitted('bg-w', 'New task: Market research')
+    // still working (no Stop yet) when the helper's result comes in, in whatever wording
+    onPromptSubmitted('bg-w', 'Subagent result: the market is …', true)
+    expect(tasksRepo.get('bg-2')!.status).toBe('in_progress')
+    expect(reportsFor('bg-2')).toHaveLength(0)
+    // after the turn stopped without its Stop (interrupted), a new prompt does mean it moved on
+    onPromptSubmitted('bg-w', 'Something else entirely', false)
+    expect(tasksRepo.get('bg-2')!.status).toBe('todo')
+    // (its "interrupted" report reaches the manager)
+    await until(() => queueRepo.countFor('bg-mgr') > 0)
+    expect(managerInbox()[0]).toContain('Interrupted')
+  })
+})
+
 describe("the manager's messages", () => {
   test('the answer goes back to the manager', async () => {
     idle('bg-w')

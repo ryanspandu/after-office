@@ -310,7 +310,7 @@ export function onSidePromptSubmitted(agentId: string, key: string, prompt?: str
 
 /** A prompt started. The first one is the work we sent; another one means the work's turn ended without a Stop
  *  (interrupted) and the user moved on: file what we have so the next answer isn't taken as its report. */
-export function onPromptSubmitted(agentId: string, prompt?: string) {
+export function onPromptSubmitted(agentId: string, prompt?: string, midTurn = false) {
   trackTurnOrigin(agentId, prompt ?? '')
   // the manager's turn: started by an agent's output (a forwarded report or answer), or by anything else
   if (agentsRepo.get(agentId)?.kind === 'manager') {
@@ -329,7 +329,10 @@ export function onPromptSubmitted(agentId: string, prompt?: string) {
   if (ours) return void (a.submitted = true)
   if (!a.submitted) return // e.g. the /clear before a fresh-context run
   // a background subagent reporting back wakes the agent up: same work, not the user moving on
-  if (a.background || /^\s*<task-notification>/.test(prompt ?? '')) return
+  if (a.background || (prompt ?? '').includes('<task-notification')) return
+  // added to the turn still running (a subagent handing its result back, a message sent while it works): the task
+  // goes on. Only a prompt after the turn stopped without its Stop (interrupted) means it moved on.
+  if (midTurn) return
   active.delete(agentId)
   // unfinished: back to the to-do list (and out of reach of the in-progress fallback in onAgentStopped)
   const t = a.taskId ? tasksRepo.get(a.taskId) : null

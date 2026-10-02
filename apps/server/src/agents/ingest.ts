@@ -66,6 +66,8 @@ export async function handleHook(c: Context) {
 
   // OFFICE_DEBUG_HOOKS=true appends every raw hook payload to data/hooks-debug.jsonl (for reverse-engineering fields)
   if (process.env.OFFICE_DEBUG_HOOKS === 'true') appendFileSync(DEBUG_LOG, JSON.stringify({ t: Date.now(), agentId, key, e }) + '\n')
+  // was it in the middle of a turn when this prompt came in (a prompt added to the running turn, not a new one)
+  const midTurn = (key ? sideRuntimeOf(agentId, key) : runtimeOf(agentId)).status === 'working'
   updateSession(agentId, key, (rt) => applyHook(rt, e))
   // /clear starts a new conversation (new session id): a later restart must --resume that one, not the old one
   if (e.hook_event_name === 'UserPromptSubmit' && e.session_id && /^[0-9a-f-]{36}$/i.test(e.session_id)) {
@@ -91,7 +93,7 @@ export async function handleHook(c: Context) {
   }
   if (e.hook_event_name === 'UserPromptSubmit') {
     if (key) onSidePromptSubmitted(agentId, key, e.prompt)
-    else onPromptSubmitted(agentId, e.prompt)
+    else onPromptSubmitted(agentId, e.prompt, midTurn)
   }
   // a mode change asked for while a dialog was open can go through now
   if (['PostToolUse', 'Stop', 'StopFailure', 'UserPromptSubmit'].includes(e.hook_event_name)) void applyDeferredMode(agentId, key)
