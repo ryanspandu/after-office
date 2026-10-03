@@ -17,6 +17,7 @@ import {
   LuFolder,
   LuFolderOpen,
   LuFolderPlus,
+  LuFilePlus,
   LuGitBranch,
   LuLink,
   LuPencil,
@@ -73,6 +74,14 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
   const uploadInput = useRef<HTMLInputElement>(null)
   // a new folder in the folder on screen: its name typed in a row under the bar
   const [newFolder, setNewFolder] = useState<string | null>(null)
+  // …or a new file (any name and extension: opened in the editor once made)
+  const [newKind, setNewKind] = useState<'folder' | 'file'>('folder')
+  const startNew = (kind: 'folder' | 'file') => {
+    setError(null)
+    if (newFolder !== null && newKind === kind) return setNewFolder(null)
+    setNewKind(kind)
+    setNewFolder('')
+  }
   // an entry being renamed (its name)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [menu, setMenu] = useState<Menu | null>(null)
@@ -156,6 +165,13 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
     act('folder', async () => {
       const name = newFolder?.trim()
       if (!name) return
+      if (newKind === 'file') {
+        const made = (await post('/api/workspaces/newfile', { root, path, name })) as { path: string }
+        setNewFolder(null)
+        await load(path)
+        setEditing(made.path)
+        return
+      }
       await post('/api/workspaces/folders', { root, path, name })
       setNewFolder(null)
       await load(path)
@@ -297,7 +313,10 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
             e.target.value = ''
           }}
         />
-        <button className="icon-btn small ghost" onClick={() => setNewFolder((v) => (v === null ? '' : null))} data-tip="New folder here" aria-label="New folder" aria-expanded={newFolder !== null}>
+        <button className="icon-btn small ghost" onClick={() => startNew('file')} data-tip="New file here (any extension)" aria-label="New file" aria-expanded={newFolder !== null && newKind === 'file'}>
+          <LuFilePlus />
+        </button>
+        <button className="icon-btn small ghost" onClick={() => startNew('folder')} data-tip="New folder here" aria-label="New folder" aria-expanded={newFolder !== null && newKind === 'folder'}>
           <LuFolderPlus />
         </button>
         <button className="icon-btn small ghost" onClick={() => uploadInput.current?.click()} disabled={uploading > 0} data-tip={uploading ? `Adding ${uploading}…` : 'Upload files here (or drop them on the list)'} aria-label="Upload files">
@@ -313,12 +332,13 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
       {gitLine && <GitLine git={gitLine} now={now} />}
       {newFolder !== null && (
         <div className="fb__new">
-          <LuFolder className="fb__new-icon" />
+          {newKind === 'file' ? <LuFile className="fb__new-icon" /> : <LuFolder className="fb__new-icon" />}
           <input
+            key={newKind}
             autoFocus
             value={newFolder}
-            maxLength={120}
-            placeholder="Folder name"
+            maxLength={newKind === 'file' ? 200 : 120}
+            placeholder={newKind === 'file' ? 'File name, e.g. notes.md, script.py, .env' : 'Folder name'}
             onChange={(e) => {
               setNewFolder(e.target.value)
               setError(null)
@@ -331,7 +351,7 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
               }
             }}
           />
-          <button className="icon-btn small ghost" onClick={() => void makeFolder()} disabled={!newFolder.trim() || busy === 'folder'} data-tip="Create" aria-label="Create the folder">
+          <button className="icon-btn small ghost" onClick={() => void makeFolder()} disabled={!newFolder.trim() || busy === 'folder'} data-tip="Create" aria-label={newKind === 'file' ? 'Create the file' : 'Create the folder'}>
             {busy === 'folder' ? <LuRefreshCw className="spin" /> : <LuCheck />}
           </button>
           <button className="icon-btn small ghost" onClick={() => setNewFolder(null)} data-tip="Cancel" aria-label="Cancel">

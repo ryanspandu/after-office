@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
 import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, ownerNotesRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
-import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, readTextFile, writeTextFile, folderGit, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
+import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, readTextFile, writeTextFile, folderGit, addEmptyFile, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
 import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder, renameProjectFolder } from '../work/projectFolders'
 import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDevice, sendPush } from '../push'
@@ -421,6 +421,12 @@ workRoutes.post('/workspaces/rename', async (c) => {
   const r = renameProjectFolder(typeof b.path === 'string' ? b.path : '', typeof b.name === 'string' ? b.name : '')
   publishWork('tasks', 'reports', 'notes')
   return c.json(r)
+})
+// a new, empty file in the folder on screen (any name and extension)
+workRoutes.post('/workspaces/newfile', async (c) => {
+  const b = await c.req.json<{ root?: unknown; path?: unknown; name?: unknown }>().catch(() => ({}) as { root?: unknown; path?: unknown; name?: unknown })
+  const str = (v: unknown) => (typeof v === 'string' ? v : '')
+  return c.json(addEmptyFile(str(b.root), str(b.path), str(b.name)))
 })
 workRoutes.post('/workspaces/folders', async (c) => {
   const b = await c.req.json<{ root?: unknown; path?: unknown; name?: unknown }>().catch(() => ({}) as { root?: unknown; path?: unknown; name?: unknown })

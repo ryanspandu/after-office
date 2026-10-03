@@ -74,3 +74,15 @@ test('the git line of a folder: branch, what is not committed, which entries it 
   // from inside a subfolder: the same repo, its own entries
   expect((await folderGit(repo, 'app'))!.entries).toEqual({ 'main.js': 'M' })
 })
+
+test('a new, empty file: any name and extension, dotfiles too; never over one, never in .git', async () => {
+  const { addEmptyFile } = await import('./workspaces')
+  expect(addEmptyFile(root, '', 'script.rb').path).toBe('script.rb')
+  expect(readTextFile(root, 'script.rb').text).toBe('')
+  expect(addEmptyFile(root, '', '.prettierrc').name).toBe('.prettierrc')
+  expect(addEmptyFile(root, '.claude', 'notes.txt').path).toBe('.claude/notes.txt')
+  expect(() => addEmptyFile(root, '', 'script.rb')).toThrow('already there')
+  expect(() => addEmptyFile(root, '', 'a/b.txt')).toThrow('plain name')
+  expect(() => addEmptyFile(root, '.git', 'hooks.txt')).toThrow('The office manages')
+  expect(() => addEmptyFile(root, '', '.mcp.json')).toThrow()
+})

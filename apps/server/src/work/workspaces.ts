@@ -438,6 +438,30 @@ export function addFolderFile(root: string, rel: string, name: string, data: Uin
   return { name: file, size: data.byteLength }
 }
 
+/**
+ * A new, empty file in the folder on screen (the Files browser), any name and extension (dotfiles too: .env,
+ * .prettierrc). Never over something that's there, never inside .git or over a file the office manages.
+ */
+export function addEmptyFile(root: string, rel: string, name: string) {
+  if (rel.split('/').some((part) => part === '..')) throw new AgentError('Invalid folder', 400)
+  const { real } = inside(root, rel)
+  if (!lstatSync(real).isDirectory()) throw new AgentError('Not a folder', 400)
+  const file = name.trim()
+  if (!file || file === '.' || file === '..' || file.length > 200 || /[/\\\0]/.test(file)) throw new AgentError('Give the file a plain name (no slashes)')
+  const relFile = [...rel.split('/').filter(Boolean), file].join('/')
+  if (keptByOffice(relFile)) throw new AgentError('The office manages files there: not here', 403)
+  let fd: number
+  try {
+    // 0664: the agents (another user on the VPS) can edit it too
+    fd = openSync(join(real, file), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o664)
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new AgentError(`${file} is already there`, 409)
+    throw e
+  }
+  closeSync(fd)
+  return { name: file, path: relFile }
+}
+
 /** A new, empty folder inside the folder on screen (the Files browser): a plain name, never over anything there. */
 export function addFolder(root: string, rel: string, name: string) {
   if (rel.split('/').some((part) => part === '..' || part.startsWith('.'))) throw new AgentError('Invalid folder', 400)

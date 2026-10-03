@@ -28,6 +28,7 @@ import { confirmWith } from './Confirm'
 import { openUrl } from '../state/url'
 import { tip } from './Tooltip'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
+import { useFlip } from '../state/useFlip'
 
 export const STATUS_META: Record<AgentStatus, { label: string; icon: ReactNode }> = {
   working: { label: 'Working', icon: <LuKeyboard /> },
@@ -65,10 +66,13 @@ export function AgentsCard({ onNavigate }: { onNavigate?: () => void }) {
   // search (name, role, status, folder) and pins: pinned agents stay on top, the manager leads each group
   const [q, setQ] = useState('')
   const needle = q.trim().toLowerCase()
-  // busy ones on top: waiting on the owner first, then working; within each, pinned ones, then the manager
+  // pinned ones first; then, among the pinned and among the rest, the busy ones on top (waiting on the owner, then
+  // working); the manager leads what's left
   const busyRank = (a: OfficeAgent) => (a.status === 'waiting' ? 2 : a.status === 'working' ? 1 : 0)
+  // re-ordered (one starts or stops working): the rows slide to their new places
+  const listRef = useRef<HTMLUListElement>(null)
   const shown = [...agents]
-    .sort((a, b) => busyRank(b) - busyRank(a) || Number(!!b.pinned) - Number(!!a.pinned) || Number(b.kind === 'manager') - Number(a.kind === 'manager'))
+    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || busyRank(b) - busyRank(a) || Number(b.kind === 'manager') - Number(a.kind === 'manager'))
     .filter(
       (a) =>
         !needle ||
@@ -80,6 +84,7 @@ export function AgentsCard({ onNavigate }: { onNavigate?: () => void }) {
     useOffice.setState((s) => ({ agents: s.agents.map((x) => (x.id === a.id ? { ...x, pinned } : x)) }))
     if (live) void liveApi.setPinned(a.id, pinned).catch(() => useOffice.setState((s) => ({ agents: s.agents.map((x) => (x.id === a.id ? { ...x, pinned: !pinned } : x)) })))
   }
+  useFlip(listRef, shown.map((a) => a.id).join(','))
 
   return (
     <>
@@ -126,7 +131,7 @@ export function AgentsCard({ onNavigate }: { onNavigate?: () => void }) {
           </label>
         )}
 
-        <ul className="list">
+        <ul className="list" ref={listRef}>
           {shown.map((a) => (
             <AgentRow
               key={a.id}
@@ -261,7 +266,7 @@ function AgentRow({
   // one click on the card opens its chat (its profile in the demo); the rest is in the ⋯ menu under the avatar.
   // Phones: a tap on the card does nothing (it's easy to hit while scrolling); the chat button under the status opens it.
   return (
-    <li className={`row agent${selected ? ' row--selected' : ''}${a.status === 'offline' ? ' row--off' : ''}`} onClick={phone ? undefined : onProfile}>
+    <li data-flip={a.id} className={`row agent${selected ? ' row--selected' : ''}${a.status === 'offline' ? ' row--off' : ''}`} onClick={phone ? undefined : onProfile}>
       <div className="agent__side">
         <span className="avatar" style={avatarStyle(a.look.shirt)} aria-hidden>
           {a.name[0]}
