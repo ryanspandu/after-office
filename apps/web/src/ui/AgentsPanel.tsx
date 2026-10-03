@@ -65,8 +65,10 @@ export function AgentsCard({ onNavigate }: { onNavigate?: () => void }) {
   // search (name, role, status, folder) and pins: pinned agents stay on top, the manager leads each group
   const [q, setQ] = useState('')
   const needle = q.trim().toLowerCase()
+  // busy ones on top: waiting on the owner first, then working; within each, pinned ones, then the manager
+  const busyRank = (a: OfficeAgent) => (a.status === 'waiting' ? 2 : a.status === 'working' ? 1 : 0)
   const shown = [...agents]
-    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Number(b.kind === 'manager') - Number(a.kind === 'manager'))
+    .sort((a, b) => busyRank(b) - busyRank(a) || Number(!!b.pinned) - Number(!!a.pinned) || Number(b.kind === 'manager') - Number(a.kind === 'manager'))
     .filter(
       (a) =>
         !needle ||
