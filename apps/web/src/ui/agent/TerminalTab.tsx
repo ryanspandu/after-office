@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { LuArrowDown, LuArrowLeft, LuArrowRight, LuArrowUp, LuCheck, LuCopy, LuCornerDownLeft, LuPlugZap, LuRotateCw, LuSquareTerminal, LuTextSelect, LuX } from 'react-icons/lu'
+import { LuArrowDown, LuArrowLeft, LuArrowRight, LuArrowUp, LuCheck, LuCopy, LuCornerDownLeft, LuKeyboard, LuPlugZap, LuRotateCw, LuSquareTerminal, LuTextSelect, LuX } from 'react-icons/lu'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import { getParam, openUrl, setUrl, useParam } from '../../state/url'
 
@@ -58,6 +58,9 @@ export function TerminalTab({
   const [fullH, setFullH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 0))
   const frameRef = useRef<HTMLDivElement>(null)
   const dockRef = useRef<HTMLDivElement>(null)
+  // phones (full screen): what a tap on the screen focuses, so the keyboard surely comes up (xterm's own field is a
+  // 0×0 box off screen, which phones often won't open a keyboard for). What's typed in it goes to the terminal as typed.
+  const proxyRef = useRef<HTMLInputElement>(null)
   const openFull = () => (setFullH(window.innerHeight), openUrl({ tfull: '1' }))
   const closeFull = () => setUrl({ tfull: null })
   // phones: opening the Terminal tab opens the terminal (once; closed, the tab offers it again)
@@ -82,6 +85,8 @@ export function TerminalTab({
   useEffect(() => {
     // (phones: only while the full-screen layer is open; host is there then)
     if (offline || !host.current || (phone && !full)) return
+    // false once this terminal is gone: late timers and callbacks (fonts loading, a redraw's repaint) leave it alone
+    let alive = true
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
@@ -130,10 +135,12 @@ export function TerminalTab({
     const onTouchEnd = (e: TouchEvent) => {
       const tap = !!at
       cancelPress()
-      if (!tap || !ta) return
+      // (phones, full screen: the typing field; otherwise xterm's own)
+      const field = proxyRef.current ?? ta
+      if (!tap || !field) return
       e.preventDefault() // no click after it (that would focus a second time)
-      ta.blur()
-      ta.focus()
+      field.blur()
+      field.focus({ preventScroll: true })
     }
     el.addEventListener('touchstart', onTouchStart, { passive: true })
     el.addEventListener('touchmove', onTouchMove, { passive: true })
@@ -147,7 +154,8 @@ export function TerminalTab({
     ws.onopen = () => {
       setState('open')
       send({ t: 'resize', cols: term.cols, rows: term.rows })
-      term.focus()
+      // (phones: the keyboard comes up from a tap, not by itself)
+      if (!fullPhone) term.focus()
       // once tmux has attached (the first resize starts it): the whole screen, whatever the timing
       setTimeout(() => redrawRef.current?.(), 300)
     }
@@ -170,6 +178,7 @@ export function TerminalTab({
     // the whole screen sent again by tmux (the server runs refresh-client): it otherwise only repaints what changed,
     // and a screen that missed a paint (a sheet still sliding up, a phone's keyboard) stays blank until something is typed
     const redraw = () => {
+      if (!alive) return
       clearTimeout(redrawTimer)
       redrawTimer = window.setTimeout(() => {
         send({ t: 'redraw' })
@@ -180,12 +189,14 @@ export function TerminalTab({
     // a phone scrolls the box around xterm's hidden field into view when its keyboard opens: the screen slides out
     // of its frame (the cursor still blinking where it was). Put back, and every row painted again.
     const unscroll = () => {
+      if (!alive) return
       for (let n: HTMLElement | null = el; n && n !== el.parentElement?.parentElement; n = n.parentElement) if (n.scrollTop) n.scrollTop = 0
       const screen = el.querySelector<HTMLElement>('.xterm-screen')
       if (screen?.parentElement?.scrollLeft) screen.parentElement.scrollLeft = 0
       term.refresh(0, term.rows - 1)
     }
     const refit = () => {
+      if (!alive) return
       try {
         const { cols, rows } = term
         fit.fit()
@@ -219,6 +230,7 @@ export function TerminalTab({
     const place = () => {
       cancelAnimationFrame(placeFrame)
       placeFrame = requestAnimationFrame(() => {
+        if (!alive) return
         const frame = frameRef.current
         const dock = dockRef.current
         if (!frame || !dock) return
@@ -245,6 +257,7 @@ export function TerminalTab({
     for (const f of frames) f.addEventListener('scroll', unscroll)
 
     return () => {
+      alive = false
       clearTimeout(late)
       clearTimeout(redrawTimer)
       document.removeEventListener('visibilitychange', back)
@@ -267,6 +280,8 @@ export function TerminalTab({
       sendRef.current = null
       ro.disconnect()
       input.dispose()
+      // closed by us (leaving, or React running this twice in development): not the server turning it away
+      ws.onopen = ws.onmessage = ws.onclose = null
       ws.close()
       term.dispose()
     }
@@ -307,7 +322,7 @@ export function TerminalTab({
       {picking !== null && <TextPick text={picking} onClose={() => (setPicking(null), redrawRef.current?.(), termRef.current?.focus())} />}
     </div>
   )
-  const keys = (touch || phone) && state === 'open' && <TouchKeys send={(d) => sendRef.current?.(d)} ctrl={ctrl} onCtrl={() => setCtrl((v) => !v)} />
+  const keys = (touch || phone) && state === 'open' && <TouchKeys send={(d) => sendRef.current?.(d)} ctrl={ctrl} onCtrl={() => setCtrl((v) => !v)} floating={fullPhone} />
 
   if (!phone)
     return (
@@ -336,6 +351,7 @@ export function TerminalTab({
             {screen}
             {/* floats at the bottom, above the keyboard when it's up (moved there by place()) */}
             <div className="term-full__dock" ref={dockRef}>
+              <TypeProxy inputRef={proxyRef} send={(d) => sendRef.current?.(d)} />
               {keys}
             </div>
           </div>,
@@ -375,26 +391,102 @@ const SYMBOLS = ['|', '/', '~', '-', '_', '.', ':', ';', '=', '>', '<', '&', '*'
  * Phones: the keys a touch keyboard lacks (Esc, Tab, Ctrl and its shortcuts, arrows, Home/End, the symbols a shell
  * needs) in one row that scrolls sideways, and a line to type a command and send it.
  */
-function TouchKeys({ send, ctrl, onCtrl }: { send: (d: string) => void; ctrl: boolean; onCtrl: () => void }) {
+function TouchKeys({ send, ctrl, onCtrl, floating = false }: { send: (d: string) => void; ctrl: boolean; onCtrl: () => void; floating?: boolean }) {
   const [line, setLine] = useState('')
+  const [open, setOpen] = useState(false)
+  const pop = useRef<HTMLDivElement>(null)
+  const fab = useRef<HTMLButtonElement>(null)
+  // the keys popup closes on a tap outside it (not on a key: arrows are often pressed several times)
+  useEffect(() => {
+    if (!open) return
+    // (its own button toggles it: not "outside")
+    const away = (e: PointerEvent) => !pop.current?.contains(e.target as Node) && !fab.current?.contains(e.target as Node) && setOpen(false)
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
+  // a key never takes the focus (the phone's keyboard stays where it is)
+  const keep = (e: React.SyntheticEvent) => e.preventDefault()
   const key = (label: React.ReactNode, d: string, name: string) => (
-    <button key={name} type="button" className="tkeys__key" aria-label={name} onMouseDown={(e) => e.preventDefault()} onClick={() => send(d)}>
+    <button key={name} type="button" className="tkeys__key" aria-label={name} onMouseDown={keep} onPointerDown={keep} onClick={() => send(d)}>
       {label}
     </button>
   )
+  const ctrlKey = (
+    <button
+      type="button"
+      className={`tkeys__key${ctrl ? ' is-on' : ''}`}
+      aria-label="Control: the next letter is sent with Ctrl"
+      aria-pressed={ctrl}
+      onMouseDown={keep}
+      onPointerDown={keep}
+      onClick={onCtrl}
+    >
+      Ctrl
+    </button>
+  )
+  const commandLine = (
+    <form
+      className="tkeys__line"
+      onSubmit={(e) => {
+        e.preventDefault()
+        send(`${line}\r`)
+        setLine('')
+      }}
+    >
+      <input
+        value={line}
+        onChange={(e) => setLine(e.target.value)}
+        placeholder="Type a command…"
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        enterKeyHint="send"
+      />
+      <button type="submit" className="icon-btn small" aria-label="Send">
+        <LuCornerDownLeft />
+      </button>
+      {/* phones (full screen): every special key is in a popup behind this one button */}
+      {floating && (
+        <button
+          ref={fab}
+          type="button"
+          className={`icon-btn tkeys__fab${open || ctrl ? ' is-on' : ''}`}
+          aria-label="Special keys"
+          aria-expanded={open}
+          onMouseDown={keep}
+          onPointerDown={keep}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <LuKeyboard />
+        </button>
+      )}
+    </form>
+  )
+
+  if (floating)
+    return (
+      <div className="tkeys tkeys--floating">
+        {open && (
+          <div ref={pop} className="tkeys__pop ui-pop" role="group" aria-label="Special keys">
+            <div className="tkeys__group">
+              {ctrlKey}
+              {CONTROL.slice(0, 2).map(([l, d, n]) => key(l, d, n))}
+            </div>
+            <div className="tkeys__group tkeys__group--arrows">{MOVE.slice(0, 4).map(([l, d, n]) => key(l, d, n))}</div>
+            <div className="tkeys__group">{CONTROL.slice(2).map(([l, d, n]) => key(l, d, n))}</div>
+            <div className="tkeys__group">{MOVE.slice(4).map(([l, d, n]) => key(l, d, n))}</div>
+            <div className="tkeys__group tkeys__group--sym">{SYMBOLS.map((c) => key(c, c, c))}</div>
+          </div>
+        )}
+        {commandLine}
+      </div>
+    )
+
   return (
     <div className="tkeys">
       <div className="tkeys__row">
-        <button
-          type="button"
-          className={`tkeys__key${ctrl ? ' is-on' : ''}`}
-          aria-label="Control: the next letter is sent with Ctrl"
-          aria-pressed={ctrl}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={onCtrl}
-        >
-          Ctrl
-        </button>
+        {ctrlKey}
         {CONTROL.slice(0, 2).map(([l, d, n]) => key(l, d, n))}
         {/* one row, scrolled sideways: Ctrl, Esc, Tab, the arrows, then the shortcuts, the other moves and the symbols */}
         {MOVE.slice(0, 4).map(([l, d, n]) => key(l, d, n))}
@@ -406,28 +498,7 @@ function TouchKeys({ send, ctrl, onCtrl }: { send: (d: string) => void; ctrl: bo
           </span>
         ))}
       </div>
-      <form
-        className="tkeys__line"
-        onSubmit={(e) => {
-          e.preventDefault()
-          send(`${line}\r`)
-          setLine('')
-        }}
-      >
-        <input
-          value={line}
-          onChange={(e) => setLine(e.target.value)}
-          placeholder="Type a command…"
-          autoCapitalize="off"
-          autoCorrect="off"
-          autoComplete="off"
-          spellCheck={false}
-          enterKeyHint="send"
-        />
-        <button type="submit" className="icon-btn small" aria-label="Send">
-          <LuCornerDownLeft />
-        </button>
-      </form>
+      {commandLine}
     </div>
   )
 }
@@ -482,5 +553,56 @@ function TextPick({ text, onClose }: { text: string; onClose: () => void }) {
         {text || ' '}
       </pre>
     </div>
+  )
+}
+
+/**
+ * Phones: an ordinary (invisible) text field the keyboard types into, passed on to the terminal as it changes: letters
+ * as they come, deletions as Backspace, Enter as Return. Read as a difference from what it held before, so a phone
+ * keyboard's word-at-a-time input, suggestions and corrections all arrive right.
+ */
+const SEED = '  '
+function TypeProxy({ inputRef, send }: { inputRef: React.RefObject<HTMLInputElement | null>; send: (d: string) => void }) {
+  const prev = useRef(SEED)
+  const reset = (el: HTMLInputElement) => {
+    el.value = SEED
+    prev.current = SEED
+    el.setSelectionRange(SEED.length, SEED.length)
+  }
+  return (
+    <input
+      ref={inputRef}
+      className="term-proxy"
+      defaultValue={SEED}
+      aria-label="Type into the terminal"
+      autoCapitalize="off"
+      autoCorrect="off"
+      autoComplete="off"
+      spellCheck={false}
+      enterKeyHint="enter"
+      onFocus={(e) => reset(e.currentTarget)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          send('\r')
+          reset(e.currentTarget)
+        } else if (e.key === 'Tab') {
+          e.preventDefault()
+          send('\t')
+        }
+      }}
+      onInput={(e) => {
+        const el = e.currentTarget
+        const now = el.value
+        const was = prev.current
+        let same = 0
+        while (same < now.length && same < was.length && now[same] === was[same]) same++
+        const out = '\x7f'.repeat(was.length - same) + now.slice(same).replace(/\n/g, '\r')
+        if (out) send(out)
+        prev.current = now
+        // keep something to delete (Backspace on an empty field sends nothing) and the field short
+        if (now.length < SEED.length || now.length > 200) reset(el)
+      }}
+    />
   )
 }

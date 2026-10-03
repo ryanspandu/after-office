@@ -309,7 +309,7 @@ span.stab { padding: 0 4px 0 10px; }
 .term-full .term__bar { position: relative; z-index: 2; flex-wrap: nowrap; min-width: 0; margin: 0 -10px; padding: calc(8px + env(safe-area-inset-top)) 10px 0; background: var(--card); }
 .term-full .term__state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .term-full .term__hint { display: none; }
-.term-full .term__screen { flex: 1; min-height: 0; margin-bottom: calc(100px + env(safe-area-inset-bottom)); transition: transform 0.12s ease-out; }
+.term-full .term__screen { flex: 1; min-height: 0; margin-bottom: calc(62px + env(safe-area-inset-bottom)); transition: transform 0.12s ease-out; }
 .term-full__close { flex-shrink: 0; }
 .term-full__dock {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 1001; padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
@@ -321,3 +321,18 @@ span.stab { padding: 0 4px 0 10px; }
 .term-launch__icon { font-size: 34px; color: var(--muted); }
 .term-launch p { margin: 0; font-size: 13px; }
 .term-launch__actions { display: flex; gap: 8px; }
+/* the phone's typing field (TypeProxy): a real input the keyboard opens for, out of sight */
+.term-proxy { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; font-size: 16px; pointer-events: none; caret-color: transparent; }
+/* phones (full screen): the special keys behind one round button beside the command line, in a popup above it */
+.tkeys--floating { position: relative; }
+.tkeys__fab { width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; font-size: 18px; }
+.tkeys__fab.is-on { background: var(--text); color: var(--card); border-color: var(--text); }
+.tkeys__pop {
+  position: absolute; right: 0; bottom: calc(100% + 10px); width: min(340px, calc(100vw - 20px)); box-sizing: border-box;
+  max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.tkeys__group { display: flex; flex-wrap: wrap; gap: 5px; }
+.tkeys__group .tkeys__key { flex: 1 0 auto; min-width: 44px; height: 38px; }
+.tkeys__group--sym .tkeys__key { flex: 0 0 auto; min-width: 38px; font-size: 14px; }
+.tkeys--floating .tkeys__line { gap: 6px; }
