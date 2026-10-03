@@ -415,6 +415,7 @@ function idleText(spotId: string) {
   if (spotId.startsWith('pool')) return 'Shooting pool'
   if (spotId.startsWith('sofa')) return 'Watching TV'
   if (spotId.startsWith('pantry')) return 'Snack break in the pantry'
+  if (spotId.startsWith('pc-')) return 'Watching videos at the desk'
   if (spotId.startsWith('desk')) return 'Chilling at the desk'
   return 'Idle'
 }

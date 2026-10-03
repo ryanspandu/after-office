@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import type { Group, Mesh, MeshStandardMaterial } from 'three'
+import type { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial } from 'three'
 import type { OfficeAgent } from '../../state/store'
 import { env } from '../DayNight'
 import { CHAIR_OFFSET, DESK_LAMP, DESK_SIZE, type Vec2 } from '../layout'
@@ -10,7 +10,8 @@ import { Chair } from './Chair'
 import { DeskLamp } from './Lamps'
 
 // play: idle but still at the desk (the few seconds after a reply): a little Pac-Man game on the screen
-type ScreenMode = 'off' | 'work' | 'wait' | 'sleep' | 'play'
+// video: idle at its own desk on purpose (spot `pc-<desk>`): a cartoon playing, with a player's progress bar
+type ScreenMode = 'off' | 'work' | 'wait' | 'sleep' | 'play' | 'video'
 
 const SYNTAX = ['#f78c6c', '#82aaff', '#c3e88d', '#c792ea', '#ffcb6b', '#89ddff']
 const LINES = 7
@@ -18,6 +19,16 @@ const LINES = 7
 const DOTS = [-0.3, -0.18, -0.06, 0.06, 0.18, 0.3]
 const RUN = 4.5
 const LANE = 0.5
+// the video: a little cartoon, its scene changing every SCENE seconds (day, sunset, night, the beach), a red progress
+// bar under it that fills over CLIP seconds
+const SCENE = 5
+const CLIP = 20
+const SCENES = [
+  { sky: '#5fb4ff', ground: '#3fae5a', sun: '#ffe066' },
+  { sky: '#ff9a6b', ground: '#7a4a8c', sun: '#fff2b0' },
+  { sky: '#1b2a5a', ground: '#24324f', sun: '#e9eefc' },
+  { sky: '#7fe0d4', ground: '#e8c27a', sun: '#ffffff' },
+]
 
 function Computer({ mode, accent }: { mode: ScreenMode; accent: string }) {
   const face = useRef<Mesh>(null!)
@@ -27,6 +38,12 @@ function Computer({ mode, accent }: { mode: ScreenMode; accent: string }) {
   const mouth = useRef<Mesh>(null!)
   const ghost = useRef<Group>(null!)
   const dots = useRef<(Mesh | null)[]>([])
+  const video = useRef<Group>(null!)
+  const sky = useRef<Mesh>(null!)
+  const ground = useRef<Mesh>(null!)
+  const sun = useRef<Mesh>(null!)
+  const hero = useRef<Mesh>(null!)
+  const fill = useRef<Mesh>(null!)
   const state = useRef({ acc: 0, widths: Array.from({ length: LINES }, () => Math.random()), indents: Array.from({ length: LINES }, () => 0) })
 
   useFrame((_, dt) => {
@@ -58,6 +75,21 @@ function Computer({ mode, accent }: { mode: ScreenMode; accent: string }) {
       ghost.current.visible = x - 0.2 > -0.42
       ghost.current.position.y = LANE + Math.sin(t * 8) * 0.006
       dots.current.forEach((d, i) => d && (d.visible = DOTS[i] > x + 0.02))
+    } else if (mode === 'video') {
+      // each desk is at another point of its clip, so the room's screens don't change scene together
+      const clock = t + accent.length * 3.1
+      const scene = SCENES[Math.floor(clock / SCENE) % SCENES.length]
+      const p = (clock % SCENE) / SCENE
+      mat.emissive.set('#0b0d14')
+      mat.emissiveIntensity = 1 + env.night
+      ;(sky.current.material as MeshBasicMaterial).color.set(scene.sky)
+      ;(ground.current.material as MeshBasicMaterial).color.set(scene.ground)
+      ;(sun.current.material as MeshBasicMaterial).color.set(scene.sun)
+      sun.current.position.set(-0.34 + p * 0.68, 0.6 + Math.sin(p * Math.PI) * 0.08, 0.031)
+      hero.current.position.set(Math.sin(clock * 0.9) * 0.22, 0.43 + Math.abs(Math.sin(clock * 3.2)) * 0.05, 0.032)
+      const done = (clock % CLIP) / CLIP
+      fill.current.scale.x = Math.max(0.001, done)
+      fill.current.position.x = -0.42 + (0.84 * done) / 2
     } else if (mode === 'sleep') {
       mat.emissive.set('#23304a')
       mat.emissiveIntensity = (0.4 + Math.sin(t * 1.2) * 0.15) * (1 + env.night)
@@ -65,6 +97,7 @@ function Computer({ mode, accent }: { mode: ScreenMode; accent: string }) {
       mat.emissiveIntensity = 0
     }
     game.current.visible = mode === 'play'
+    video.current.visible = mode === 'video'
     lines.current.forEach((m, i) => {
       if (!m) return
       m.visible = mode === 'work'
@@ -89,6 +122,34 @@ function Computer({ mode, accent }: { mode: ScreenMode; accent: string }) {
           <meshBasicMaterial color={i === LINES - 1 ? accent : SYNTAX[i % SYNTAX.length]} toneMapped={false} />
         </mesh>
       ))}
+      <group ref={video} visible={false} userData={{ dynamic: true }}>
+        <mesh ref={sky} position={[0, 0.58, 0.029]}>
+          <planeGeometry args={[0.86, 0.3]} />
+          <meshBasicMaterial color={SCENES[0].sky} toneMapped={false} />
+        </mesh>
+        <mesh ref={ground} position={[0, 0.37, 0.029]}>
+          <planeGeometry args={[0.86, 0.12]} />
+          <meshBasicMaterial color={SCENES[0].ground} toneMapped={false} />
+        </mesh>
+        <mesh ref={sun} position={[0, 0.62, 0.031]}>
+          <circleGeometry args={[0.04, 16]} />
+          <meshBasicMaterial color={SCENES[0].sun} toneMapped={false} />
+        </mesh>
+        {/* someone hopping along in the cartoon */}
+        <mesh ref={hero} position={[0, 0.43, 0.032]}>
+          <planeGeometry args={[0.045, 0.07]} />
+          <meshBasicMaterial color={accent} toneMapped={false} />
+        </mesh>
+        {/* the player's bar: grey track, red played part */}
+        <mesh position={[0, 0.285, 0.03]}>
+          <planeGeometry args={[0.84, 0.014]} />
+          <meshBasicMaterial color="#555a66" toneMapped={false} />
+        </mesh>
+        <mesh ref={fill} position={[-0.42, 0.285, 0.031]}>
+          <planeGeometry args={[0.84, 0.014]} />
+          <meshBasicMaterial color="#ff3b30" toneMapped={false} />
+        </mesh>
+      </group>
       <group ref={game} visible={false} userData={{ dynamic: true }}>
         {/* the maze's walls above and below the lane */}
         {[LANE + 0.1, LANE - 0.1].map((y) => (
@@ -145,7 +206,10 @@ export function Workstation({ at, owner, index }: { at: Vec2; owner?: OfficeAgen
         : // done but still sitting there (the wind-down after a reply): playing a game
           owner.status === 'idle' && (owner.spotId === `desk-${owner.desk}` || isBossSpot(owner.spotId))
           ? 'play'
-          : 'sleep'
+          : // idle at its own desk on purpose: a video on
+            owner.status === 'idle' && owner.spotId === `pc-${owner.desk}`
+            ? 'video'
+            : 'sleep'
   const { w, d, h } = DESK_SIZE
   return (
     <group position={[at[0], 0, at[1]]}>

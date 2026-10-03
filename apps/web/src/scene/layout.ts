@@ -7,7 +7,7 @@
 export type Vec2 = [x: number, z: number]
 
 /** What an agent does once it reaches a spot. */
-export type SpotKind = 'desk' | 'meeting' | 'sofa' | 'cat' | 'billiards' | 'pantry' | 'read'
+export type SpotKind = 'desk' | 'meeting' | 'sofa' | 'cat' | 'billiards' | 'pantry' | 'read' | 'pc'
 
 export interface Spot {
   id: string
@@ -227,6 +227,8 @@ export function deskSpot(i: number): Spot {
 export function spotById(id: string): Spot {
   if (isBossSpot(id)) return bossPlaceSpot(id)
   if (id.startsWith('desk-')) return deskSpot(Number(id.slice(5)))
+  // idle at its own desk, watching something on its screen (`pc-<desk>`): the desk's chair, another pose
+  if (id.startsWith('pc-')) return { ...deskSpot(Number(id.slice(3))), id, kind: 'pc' }
   return FIXED_BY_ID.get(id) ?? deskSpot(0)
 }
 

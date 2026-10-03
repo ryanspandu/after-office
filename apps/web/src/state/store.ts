@@ -234,18 +234,19 @@ function assignSpot(agent: Pick<OfficeAgent, 'id' | 'desk'> & { kind?: OfficeAge
 
   if (status === 'meeting') return free('meeting')[0]?.id ?? desk
 
-  // idle → pet the cat, shoot some pool, watch TV on the sofa, or grab a snack in the pantry
-  if (current && /^(cat|pool|sofa|pantry)/.test(current)) return current
+  // idle → pet the cat, shoot some pool, watch TV on the sofa, grab a snack in the pantry, or stay at its own desk
+  // watching videos on its screen
+  if (current && /^(cat|pool|sofa|pantry|pc-)/.test(current)) return current
   const options = [
-    ...free('cat').map((s) => ({ s, w: 4 })),
-    ...free('billiards').map((s) => ({ s, w: 4 })),
-    ...free('sofa').map((s) => ({ s, w: 1.5 })),
-    ...free('pantry').map((s) => ({ s, w: 1.5 })),
+    ...free('cat').map((s) => ({ id: s.id, w: 4 })),
+    ...free('billiards').map((s) => ({ id: s.id, w: 4 })),
+    ...free('sofa').map((s) => ({ id: s.id, w: 1.5 })),
+    ...free('pantry').map((s) => ({ id: s.id, w: 1.5 })),
+    { id: `pc-${agent.desk}`, w: 3 },
   ]
-  if (!options.length) return desk
   let r = Math.random() * options.reduce((sum, o) => sum + o.w, 0)
-  for (const o of options) if ((r -= o.w) <= 0) return o.s.id
-  return options[0].s.id
+  for (const o of options) if ((r -= o.w) <= 0) return o.id
+  return options[0].id
 }
 
 export type DataSource = 'demo' | 'live'
