@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { LuArrowDown, LuArrowLeft, LuArrowRight, LuArrowUp, LuCornerDownLeft, LuPlugZap, LuRotateCw } from 'react-icons/lu'
+import { LuArrowDown, LuArrowLeft, LuArrowRight, LuArrowUp, LuCheck, LuCopy, LuCornerDownLeft, LuPlugZap, LuRotateCw, LuTextSelect, LuX } from 'react-icons/lu'
 
 // The real Claude Code TUI: xterm.js attached to the agent's tmux session through /api/agents/:id/term.
 // Typing here is exactly like typing in the terminal on the server.
@@ -41,6 +41,9 @@ export function TerminalTab({
   const ctrlRef = useRef(false)
   ctrlRef.current = ctrl
   const touch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
+  const termRef = useRef<Terminal | null>(null)
+  // touch screens can't select in xterm: its text as plain text instead (selected the phone's own way), or copied whole
+  const [picking, setPicking] = useState<string | null>(null)
 
   useEffect(() => {
     if (offline || !host.current) return
@@ -56,6 +59,19 @@ export function TerminalTab({
     term.loadAddon(fit)
     term.open(host.current)
     fit.fit()
+    termRef.current = term
+    // phones: a tap on the screen focuses xterm's hidden field (in the tap itself, or the keyboard won't come up),
+    // and that field takes keys as typed: no capitals, corrections or suggestions
+    const ta = term.textarea
+    if (ta) {
+      ta.setAttribute('autocapitalize', 'off')
+      ta.setAttribute('autocorrect', 'off')
+      ta.setAttribute('autocomplete', 'off')
+      ta.setAttribute('spellcheck', 'false')
+    }
+    const el = host.current
+    const tapFocus = () => term.focus()
+    el.addEventListener('click', tapFocus)
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(`${proto}://${location.host}${url ?? `/api/agents/${agentId}/term${session ? `?session=${session}` : ''}`}`)
@@ -89,14 +105,34 @@ export function TerminalTab({
         // element hidden
       }
     }
+    // the whole screen drawn again: tmux only repaints on a change of size, so it gets a row less and back. Without
+    // it, a terminal attached while its sheet was still sliding up can stay blank until something is typed.
+    let redrawTimer = 0
+    const redraw = () => {
+      refit()
+      if (ws.readyState !== WebSocket.OPEN || term.rows < 3) return
+      send({ t: 'resize', cols: term.cols, rows: term.rows - 1 })
+      clearTimeout(redrawTimer)
+      redrawTimer = window.setTimeout(() => {
+        send({ t: 'resize', cols: term.cols, rows: term.rows })
+        term.refresh(0, term.rows - 1)
+      }, 80)
+    }
     const ro = new ResizeObserver(refit)
     ro.observe(host.current)
     // measured again once the font is in and a sheet has finished sliding up (the first size can be off by a row)
-    void document.fonts?.ready.then(refit)
-    const late = setTimeout(refit, 350)
+    void document.fonts?.ready.then(redraw)
+    const late = setTimeout(redraw, 450)
+    // back to the app (a phone locks, another app): the screen may have missed a repaint
+    const back = () => document.visibilityState === 'visible' && redraw()
+    document.addEventListener('visibilitychange', back)
 
     return () => {
       clearTimeout(late)
+      clearTimeout(redrawTimer)
+      document.removeEventListener('visibilitychange', back)
+      el.removeEventListener('click', tapFocus)
+      termRef.current = null
       sendRef.current = null
       ro.disconnect()
       input.dispose()
@@ -121,11 +157,17 @@ export function TerminalTab({
         <span className="muted term__hint">
           <LuPlugZap /> Closing this only detaches; it keeps running
         </span>
+        {state === 'open' && (
+          <button className="small term__select" onClick={() => setPicking(termText(termRef.current))} data-tip="The terminal's text, to select and copy">
+            <LuTextSelect /> Select
+          </button>
+        )}
         {actions}
       </div>
       {/* padding lives on the frame; xterm measures the inner box, so fit() doesn't count the padding as rows */}
       <div className="term__screen">
         <div className="term__host" ref={host} />
+        {picking !== null && <TextPick text={picking} onClose={() => (setPicking(null), termRef.current?.focus())} />}
       </div>
       {touch && state === 'open' && <TouchKeys send={(d) => sendRef.current?.(d)} ctrl={ctrl} onCtrl={() => setCtrl((v) => !v)} />}
     </div>
@@ -208,6 +250,59 @@ function TouchKeys({ send, ctrl, onCtrl }: { send: (d: string) => void; ctrl: bo
           <LuCornerDownLeft />
         </button>
       </form>
+    </div>
+  )
+}
+
+/** What the terminal shows and keeps above (its scrollback), as plain text: trailing blank lines dropped. */
+function termText(term: Terminal | null) {
+  if (!term) return ''
+  const buf = term.buffer.active
+  const lines: string[] = []
+  for (let i = 0; i < buf.length; i++) {
+    const line = buf.getLine(i)
+    if (!line) continue
+    // a wrapped row continues the one before it
+    if (line.isWrapped && lines.length) lines[lines.length - 1] += line.translateToString(true)
+    else lines.push(line.translateToString(true))
+  }
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop()
+  return lines.join('\n')
+}
+
+/** The terminal's text over its screen: selected the phone's own way (long press, handles), or copied whole. */
+function TextPick({ text, onClose }: { text: string; onClose: () => void }) {
+  const pre = useRef<HTMLPreElement>(null)
+  const [copied, setCopied] = useState(false)
+  // opens at the end (the latest output), like the terminal
+  useEffect(() => {
+    if (pre.current) pre.current.scrollTop = pre.current.scrollHeight
+  }, [])
+  const copy = async () => {
+    const sel = window.getSelection()?.toString()
+    try {
+      await navigator.clipboard.writeText(sel && pre.current?.contains(window.getSelection()!.anchorNode) ? sel : text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // no clipboard (not a secure page): the text is still there to select
+    }
+  }
+  return (
+    <div className="term-pick ui-drop">
+      <div className="term-pick__bar">
+        <span className="muted">Long-press to select, or copy</span>
+        <span className="grow" />
+        <button type="button" className="small" onClick={() => void copy()}>
+          {copied ? <LuCheck /> : <LuCopy />} {copied ? 'Copied' : 'Copy'}
+        </button>
+        <button type="button" className="icon-btn small" onClick={onClose} aria-label="Back to the terminal">
+          <LuX />
+        </button>
+      </div>
+      <pre ref={pre} className="term-pick__text">
+        {text || ' '}
+      </pre>
     </div>
   )
 }

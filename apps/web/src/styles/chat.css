@@ -125,7 +125,7 @@
 .term { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
 .term__bar { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .term__hint { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
-.term__screen { flex: 1; min-height: 300px; border-radius: 12px; overflow: hidden; background: #111; padding: 8px; display: flex; }
+.term__screen { position: relative; flex: 1; min-height: 300px; border-radius: 12px; overflow: hidden; background: #111; padding: 8px; display: flex; }
 .term__host { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
 /* the terminal wraps its lines: no sideways scrollbar (it showed as a dark bar along the bottom) */
 .term__host .xterm .scrollbar.horizontal { display: none !important; }
@@ -288,3 +288,13 @@ span.stab { padding: 0 4px 0 10px; }
 .tkeys__row .tkeys__key svg { font-size: 15px; }
 .tkeys__line { display: flex; gap: 6px; align-items: center; }
 .tkeys__line input { flex: 1; min-width: 0; height: 36px; font: 13px ui-monospace, Menlo, monospace; }
+/* the terminal's text as plain text over its screen (touch screens can't select in xterm): selectable, copyable */
+.term-pick { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: #111; }
+.term-pick__bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #2a2a2a; font-size: 12px; }
+.term-pick__bar .muted { color: #9a9a96; }
+.term-pick__text {
+  flex: 1; min-height: 0; margin: 0; padding: 10px 12px; overflow: auto; color: #e9e9e6;
+  font: 12.5px/1.35 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+  -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+}
+.term__select { flex-shrink: 0; }

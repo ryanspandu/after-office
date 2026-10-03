@@ -110,9 +110,11 @@ export function useSheetDrag<T extends HTMLElement>(onClose: () => void, cardRef
       if (Math.abs(dy) < 6) return
       d.moved = true
       watchFull(el)
+      // measured before 'is-dragging' (a chat drawer lets go of its top then, and would shrink to its content)
+      measure(el, d)
+      el.style.height = `${d.h0}px`
       // its opening slide is over for good: taking 'is-dragging' off later mustn't play it again
       el.classList.add('is-opened', 'is-dragging')
-      measure(el, d)
     }
     resize(el, d, d.h0! - dy)
   }

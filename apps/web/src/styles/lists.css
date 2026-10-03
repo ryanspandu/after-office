@@ -69,9 +69,9 @@
 .row__unread { display: inline-flex; align-items: center; gap: 3px; }
 /* phones: an agent card's chat button, under its status badge (a tap on the card itself does nothing there) */
 .row.agent { position: relative; }
-.agent__chat { position: absolute; right: 6px; top: 34px; width: 30px; height: 30px; }
+.row.agent .agent__chat { position: absolute; right: 6px; top: 34px; width: 32px; height: 32px; font-size: 15px; }
 .agent__chat-count { position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px; background: var(--hl); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; box-sizing: border-box; }
 @media (max-width: 768px) {
   .row.agent { cursor: default; }
-  .row.agent .row__meta, .row.agent .row__mono { padding-right: 40px; }
+  .row.agent .row__meta, .row.agent .row__mono { padding-right: 42px; }
 }

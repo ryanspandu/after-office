@@ -46,3 +46,8 @@
   .tool { width: 100%; }
   .chat--mobile .chat__log { padding-top: 52px; }
 }
+/* phones: a chat drawer being resized, or left at its own height (state/useSheetDrag.ts), stays on the bottom edge
+   (it's pinned top and bottom otherwise, so a set height would lift its bottom instead of moving its top) */
+@media (max-width: 768px) {
+  .drawer.is-dragging, .drawer[data-sheet-h] { top: auto; }
+}
