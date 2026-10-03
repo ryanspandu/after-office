@@ -6,7 +6,7 @@ import { streamSSE } from 'hono/streaming'
 import type { FollowUpDecision, LiveMode } from '@after-office/shared'
 import { agentsRepo, sideSessionsRepo, usageRepo } from '../db'
 import { existsSync } from 'node:fs'
-import { cleanChatContext, contextBlock, expectChatReport, withContext } from '../work/work'
+import { cleanChatContext, contextBlock, expectChatReport, withContext, stopActiveTask } from '../work/work'
 import { decide } from '../agents/ingest'
 import { AgentError, changeFolder, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeFolder, randomStyle, grantFolder, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
 import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime } from '../agents/registry'
@@ -231,8 +231,11 @@ agentRoutes.post('/agents/:id/read', (c) => {
 })
 
 agentRoutes.post('/agents/:id/interrupt', async (c) => {
-  await interrupt(c.req.param('id'), sessionKeyOf(c.req.query('session')))
-  return c.json({ ok: true })
+  const key = sessionKeyOf(c.req.query('session'))
+  await interrupt(c.req.param('id'), key)
+  // stopped partway through a task: it goes back to To do now (Resume picks it up), not when the next message comes
+  const task = stopActiveTask(c.req.param('id'), { author: 'user' }, undefined, key)
+  return c.json({ ok: true, ...(task ? { task: { id: task.id, title: task.title } } : {}) })
 })
 
 // ── side sessions: more chats with the same agent, each its own Claude Code process (agents/manager.ts) ──

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ReactSelect from 'react-select'
 import { ProjectFolderPicker } from './ProjectFolderPicker'
-import { LuCircleCheck, LuCircleX, LuFolder, LuHourglass, LuLoader, LuLock, LuX } from 'react-icons/lu'
+import { LuCircleCheck, LuCircleX, LuFolder, LuHourglass, LuLoader, LuLock, LuCirclePause, LuX } from 'react-icons/lu'
 import type { OfficeTask, TaskPriority, TaskStatus, TaskStatusDef } from '@after-office/shared'
 import { useLive } from '../state/live'
 import { openUrl } from '../state/url'
@@ -209,13 +209,23 @@ export function WaitsForSelect({ taskId, value, onChange }: { taskId?: string; v
 /** Small lock shown on a task that still waits for others. */
 export function BlockedBadge({ task }: { task: OfficeTask }) {
   const tasks = useDashboard((s) => s.tasks)
-  if (!task.blockedBy?.length || task.status !== 'todo') return null
+  // stopped partway (the owner's Stop, the manager's interrupt): Resume, in the task, continues it
+  const stopped =
+    task.stoppedAt && task.status === 'todo' ? (
+      <span className="blocked-badge blocked-badge--stopped" data-tip="Stopped partway: open it to Resume" aria-label="Stopped partway">
+        <LuCirclePause />
+      </span>
+    ) : null
+  if (!task.blockedBy?.length || task.status !== 'todo') return stopped
   const waiting = waitingOn(task, tasks)
-  if (!waiting.length) return null
+  if (!waiting.length) return stopped
   return (
-    <span className="blocked-badge" data-tip={`Waits for ${waiting.map((t) => `"${t.title}"`).join(', ')}`} aria-label="Waiting for other tasks">
-      <LuLock />
-    </span>
+    <>
+      {stopped}
+      <span className="blocked-badge" data-tip={`Waits for ${waiting.map((t) => `"${t.title}"`).join(', ')}`} aria-label="Waiting for other tasks">
+        <LuLock />
+      </span>
+    </>
   )
 }
 

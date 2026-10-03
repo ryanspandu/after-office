@@ -3,6 +3,7 @@ import { MicButton, ListeningBar, SpeakingChip } from '../Voice'
 import { useDictation } from '../../state/dictation'
 import { primeSpeech, talkedByVoice } from '../../state/speech'
 import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX } from 'react-icons/lu'
+import { openUrl } from '../../state/url'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import type { ChatItem, LiveMode } from '@after-office/shared'
 import { mentionedPaths, modelChoiceOf, MODELS } from '@after-office/shared'
@@ -74,6 +75,13 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  // Stop pressed partway through a task: it's back in To do (Resume, in the task, continues it)
+  const [stoppedTask, setStoppedTask] = useState<{ id: string; title: string } | null>(null)
+  const stop = () =>
+    run('stop', async () => {
+      const r = (await liveApi.interrupt(agent.id, sk)) as { task?: { id: string; title: string } }
+      if (r?.task) setStoppedTask(r.task)
+    })
   const [busy, setBusy] = useState('')
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
@@ -474,7 +482,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
           </span>
         )}
         {active && !mobile && (
-          <button className="small" onClick={() => run('stop', () => liveApi.interrupt(agent.id, sk))} data-tip="Press Esc in the session">
+          <button className="small" onClick={stop} data-tip="Press Esc in the session">
             <LuCircleStop /> Stop
           </button>
         )}
@@ -507,7 +515,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
         <>
           <div className={`chat__float${findOpen ? ' chat__float--find' : ''}`}>
             {active && !findOpen && (
-              <button className="small" onClick={() => run('stop', () => liveApi.interrupt(agent.id, sk))} aria-label="Stop the agent">
+              <button className="small" onClick={stop} aria-label="Stop the agent">
                 <LuCircleStop /> Stop
               </button>
             )}
@@ -607,6 +615,19 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       {offline && (session ? <div className="chat__notice">Starting the session…</div> : <OfflineBanner agent={agent} />)}
       {error && <div className="chat__error">{error}</div>}
       {!error && notice && agent.status === 'waiting' && <div className="chat__notice">{notice}</div>}
+      {stoppedTask && (
+        <div className="chat__notice chat__notice--stopped">
+          <span>
+            “{stoppedTask.title}” is back in To do (stopped).
+          </span>
+          <button className="small" onClick={() => (openUrl({ task: stoppedTask.id }), setStoppedTask(null))}>
+            Open to Resume
+          </button>
+          <button className="icon-btn small ghost" aria-label="Dismiss" onClick={() => setStoppedTask(null)}>
+            <LuX />
+          </button>
+        </div>
+      )}
       <PendingTray items={pending.items} onRemove={pending.remove} />
       {/* always there, folded away when closed: it slides open and shut (CSS grid rows) */}
       <div className={`chat-ctx-wrap${ctxShown ? ' is-open' : ''}`} inert={!ctxShown}>

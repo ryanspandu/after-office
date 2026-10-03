@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuCheck, LuCrown, LuMessageSquareReply, LuPlay, LuRotateCcw, LuSend, LuSplit, LuTrash2, LuUser } from 'react-icons/lu'
+import { LuCheck, LuCrown, LuMessageSquareReply, LuPlay, LuRotateCcw, LuSend, LuSplit, LuTrash2, LuUser, LuCirclePause, LuStepForward } from 'react-icons/lu'
 import type { OfficeTask } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { hasUnsaved, useDashboard } from '../state/dashboard'
@@ -99,6 +99,21 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
     }
   }
 
+  // stopped partway (the owner's Stop, the manager's interrupt): its agent can take it up again where it stopped
+  const stopped = !!task.stoppedAt && task.status === 'todo'
+  const resume = async () => {
+    setStarting(true)
+    setStartMsg(null)
+    try {
+      const { result } = await liveApi.resumeTask(task.id)
+      setStartMsg({ ok: true, text: result === 'queued' ? 'Agent is busy: queued, it picks this up when it is free.' : 'Sent: the agent continues where it stopped.' })
+    } catch (e) {
+      setStartMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not resume' })
+    } finally {
+      setStarting(false)
+    }
+  }
+
   const set = (patch: Partial<OfficeTask>) => updateTask(task.id, patch)
   const done = task.status === 'done'
   const due = dueInfo(task.deadline, now)
@@ -119,6 +134,11 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
           {mine && (
             <span className="check-pill check-pill--approval">
               <LuUser /> Your task
+            </span>
+          )}
+          {stopped && (
+            <span className="check-pill check-pill--stopped" data-tip={`Stopped partway, ${new Date(task.stoppedAt!).toLocaleString()}: Resume continues it where it stopped`}>
+              <LuCirclePause /> Stopped
             </span>
           )}
           {task.sessionKey && (
@@ -281,7 +301,12 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
                         : "Type this task into the agent's session"
               }
             >
-              <LuPlay /> {task.status === 'in_progress' ? 'Send again' : 'Start on agent'}
+              <LuPlay /> {task.status === 'in_progress' ? 'Send again' : stopped ? 'Start over' : 'Start on agent'}
+            </button>
+          )}
+          {live && !mine && stopped && (
+            <button className="primary" onClick={resume} disabled={starting || !agentOnline} data-tip={agentOnline ? 'The same agent continues from where it stopped' : 'Agent is offline'}>
+              <LuStepForward /> Resume
             </button>
           )}
           {inReview ? (

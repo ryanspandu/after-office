@@ -77,7 +77,7 @@ const serverSecret = () => {
   return s
 }
 /** What happens once an import is in place (tests replace it): the server exits, its service manager starts it again. */
-export const afterImport = { restart: () => process.exit(0) }
+export const afterImport = { restart: (): void => process.exit(0) }
 
 let job: MigrateJob | null = null
 let exportFile: string | null = null

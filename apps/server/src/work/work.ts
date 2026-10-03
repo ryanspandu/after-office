@@ -514,6 +514,59 @@ export function markTask(id: string, patch: Partial<OfficeTask>) {
 
 // ── tasks ──
 
+/**
+ * An agent stopped partway through its task (the owner's Stop, the manager's interrupt_agent / stop_task): the task
+ * goes back to To do, marked stopped (Resume picks it up where it stopped), with a note on it and a report, so whoever
+ * follows it up (the manager, for its tasks) knows. `key`: one of its side sessions. Returns the task, if there was one.
+ */
+export function stopActiveTask(agentId: string, by: { author: 'user' | 'manager'; agentId?: string }, reason?: string, key = '') {
+  const who = by.author === 'manager' ? 'the manager' : 'the owner'
+  const why = reason?.trim() ? ` (${reason.trim()})` : ''
+  const note = (taskId: string) =>
+    addComment({ taskId, author: by.author, ...(by.agentId ? { agentId: by.agentId } : {}), kind: 'note', text: `Stopped by ${who}${why}. Back in To do; Resume continues where it stopped.` })
+  if (key) {
+    // a side session's task (parallel.ts keeps no run of its own here)
+    const t = tasksRepo.active().find((x) => x.agentId === agentId && x.sessionKey === key && x.status === 'in_progress')
+    if (!t) return null
+    markTask(t.id, { status: 'todo', stoppedAt: Date.now() })
+    note(t.id)
+    return tasksRepo.get(t.id)
+  }
+  const a = active.get(agentId)
+  if (!a) return null
+  active.delete(agentId)
+  // the mode it was switched to for this task: back to the agent's own
+  if (a.restoreMode) void setMode(agentId, a.restoreMode).catch((e) => console.warn('[task] could not restore mode:', e.message))
+  const t = a.taskId ? tasksRepo.get(a.taskId) : null
+  if (t && t.status === 'in_progress') markTask(t.id, { status: 'todo', stoppedAt: Date.now() })
+  if (t) note(t.id)
+  // the manager stopped it itself: no report back to it about its own decision
+  fileReport(agentId, a, `Stopped by ${who} before the agent finished${why}. The task is back in To do; Resume continues it where it stopped.`, false, {
+    forward: by.author !== 'manager',
+  })
+  return t ? tasksRepo.get(t.id) : null
+}
+
+/** A stopped task taken up again by the same agent, from where it stopped (its conversation still has the work so far). */
+export async function resumeTask(taskId: string) {
+  const task = tasksRepo.get(taskId)
+  if (!task) throw new AgentError('No such task', 404)
+  if (!task.agentId || !agentsRepo.get(task.agentId)) throw new AgentError('Assign the task to an agent first')
+  if (task.status !== 'todo') throw new AgentError('Only a stopped task (back in To do) can be resumed')
+  const folder = task.folder && existsSync(task.folder) ? task.folder : null
+  const prompt = [
+    `Resume the task: ${task.title}`,
+    folder ? `Folder: ${folder} (work there)` : null,
+    "\nYou were stopped partway through it. Continue from where you left off: what you did so far is in this conversation and in the files. Don't start over.",
+    '\nWhen you are done, give a short summary of what you changed and anything I should review.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  const result = await deliver(task.agentId, prompt, { taskId })
+  markTask(taskId, { stoppedAt: undefined, sessionKey: undefined, ...(result === 'sent' ? { status: 'in_progress', startedAt: Date.now() } : {}) })
+  return result
+}
+
 export async function startTask(taskId: string, agentId?: string) {
   const task = tasksRepo.get(taskId)
   if (!task) throw new AgentError('No such task', 404)
@@ -540,7 +593,7 @@ export async function startTask(taskId: string, agentId?: string) {
     return 'parallel' as const
   }
   const result = await deliver(target, prompt, { taskId })
-  markTask(taskId, { agentId: target, sessionKey: undefined, ...(result === 'sent' ? { status: 'in_progress', startedAt: Date.now() } : {}) })
+  markTask(taskId, { agentId: target, sessionKey: undefined, stoppedAt: undefined, ...(result === 'sent' ? { status: 'in_progress', startedAt: Date.now() } : {}) })
   return result
 }
 

@@ -334,6 +334,8 @@ export const liveApi = {
   reopenSession: (id: string, key: string) => call(`/api/agents/${id}/sessions/${key}/reopen`, {}) as Promise<{ key: string }>,
   forgetSession: (id: string, key: string) => call(`/api/agents/${id}/sessions/${key}/forget`, undefined, 'DELETE'),
   reviseTask: (taskId: string, feedback: string) => call(`/api/tasks/${taskId}/revise`, { feedback }) as Promise<{ result: 'sent' | 'queued' }>,
+  /** a stopped task taken up again by its agent, where it stopped */
+  resumeTask: (taskId: string) => call(`/api/tasks/${taskId}/resume`, {}) as Promise<{ result: 'sent' | 'queued' }>,
   startTask: (taskId: string, agentId?: string) => call(`/api/tasks/${taskId}/start`, { agentId }) as Promise<{ result: 'sent' | 'queued' | 'parallel' }>,
   taskArchive: async (q: string, offset = 0): Promise<TaskArchivePage> => {
     const res = await api(`/api/tasks/archive?${new URLSearchParams({ q, offset: String(offset) })}`)

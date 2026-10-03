@@ -474,6 +474,8 @@ export interface OfficeTask {
   forOwner?: boolean
   /** Server-owned: the side session it's running in (s2, s3…), while it runs there; closed when it finishes. */
   sessionKey?: string
+  /** stopped partway (the owner's Stop, the manager's interrupt): back in To do; Resume continues it where it stopped */
+  stoppedAt?: number
 }
 
 /** A file changed since a task was handed to its agent. */

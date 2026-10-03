@@ -6,7 +6,7 @@ import { DEFAULT_MODEL, divisionOf, MODEL_CHOICES, RULE_PACKS, type OfficeTask, 
 import { agentsRepo, commentsRepo, connectorsOf, cronsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
 import { knownConnectors, listConnectors } from './agents/connectors'
 import { diffSince } from './work/git'
-import { AgentError, restartAgent } from './agents/manager'
+import { AgentError, interrupt, restartAgent } from './agents/manager'
 import { restartWhenIdle } from './agents/reconciler'
 import { requestHire } from './work/hires'
 import { bossMode, countBoss } from './work/settings'
@@ -14,7 +14,7 @@ import { logSystem, noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
 import { jobNamed } from './work/jobs'
 import { statusLabel } from './work/statuses'
-import { isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker, ownerTask } from './work/work'
+import { stopActiveTask, markTask, isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker, ownerTask } from './work/work'
 import { listTags, tagIdsByName, tagNames } from './work/tags'
 import { cleanFolder } from './work/folders'
 import { agentDeleteNote, agentEditNote, agentNotes, agentReadNote, agentWriteNote, noteForAgent } from './work/notes'
@@ -249,6 +249,80 @@ function buildServer(managerId: string) {
         countBoss('messages')
         if (target.id !== managerId) expectReply(target.id, managerId)
         return text(result === 'sent' ? `Sent to ${target.name}.` : `${target.name} is busy; queued.`)
+      } catch (e) {
+        return fail(e)
+      }
+    },
+  )
+
+  // stopping work partway: the agent stops (like Esc in its terminal); a task it was on goes back to To do, marked
+  // stopped (Resume picks it up), with a note saying the manager stopped it and why
+  const stopWork = async (target: AgentRow, reason: string, key = '') => {
+    await interrupt(target.id, key)
+    const task = stopActiveTask(target.id, { author: 'manager', agentId: managerId }, reason, key)
+    logSystem(target.id, `Stopped by the manager: ${reason}`)
+    return task
+  }
+  // right after an agent's report, no stopping agents (an injected report mustn't be able to halt the office)
+  const stopRefused = () =>
+    isReadingAgentOutput(managerId) && !bossMode()
+      ? fail(new Error("Right after an agent's report, stopping agents is off. Tell the owner what you'd stop and why, or wait for your next turn."))
+      : null
+
+  server.registerTool(
+    'interrupt_agent',
+    {
+      description:
+        "Stop what an agent is doing right now (like pressing Esc in its terminal): for one going the wrong way, looping, or working on something that's no longer wanted. Its conversation stays. A task it was on goes back to To do, marked stopped (the owner can Resume it, or you can send it again). Not yourself. Say why; tell the owner.",
+      inputSchema: {
+        agent: z.string().describe('agent id or name'),
+        reason: z.string().min(3).max(300).describe('why, in a few words (shown on the task and in its activity log)'),
+      },
+    },
+    async ({ agent, reason }) => {
+      try {
+        const target = resolveAgent(agent, managerId)
+        if (target.id === managerId) return fail(new Error("You can't interrupt yourself."))
+        const refused = stopRefused()
+        if (refused) return refused
+        const status = runtimeOf(target.id).status
+        if (status !== 'working' && status !== 'waiting') return text(`${target.name} isn't working right now (${status}); nothing to stop.`)
+        const task = await stopWork(target, reason)
+        return text(`${target.name} stopped.${task ? ` Its task "${task.title}" is back in To do (stopped; it can be resumed).` : ''}`)
+      } catch (e) {
+        return fail(e)
+      }
+    },
+  )
+
+  server.registerTool(
+    'stop_task',
+    {
+      description:
+        "Stop a task that's in progress and put it back in To do: its agent stops (conversation kept), the task is marked stopped, so it can be resumed later or sent again. For work that's no longer wanted now, or must wait. Say why; tell the owner.",
+      inputSchema: {
+        task: z.string().describe('task id'),
+        reason: z.string().min(3).max(300).describe('why, in a few words (shown on the task)'),
+      },
+    },
+    async ({ task: taskId, reason }) => {
+      try {
+        const t = tasksRepo.get(taskId)
+        if (!t) return fail(new Error('No such task'))
+        if (t.status !== 'in_progress') return fail(new Error(`That task isn't in progress (it's ${statusLabel(t.status, t.customStatus)}).`))
+        if (!t.agentId || !agentsRepo.get(t.agentId)) return fail(new Error('That task has no agent.'))
+        if (t.agentId === managerId) return fail(new Error("That's your own task."))
+        const refused = stopRefused()
+        if (refused) return refused
+        const stopped = await stopWork(agentsRepo.get(t.agentId)!, reason, t.sessionKey ?? '')
+        // its agent wasn't really on it any more (no run tracked): still back to To do
+        if (!stopped || stopped.id !== t.id) {
+          if (tasksRepo.get(t.id)?.status === 'in_progress') {
+            markTask(t.id, { status: 'todo', stoppedAt: Date.now() })
+            addComment({ taskId: t.id, author: 'manager', agentId: managerId, kind: 'note', text: `Stopped by the manager (${reason}). Back in To do.` })
+          }
+        }
+        return text(`"${t.title}" stopped and back in To do.`)
       } catch (e) {
         return fail(e)
       }

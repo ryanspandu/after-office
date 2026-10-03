@@ -336,3 +336,5 @@ span.stab { padding: 0 4px 0 10px; }
 .tkeys__group .tkeys__key { flex: 1 0 auto; min-width: 44px; height: 38px; }
 .tkeys__group--sym .tkeys__key { flex: 0 0 auto; min-width: 38px; font-size: 14px; }
 .tkeys--floating .tkeys__line { gap: 6px; }
+.chat__notice--stopped { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; color: var(--text); background: rgba(217, 119, 6, 0.12); }
+.chat__notice--stopped > span { flex: 1; min-width: 0; }

@@ -17,7 +17,7 @@ import { listPreviews, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
 import { createNote, deleteNote, reorderNotes, updateNote } from '../work/notes'
 import { cleanFolder } from '../work/folders'
-import { taskFolder, addComment, deliver, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
+import { taskFolder, addComment, deliver, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
 import { requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
@@ -164,6 +164,9 @@ workRoutes.post('/tasks/:id/start', async (c) => {
   const body = await c.req.json<{ agentId?: string }>().catch(() => ({}) as { agentId?: string })
   return c.json({ result: await startTask(c.req.param('id'), body.agentId) })
 })
+
+// a stopped task (the owner's Stop, the manager's interrupt) taken up again by its agent, where it stopped
+workRoutes.post('/tasks/:id/resume', async (c) => c.json({ result: await resumeTask(c.req.param('id')) }))
 
 workRoutes.post('/tasks/:id/revise', async (c) => {
   const body = await c.req.json<{ feedback?: string }>().catch(() => ({}) as { feedback?: string })
