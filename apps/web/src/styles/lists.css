@@ -57,3 +57,13 @@
   display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
   color: #fff; font-size: 12px; font-weight: 600;
 }
+/* agent card (ui/AgentsPanel.tsx): one click opens its chat; the avatar with the ⋯ menu under it */
+.row.agent { cursor: pointer; }
+.agent__side { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+.agent__more.agent__more { width: 30px; height: 22px; border-radius: 8px; color: var(--muted); border: none; background: color-mix(in srgb, var(--text) 5%, transparent); }
+.agent__more.agent__more:hover:not(:disabled), .agent__more.agent__more.is-on { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
+.agent-menu button[role='menuitem'].is-on { font-weight: 600; background: var(--card-2); }
+.agent-menu button[role='menuitem'].danger-text, .agent-menu button[role='menuitem'].danger-text svg { color: var(--danger); }
+.agent-menu__label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; white-space: nowrap; }
+.agent-menu__hint { font-size: 11px; line-height: 1.2; }
+.row__unread { display: inline-flex; align-items: center; gap: 3px; }

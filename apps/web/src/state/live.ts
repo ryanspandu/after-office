@@ -345,6 +345,7 @@ export const liveApi = {
     quota?: Partial<OfficeSettings['quota']>
     managerApproval?: boolean
     parallelSessions?: number
+    dailySummary?: Partial<OfficeSettings['dailySummary']>
     autoAssign?: boolean
   }) => call('/api/automation', patch, 'PUT'),
   taskDiff: async (taskId: string): Promise<TaskDiff> => {

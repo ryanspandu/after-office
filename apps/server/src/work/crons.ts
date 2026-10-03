@@ -49,7 +49,7 @@ const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, 
 /** Only fire slots whose time passed within this many minutes (e.g. right after a server restart). */
 const CATCH_UP_MIN = 5
 
-function zoned(date: Date, tz: string) {
+export function zoned(date: Date, tz: string) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: tz,
     year: 'numeric',

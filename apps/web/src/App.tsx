@@ -16,9 +16,11 @@ import { useOffice } from './state/store'
 import { useMetricsSim, useMockSim } from './state/mockSim'
 import { MOBILE, useMediaQuery } from './state/useMediaQuery'
 import { AgentProfileDrawer } from './ui/AgentProfile'
-import { AgentsPanel } from './ui/AgentsPanel'
+import { AgentsCard, AgentsPanel } from './ui/AgentsPanel'
+import { ReportsPanel } from './ui/Reports'
+import { DeskLayout } from './ui/DeskLayout'
 import { FollowUps } from './ui/FollowUps'
-import { LeftSidebar } from './ui/LeftSidebar'
+import { CronPanel, LeftSidebar, TaskPanel } from './ui/LeftSidebar'
 import { ManagerPanel, useManager, useManagerPanel } from './ui/ManagerPanel'
 import { Navbar } from './ui/Navbar'
 import { RenderSwitch } from './ui/RenderSwitch'
@@ -36,6 +38,9 @@ export function App() {
   const syncError = useDashboard((s) => s.syncError)
   // phones: the office fills the screen; the side panels open from a floating dock
   const mobile = useMediaQuery(MOBILE)
+  // wide enough: the owner's own arrangement of the panels (ui/DeskLayout.tsx); narrower, the fixed stack
+  const narrow = useMediaQuery('(max-width: 960px)')
+  const desk = !mobile && !narrow && !fullscreen
   const update = useAppUpdate()
   // app shortcut "Manager chat": open the manager's panel once the manager is known (live data arrives first)
   const launch = useLaunch((s) => s.open)
@@ -46,22 +51,41 @@ export function App() {
     useLaunch.getState().done()
   }, [launch, manager])
 
+  const stage = (
+    <main className="stage">
+      <Office />
+      <LabelLayer />
+      <RenderSwitch />
+      <AppReload />
+    </main>
+  )
+
   return (
-    <div className={`app${fullscreen && !mobile ? ' app--full' : ''}${mobile ? ' app--mobile' : ''}`}>
+    <div className={`app${fullscreen && !mobile ? ' app--full' : ''}${mobile ? ' app--mobile' : ''}${desk ? ' app--desk' : ''}`}>
       <Navbar />
-      {!mobile && <LeftSidebar />}
-      <main className="stage">
-        <Office />
-        <LabelLayer />
-        <RenderSwitch />
-        <AppReload />
-      </main>
-      {mobile ? (
-        <MobileDock />
+      {desk ? (
+        <DeskLayout
+          panels={{
+            daily: <CronPanel />,
+            work: <TaskPanel />,
+            office: stage,
+            attention: <FollowUps />,
+            reports: <ReportsPanel />,
+            agents: <AgentsCard />,
+          }}
+        />
       ) : (
         <>
-          <AgentsPanel />
-          <FollowUps />
+          {!mobile && <LeftSidebar />}
+          {stage}
+          {mobile ? (
+            <MobileDock />
+          ) : (
+            <>
+              <AgentsPanel />
+              <FollowUps />
+            </>
+          )}
         </>
       )}
       <AgentProfileDrawer />

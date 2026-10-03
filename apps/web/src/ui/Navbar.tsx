@@ -1,9 +1,10 @@
+import { useLayout } from '../state/layout'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { OwnerAvatar } from './EditProfile'
 import { useShallow } from 'zustand/react/shallow'
 import { createPortal } from 'react-dom'
 import { usePresence } from '../state/usePresence'
-import { LuMonitorDown, LuShare, LuSmartphone, LuBell, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuSun, LuSunMoon } from 'react-icons/lu'
+import { LuMonitorDown, LuShare, LuSmartphone, LuBell, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuSun, LuSunMoon, LuLayoutDashboard } from 'react-icons/lu'
 import { useAuth } from '../state/auth'
 import { TIMEZONES, useClock, useNow, zonedParts, type ThemeMode } from '../state/clock'
 import { formatTokens, rangeBounds, useDashboard } from '../state/dashboard'
@@ -159,6 +160,7 @@ export function Navbar() {
                 </button>
               ))}
             </div>
+            {!fullscreen && <ArrangeButton />}
             <button className="icon-btn" {...tip(fullscreen ? 'Show panels' : 'Fullscreen office')} onClick={toggleFullscreen}>
               {fullscreen ? <LuMinimize2 /> : <LuMaximize2 />}
             </button>
@@ -322,6 +324,18 @@ function ManagerButton() {
     <button className="manager-btn" onClick={() => setOpen(true)} {...tip(manager.unread ? `${manager.unread} new from the manager` : 'Talk to the manager')}>
       <LuCrown /> Manager
       {!!manager.unread && <span className="icon-btn__count">{manager.unread > 9 ? '9+' : manager.unread}</span>}
+    </button>
+  )
+}
+
+/** Layout mode on/off: move the panels around (ui/DeskLayout.tsx). Only where the panels can be arranged. */
+function ArrangeButton() {
+  const editing = useLayout((s) => s.editing)
+  const narrow = useMediaQuery('(max-width: 960px)')
+  if (narrow) return null
+  return (
+    <button className={`icon-btn${editing ? ' is-on' : ''}`} aria-pressed={editing} {...tip(editing ? 'Done arranging' : 'Arrange panels')} onClick={() => useLayout.getState().setEditing(!editing)}>
+      <LuLayoutDashboard />
     </button>
   )
 }

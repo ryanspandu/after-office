@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
   managerApproval: false,
   autoAssign: false,
   parallelSessions: 0,
+  dailySummary: { enabled: false, time: '17:00' },
 }
 
 /** Most parallel sessions per agent the owner can allow. */
@@ -35,6 +36,7 @@ export function officeSettings(): OfficeSettings {
     managerApproval: saved.managerApproval ?? DEFAULT_SETTINGS.managerApproval,
     autoAssign: saved.autoAssign ?? DEFAULT_SETTINGS.autoAssign,
     parallelSessions: cleanParallel(saved.parallelSessions) ?? DEFAULT_SETTINGS.parallelSessions,
+    dailySummary: { ...DEFAULT_SETTINGS.dailySummary, ...saved.dailySummary },
   }
 }
 
@@ -46,6 +48,7 @@ export function updateSettings(patch: {
   autoAssign?: unknown
   notifyDetail?: unknown
   parallelSessions?: unknown
+  dailySummary?: { enabled?: unknown; time?: unknown }
 }) {
   const cur = officeSettings()
   const notify = { ...cur.notify }
@@ -61,6 +64,10 @@ export function updateSettings(patch: {
     managerApproval: typeof patch.managerApproval === 'boolean' ? patch.managerApproval : cur.managerApproval,
     autoAssign: typeof patch.autoAssign === 'boolean' ? patch.autoAssign : cur.autoAssign,
     parallelSessions: cleanParallel(patch.parallelSessions) ?? cur.parallelSessions,
+    dailySummary: {
+      enabled: typeof patch.dailySummary?.enabled === 'boolean' ? patch.dailySummary.enabled : cur.dailySummary.enabled,
+      time: typeof patch.dailySummary?.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(patch.dailySummary.time) ? patch.dailySummary.time : cur.dailySummary.time,
+    },
   }
   settingsRepo.set(KEY, JSON.stringify(next))
   return next

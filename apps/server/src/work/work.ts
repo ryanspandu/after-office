@@ -738,6 +738,8 @@ export function startWorkJobs() {
   void import('./managerCrons').then((m) => m.restoreCronChanges())
   const safe = (fn: () => Promise<unknown>) => () => void fn().catch((e) => console.error('[work]', e))
   setInterval(safe(tickCrons), 20_000)
+  // the manager's daily summary, at the time set (dailySummary.ts)
+  setInterval(safe(() => import('./dailySummary').then((m) => m.tickDailySummary())), 20_000)
   setInterval(safe(() => tickTasks()), 20_000)
   // parallel sessions closed by hand or gone: their tasks back to To do
   setInterval(() => tidyParallel(), 20_000)

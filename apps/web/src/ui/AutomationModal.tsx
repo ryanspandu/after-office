@@ -96,6 +96,7 @@ export function AutomationModal() {
     managerApproval?: boolean
     autoAssign?: boolean
     parallelSessions?: number
+    dailySummary?: Partial<OfficeSettings['dailySummary']>
     notifyDetail?: OfficeSettings['notifyDetail']
   }) => {
     setError(null)
@@ -107,6 +108,7 @@ export function AutomationModal() {
         notifyDetail: patch.notifyDetail ?? settings.notifyDetail,
         autoAssign: patch.autoAssign ?? settings.autoAssign,
         parallelSessions: patch.parallelSessions ?? settings.parallelSessions,
+        dailySummary: { ...settings.dailySummary, ...patch.dailySummary },
       },
     })
     liveApi.saveAutomation(patch).catch((e) => setError(e.message))
@@ -275,6 +277,37 @@ export function AutomationModal() {
                 working in) instead of queueing it. It closes when the task is done. Each session uses plan usage of its own.
               </span>
               {settings.parallelSessions > 0 && <ParallelLimit value={settings.parallelSessions} onChange={(n) => save({ parallelSessions: n })} />}
+            </span>
+          </label>
+          <label className="switch-row">
+            <span className="toggle">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={settings.dailySummary.enabled}
+                onChange={(ev) => save({ dailySummary: { enabled: ev.target.checked } })}
+              />
+              <span />
+            </span>
+            <span>
+              <span className="switch-row__label">Daily summary from the manager</span>
+              <span className="field__hint">
+                Once a day the manager sums up the day in one note in Reports: what got done, what's still running, what waits on you. Skipped on a
+                day with nothing to tell.
+              </span>
+              {settings.dailySummary.enabled && (
+                <span className="parallel-limit" onClick={(e) => e.preventDefault()}>
+                  At
+                  <input
+                    type="time"
+                    value={settings.dailySummary.time}
+                    onChange={(e) => e.target.value && save({ dailySummary: { time: e.target.value } })}
+                    aria-label="Daily summary time"
+                    style={{ width: 96 }}
+                  />
+                  office time
+                </span>
+              )}
             </span>
           </label>
         </section>

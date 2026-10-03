@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
 import {
   LuCrown,
@@ -17,6 +18,7 @@ import {
   LuPinOff,
   LuSearch,
   LuX,
+  LuEllipsis,
 } from 'react-icons/lu'
 import type { AgentStatus, LiveMode } from '@after-office/shared'
 import { liveApi, useLive } from '../state/live'
@@ -218,20 +220,67 @@ function AgentRow({
     .filter(Boolean)
     .join(' · ')
 
+  const removeAgent = async () => {
+    const tilde = (a.cwd ?? '').replace(/^\/(Users|home)\/[^/]+/, '~')
+    const folder = live ? await liveApi.agentFolder(a.id) : null
+    const items = folder?.entries ?? 0
+    const { ok, option } = await confirmWith({
+      title: `Remove ${a.name}?`,
+      message: live ? (
+        <>
+          Its session stops and it leaves the office; its tasks stay, without an agent.{' '}
+          {folder?.deletable ? 'Its folder stays unless you tick the box below.' : <>Its folder <code>{tilde}</code> and the files in it stay.</>}
+        </>
+      ) : (
+        'It leaves the demo office.'
+      ),
+      confirmLabel: 'Remove',
+      option: folder?.deletable
+        ? {
+            label: (
+              <>
+                Also delete its folder <code>{tilde}</code>
+              </>
+            ),
+            hint: (
+              <span className="danger-text">
+                {items ? `${items >= 10_000 ? '10,000+' : items} item${items === 1 ? '' : 's'} (its CLAUDE.md, skills and everything it made)` : 'It is empty.'}{' '}
+                are deleted for good. Back up or download anything you still need first (Folders tab → its folder → Files).
+              </span>
+            ),
+          }
+        : undefined,
+    })
+    if (ok) act('remove', () => (live ? liveApi.deleteAgent(a.id, { folder: option }) : onRemove()))
+  }
+
+  // one click on the card opens its chat (its profile in the demo); the rest is in the ⋯ menu under the avatar
   return (
-    <li className={`row agent${selected ? ' row--selected' : ''}${a.status === 'offline' ? ' row--off' : ''}`} onClick={onSelect}>
-      <button
-        className="avatar avatar--btn"
-        style={avatarStyle(a.look.shirt)}
-        data-tip="Open profile"
-        aria-label={`Open ${a.name} profile`}
-        onClick={(e) => {
-          e.stopPropagation()
-          onProfile()
-        }}
-      >
-        {a.name[0]}
-      </button>
+    <li className={`row agent${selected ? ' row--selected' : ''}${a.status === 'offline' ? ' row--off' : ''}`} onClick={onProfile}>
+      <div className="agent__side">
+        <span className="avatar" style={avatarStyle(a.look.shirt)} aria-hidden>
+          {a.name[0]}
+        </span>
+        <AgentMenu
+          agent={a}
+          live={live}
+          busy={busy}
+          items={[
+            ...(!live
+              ? STAT_STATUSES.map((status) => ({ key: status, icon: STATUS_META[status].icon, label: STATUS_META[status].label, on: a.status === status, run: () => onStatus(status) }))
+              : []),
+            {
+              key: 'chat',
+              icon: live ? <LuMessageSquareText /> : <LuSlidersHorizontal />,
+              label: live ? (a.unread ? `Open chat · ${a.unread} new` : 'Open chat') : 'Open profile',
+              run: onProfile,
+            },
+            ...(live ? [{ key: 'restart', icon: <LuRotateCw />, label: 'Restart session', hint: 'keeps the conversation', run: () => act('restart', () => liveApi.restart(a.id)) }] : []),
+            { key: 'pin', icon: a.pinned ? <LuPinOff /> : <LuPin />, label: a.pinned ? 'Unpin' : 'Pin to the top', run: onPin },
+            { key: 'remove', icon: <LuTrash2 />, label: 'Remove agent', danger: true, run: () => void removeAgent() },
+          ]}
+        />
+      </div>
       <div className="row__body">
         <div className="row__title">
           {a.name}
@@ -246,18 +295,10 @@ function AgentRow({
             </span>
           )}
           <span className="muted role">{a.role || a.profile.role}</span>
-          {/* collapsed: unread replies show here (expanded, they're on the chat button) */}
-          {live && !selected && !!a.unread && (
-            <button
-              className="row__unread"
-              {...tip(`${a.unread} new ${a.unread === 1 ? 'reply' : 'replies'} · open chat`)}
-              onClick={(e) => {
-                e.stopPropagation()
-                onProfile()
-              }}
-            >
+          {live && !!a.unread && (
+            <span className="row__unread" {...tip(`${a.unread} new ${a.unread === 1 ? 'reply' : 'replies'}`)}>
               <LuMessageSquareText /> {a.unread > 9 ? '9+' : a.unread}
-            </button>
+            </span>
           )}
           <span className={`status status--${a.status}`}>{a.status === 'waiting' && a.waitingFor ? waitingLabel(a.waitingFor) : STATUS_META[a.status].label}</span>
         </div>
@@ -266,92 +307,6 @@ function AgentRow({
           {a.status === 'idle' ? (live ? a.lastMessage ?? idleText(a.spotId) : idleText(a.spotId)) : (a.task ?? '—')}
         </div>
         {live && liveMeta && <div className="row__mono truncate">{liveMeta}</div>}
-        {/* always rendered; opens with a height + fade transition instead of popping in */}
-        <div className={`row__expand${selected ? ' row__expand--open' : ''}`} inert={!selected}>
-          <div className="row__expand-inner">
-              <div className="row__actions" onClick={(e) => e.stopPropagation()}>
-                {!live && (
-                  <div className="seg">
-                    {STAT_STATUSES.map((status) => (
-                      <button
-                        key={status}
-                        data-tip={STATUS_META[status].label}
-                        aria-label={STATUS_META[status].label}
-                        className={a.status === status ? 'active' : ''}
-                        onClick={() => onStatus(status)}
-                      >
-                        {STATUS_META[status].icon}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <button
-                  className="icon-btn small icon-btn--badge"
-                  data-tip={live ? (a.unread ? `${a.unread} new ${a.unread === 1 ? 'reply' : 'replies'} · open chat` : 'Chat & profile') : 'Profile'}
-                  aria-label={live ? `Open chat${a.unread ? `, ${a.unread} unread` : ''}` : 'Open profile'}
-                  onClick={onProfile}
-                >
-                  {live ? <LuMessageSquareText /> : <LuSlidersHorizontal />}
-                  {live && !!a.unread && <span className="icon-btn__count">{a.unread > 9 ? '9+' : a.unread}</span>}
-                </button>
-                {live && (
-                  <button className="icon-btn small" data-tip="Restart session (keeps the conversation)" aria-label="Restart session" disabled={!!busy} onClick={() => act('restart', () => liveApi.restart(a.id))}>
-                    <LuRotateCw className={busy === 'restart' ? 'spin' : ''} />
-                  </button>
-                )}
-                <button
-                  className="icon-btn small icon-btn--toggle pin-btn"
-                  aria-pressed={!!a.pinned}
-                  data-tip={a.pinned ? 'Unpin' : 'Pin to the top'}
-                  aria-label={a.pinned ? `Unpin ${a.name}` : `Pin ${a.name}`}
-                  onClick={onPin}
-                >
-                  {a.pinned ? <LuPinOff /> : <LuPin />}
-                </button>
-                <button
-                  className="icon-btn small ghost"
-                  data-tip="Remove agent"
-                  aria-label="Remove agent"
-                  disabled={!!busy}
-                  onClick={async () => {
-                    const tilde = (a.cwd ?? '').replace(/^\/(Users|home)\/[^/]+/, '~')
-                    const folder = live ? await liveApi.agentFolder(a.id) : null
-                    const items = folder?.entries ?? 0
-                    const { ok, option } = await confirmWith({
-                      title: `Remove ${a.name}?`,
-                      message: live ? (
-                        <>
-                          Its session stops and it leaves the office; its tasks stay, without an agent.{' '}
-                          {folder?.deletable ? 'Its folder stays unless you tick the box below.' : <>Its folder <code>{tilde}</code> and the files in it stay.</>}
-                        </>
-                      ) : (
-                        'It leaves the demo office.'
-                      ),
-                      confirmLabel: 'Remove',
-                      option: folder?.deletable
-                        ? {
-                            label: (
-                              <>
-                                Also delete its folder <code>{tilde}</code>
-                              </>
-                            ),
-                            hint: (
-                              <span className="danger-text">
-                                {items ? `${items >= 10_000 ? '10,000+' : items} item${items === 1 ? '' : 's'} (its CLAUDE.md, skills and everything it made)` : 'It is empty.'}{' '}
-                                are deleted for good. Back up or download anything you still need first (Folders tab → its folder → Files).
-                              </span>
-                            ),
-                          }
-                        : undefined,
-                    })
-                    if (ok) act('remove', () => (live ? liveApi.deleteAgent(a.id, { folder: option }) : onRemove()))
-                  }}
-                >
-                  <LuTrash2 />
-                </button>
-              </div>
-          </div>
-        </div>
         {error && <div className="row__error">{error}</div>}
         <div className="row__mono truncate" data-tip={a.cwd}>
           {a.tmuxSession}
@@ -359,6 +314,86 @@ function AgentRow({
         </div>
       </div>
     </li>
+  )
+}
+
+interface MenuItem {
+  key: string
+  icon: ReactNode
+  label: string
+  hint?: string
+  on?: boolean
+  danger?: boolean
+  run: () => void
+}
+
+/** The card's ⋯ button and its menu (chat, restart, pin, remove; the demo's statuses). */
+function AgentMenu({ agent: a, items, busy }: { agent: OfficeAgent; live: boolean; items: MenuItem[]; busy: string }) {
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  const btn = useRef<HTMLButtonElement>(null)
+  const pop = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!pos) return
+    const away = (e: PointerEvent) => !btn.current?.contains(e.target as Node) && !pop.current?.contains(e.target as Node) && setPos(null)
+    const shut = () => setPos(null)
+    document.addEventListener('pointerdown', away)
+    window.addEventListener('resize', shut)
+    window.addEventListener('scroll', shut, true)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      window.removeEventListener('resize', shut)
+      window.removeEventListener('scroll', shut, true)
+    }
+  }, [pos])
+  const toggle = () => {
+    if (pos) return setPos(null)
+    const r = btn.current?.getBoundingClientRect()
+    if (!r) return
+    const width = 220
+    const height = items.length * 38 + 12
+    const below = r.bottom + 6 + height < window.innerHeight
+    setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)), top: below ? r.bottom + 6 : Math.max(8, r.top - 6 - height) })
+  }
+  return (
+    <>
+      <button
+        ref={btn}
+        className={`icon-btn small ghost agent__more${pos ? ' is-on' : ''}`}
+        aria-label={`More for ${a.name}`}
+        aria-haspopup="menu"
+        aria-expanded={!!pos}
+        disabled={!!busy}
+        onClick={(e) => {
+          e.stopPropagation()
+          toggle()
+        }}
+      >
+        {busy ? <LuRotateCw className="spin" /> : <LuEllipsis />}
+      </button>
+      {pos &&
+        createPortal(
+          <div className="stab-menu__pop agent-menu" role="menu" ref={pop} style={{ left: pos.left, top: pos.top, width: 220 }} onClick={(e) => e.stopPropagation()}>
+            {items.map((it) => (
+              <button
+                key={it.key}
+                role="menuitem"
+                className={`${it.danger ? 'danger-text' : ''}${it.on ? ' is-on' : ''}`}
+                onClick={() => {
+                  setPos(null)
+                  it.run()
+                }}
+              >
+                {it.icon}
+                <span className="agent-menu__label">
+                  {it.label}
+                  {it.hint && <span className="muted agent-menu__hint">{it.hint}</span>}
+                </span>
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 

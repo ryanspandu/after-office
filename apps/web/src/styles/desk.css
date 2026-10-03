@@ -1,0 +1,37 @@
+/* ── the desktop's panels as the owner arranged them (ui/DeskLayout.tsx) ───────────────── */
+.app--desk { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: 'nav' 'desk'; }
+.desk { grid-area: desk; min-height: 0; }
+.desk__col { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.desk__panel { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+/* whatever sits in a panel fills it (the fixed sidebars' height limits don't apply here) */
+.desk__panel > .card, .desk__panel > .stage { flex: 1 1 auto; min-height: 0; max-height: none !important; }
+.desk__panel > .stage { grid-area: auto; }
+
+/* the gaps between panels: drag to resize; a line shows while hovering or dragging */
+.desk__gutter { position: relative; flex: 0 0 12px; display: flex; align-items: center; justify-content: center; }
+.desk__gutter::after { content: ''; border-radius: 999px; background: transparent; transition: background 0.15s; }
+.desk__gutter--col::after { width: 3px; height: 48px; }
+.desk__gutter--row::after { height: 3px; width: 48px; }
+.desk__gutter:hover::after, .desk__gutter[data-resize-handle-state='drag']::after { background: var(--hl); }
+.desk__gutter--col { cursor: col-resize; }
+.desk__gutter--row { cursor: row-resize; }
+
+/* layout mode: each panel dimmed under its handle; drop zones light up under the pointer */
+.desk__edit { position: absolute; inset: 0; z-index: 20; border-radius: 16px; border: 2px dashed color-mix(in srgb, var(--hl) 55%, transparent); background: color-mix(in srgb, var(--card) 55%, transparent); backdrop-filter: blur(1px); display: flex; align-items: flex-start; justify-content: center; padding-top: 12px; }
+.desk__handle { position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--card); box-shadow: var(--shadow); cursor: grab; touch-action: none; }
+.desk__handle:active { cursor: grabbing; }
+.desk__panel.is-dragged .desk__edit { opacity: 0.35; }
+.desk__drop { position: absolute; left: 0; right: 0; z-index: 1; border-radius: 14px; }
+.desk__drop--above { top: 0; height: 50%; }
+.desk__drop--below { bottom: 0; height: 50%; }
+.desk__drop--above.is-over { box-shadow: inset 0 4px 0 var(--hl); background: color-mix(in srgb, var(--hl) 14%, transparent); }
+.desk__drop--below.is-over { box-shadow: inset 0 -4px 0 var(--hl); background: color-mix(in srgb, var(--hl) 14%, transparent); }
+.desk__edge { position: absolute; top: 0; bottom: 0; width: 28px; z-index: 30; border-radius: 12px; }
+.desk__edge--left { left: -6px; }
+.desk__edge--right { right: -6px; }
+.desk__edge.is-over { background: color-mix(in srgb, var(--hl) 30%, transparent); box-shadow: inset 0 0 0 2px var(--hl); }
+.desk-ghost { display: inline-flex; padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--accent-fg); background: var(--accent); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); cursor: grabbing; }
+.desk-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 900; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 8px 8px 8px 16px; border-radius: 999px; font-size: 12.5px; color: var(--muted); background: var(--card); border: 1px solid var(--line); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2); }
+.desk-bar > span { min-width: 0; }
+.desk-bar button { flex-shrink: 0; }
+.icon-btn.is-on { color: var(--hl); background: var(--hl-soft); }

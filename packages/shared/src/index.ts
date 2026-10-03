@@ -503,6 +503,8 @@ export interface OfficeSettings {
   autoAssign: boolean
   /** extra sessions an agent may open for a parallel task while it's busy (0: off; tasks wait in its queue) */
   parallelSessions: number
+  /** the manager sums up the day in one note, at `time` (HH:MM, office timezone); skipped on a day with nothing */
+  dailySummary: { enabled: boolean; time: string }
 }
 
 /** Read-only server state shown next to the settings. */
