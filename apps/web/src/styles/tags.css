@@ -145,3 +145,6 @@
 .tag-chip__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tag-mv__label { display: inline-flex; align-items: center; gap: 3px; min-width: 0; }
 .tag-opt__icon { display: inline-grid; place-items: center; flex-shrink: 0; font-size: 13px; }
+.tags-tab__uses { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.tags-tab__uses > span { display: inline-flex; align-items: center; gap: 3px; }
+.tags-tab__uses svg { font-size: 13px; }

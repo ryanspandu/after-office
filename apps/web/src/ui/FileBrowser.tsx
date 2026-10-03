@@ -29,6 +29,7 @@ import { canPreview, FilePreview, formatSize, saveUrl } from './Attachments'
 import { confirm } from './Confirm'
 import { ago } from './FollowUps'
 import { SearchBox } from './SearchBox'
+import { ActionMenu, type MenuAction } from './ActionMenu'
 
 // A file manager for a folder the agents work in (the folder details, an agent's Folder tab): browse, preview, upload,
 // new folders, rename, download (one file, or several as a .zip) and delete, which moves things to the office's trash
@@ -459,46 +460,6 @@ function RenameField({ name, dir, onDone }: { name: string; dir: boolean; onDone
 }
 
 /** The actions of one entry (its ⋯ button, or a right-click), on the page itself so no panel clips it. */
-function EntryMenu({ at, actions, onClose }: { at: Menu; actions: { icon: React.ReactNode; label: string; danger?: boolean; run: () => void }[]; onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
-  // kept inside the screen: opens to the left / above when there's no room
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const w = el.offsetWidth
-    const h = el.offsetHeight
-    setPos({ left: Math.max(8, Math.min(at.x - (at.x + w > innerWidth - 8 ? w : 0), innerWidth - w - 8)), top: at.y + h > innerHeight - 8 ? Math.max(8, at.y - h) : at.y })
-  }, [at])
-  useEffect(() => {
-    const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose()
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && (e.stopPropagation(), onClose())
-    document.addEventListener('pointerdown', away)
-    document.addEventListener('keydown', key, true)
-    window.addEventListener('resize', onClose)
-    return () => {
-      document.removeEventListener('pointerdown', away)
-      document.removeEventListener('keydown', key, true)
-      window.removeEventListener('resize', onClose)
-    }
-  }, [onClose])
-  return createPortal(
-    <div ref={ref} className="fb-menu ui-pop" role="menu" style={pos ? { left: pos.left, top: pos.top } : { left: at.x, top: at.y, visibility: 'hidden' }}>
-      <div className="fb-menu__name truncate">{at.entry.name}</div>
-      {actions.map((a) => (
-        <button
-          key={a.label}
-          role="menuitem"
-          className={a.danger ? 'is-danger' : ''}
-          onClick={() => {
-            onClose()
-            a.run()
-          }}
-        >
-          {a.icon} {a.label}
-        </button>
-      ))}
-    </div>,
-    document.body,
-  )
+function EntryMenu({ at, actions, onClose }: { at: Menu; actions: MenuAction[]; onClose: () => void }) {
+  return <ActionMenu x={at.x} y={at.y} title={at.entry.name} actions={actions} onClose={onClose} />
 }
