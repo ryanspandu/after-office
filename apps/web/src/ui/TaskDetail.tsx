@@ -13,7 +13,7 @@ import { TaskReports } from './Reports'
 import { TaskRunFields } from './TaskRun'
 import { Select } from './Select'
 import { AgentSelect, assigneeOf, assigneePatch, dueInfo, PRIORITY_OPTIONS, FolderSelect, StatusSelect, statusDefOf, useStatuses, WaitsForSelect, waitingOn } from './taskMeta'
-import { TaskTimeline } from './TaskTimeline'
+import { flushTaskNote, TaskTimeline } from './TaskTimeline'
 import { TaskDiff } from './TaskDiff'
 import { TagPicker } from './tags'
 
@@ -115,6 +115,16 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
   }
 
   const set = (patch: Partial<OfficeTask>) => updateTask(task.id, patch)
+  // done (Mark done, Accept): a note still typed in the box is sent first, so it goes with the task (and the manager
+  // reads it when it hears the task is done); if it can't be sent, the task stays as it is
+  const finish = async () => {
+    try {
+      await flushTaskNote(task.id)
+    } catch {
+      return
+    }
+    set({ status: 'done' })
+  }
   const done = task.status === 'done'
   const due = dueInfo(task.deadline, now)
   const statusDef = statusDefOf(task, statusDefs)
@@ -314,12 +324,12 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
               <button onClick={() => setRevising((v) => !v)} aria-expanded={revising} disabled={!agentOnline} data-tip={agentOnline ? 'Send feedback to the agent' : 'Agent is offline'}>
                 <LuMessageSquareReply /> Request changes
               </button>
-              <button className="accent" onClick={() => set({ status: 'done' })} data-tip="Looks good: mark it done">
+              <button className="accent" onClick={() => void finish()} data-tip="Looks good: mark it done">
                 <LuCheck /> Accept
               </button>
             </>
           ) : (
-            <button onClick={() => set({ status: done ? 'todo' : 'done' })}>
+            <button onClick={() => (done ? set({ status: 'todo' }) : void finish())}>
               {done ? (
                 <>
                   <LuRotateCcw /> Reopen

@@ -1,4 +1,5 @@
 import { isRulePack, RULE_PACKS, type RulePackId } from '@after-office/shared'
+import { PLANS_DIR } from '../fsroots'
 
 // Office rules in an agent's CLAUDE.md. Each set sits between its own markers:
 //   <!-- after-office:rules:<id> -->
@@ -15,6 +16,9 @@ const BODIES: Record<RulePackId, string> = {
 - Finish the task within your turn. If you hand parts to subagents, wait for all of them, combine their results
   (in the file and in your final message), then end your turn.
 - Save deliverables in your folder, or in the folder the task names, and mention their paths.
+- A plan, proposal or other working document you're asked for (outside plan mode) is not part of the project: write
+  it in \`${PLANS_DIR}/\` (create it if needed), named like \`YYYY-MM-DD-<topic>.md\`, never inside a project's folder,
+  unless the owner names another place. Mention its path. (In plan mode, Claude Code keeps the plan itself.)
 - Stuck or unsure? Ask instead of guessing. Never publish, deploy, delete data or spend money without the owner's
   approval.`,
   engineering: `## Software engineering

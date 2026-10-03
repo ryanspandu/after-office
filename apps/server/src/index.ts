@@ -36,6 +36,7 @@ import { agentRoutes } from './routes/agents'
 import { workRoutes } from './routes/work'
 import { checkTrigger, startWorkJobs, triggerCron } from './work/work'
 import { bodyLimit } from 'hono/body-limit'
+import { refreshOfficeRules } from './agents/rulesSync'
 import { migrateRoutes } from './routes/migrate'
 import type { Context } from 'hono'
 import { AgentError } from './agents/manager'
@@ -195,6 +196,8 @@ startBackgroundJobs()
 startNotifications()
 startWorkJobs()
 startBackups()
+// the office rules in each agent's CLAUDE.md, as they are in this version
+refreshOfficeRules()
 startPreviewProxies()
 
 const port = Number(process.env.OFFICE_PORT ?? 8787)

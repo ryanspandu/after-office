@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { LuBot, LuCheck, LuCrown, LuInfo, LuMessageSquareReply, LuSend, LuTrash2, LuTriangleAlert, LuUser } from 'react-icons/lu'
 import type { TaskComment } from '@after-office/shared'
 import { useNow } from '../state/clock'
@@ -9,6 +9,11 @@ import { confirm } from './Confirm'
 
 // A task's timeline: your notes, revision requests, the agent's reports (as one-liners: the full report is shown
 // above), what the manager said about it, and office events such as "started after its dependencies finished".
+
+/** A note typed in a task's box but not sent yet, per task: sent by whatever finishes the task first (Mark done). */
+const drafts = new Map<string, () => Promise<void>>()
+/** Send the note still in the task's box, if any (before marking it done: the note goes with it). */
+export const flushTaskNote = (taskId: string) => drafts.get(taskId)?.() ?? Promise.resolve()
 
 export function TaskTimeline({ taskId }: { taskId: string }) {
   const comments = useTaskComments(taskId)
@@ -36,10 +41,19 @@ export function TaskTimeline({ taskId }: { taskId: string }) {
       setText('')
     } catch (e) {
       setError((e as Error).message)
+      throw e
     } finally {
       setBusy(false)
     }
   }
+  // what's in the box now, for flushTaskNote (the latest text, not the one of an earlier render)
+  const sendRef = useRef(send)
+  sendRef.current = send
+  useEffect(() => {
+    const flush = () => sendRef.current()
+    drafts.set(taskId, flush)
+    return () => void (drafts.get(taskId) === flush && drafts.delete(taskId))
+  }, [taskId])
 
   const who = (c: TaskComment) => {
     if (c.author === 'user') return 'You'
@@ -107,11 +121,11 @@ export function TaskTimeline({ taskId }: { taskId: string }) {
           onChange={(e) => setText(e.target.value)}
           placeholder="Add a note (the manager sees it on this task)"
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send()
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void send().catch(() => {})
           }}
           aria-label="Add a note"
         />
-        <button className="icon-btn small primary timeline__send" onClick={send} disabled={!text.trim() || busy} data-tip="Add note (⌘/Ctrl + Enter)" aria-label="Add note">
+        <button className="icon-btn small primary timeline__send" onClick={() => void send().catch(() => {})} disabled={!text.trim() || busy} data-tip="Add note (⌘/Ctrl + Enter)" aria-label="Add note">
           <LuSend />
         </button>
       </div>

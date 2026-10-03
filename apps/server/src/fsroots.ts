@@ -69,6 +69,10 @@ export const PROJECTS_DIR = (() => {
   return real(dir)
 })()
 
+/** Where agents put the plans and proposals they're asked for (outside plan mode): out of the projects' folders, like
+ *  the trash (.trash). */
+export const PLANS_DIR = join(AGENTS_DIR, '.plan')
+
 /** Where the folder picker starts: OFFICE_DEFAULT_DIR, else the agents' folder, else the first root. */
 export const DEFAULT_DIR = (() => {
   const wanted = real(process.env.OFFICE_DEFAULT_DIR ?? AGENTS_DIR)

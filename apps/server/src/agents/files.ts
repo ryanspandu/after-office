@@ -2,7 +2,7 @@ import { lstatSync, realpathSync } from 'node:fs'
 import { basename, extname, isAbsolute, join, resolve, sep } from 'node:path'
 import type { Attachment, WorkReport } from '@after-office/shared'
 import { agentsRepo, extraDirsOf, type AgentRow } from '../db'
-import { AGENT_HOME, PROJECTS_DIR } from '../fsroots'
+import { AGENT_HOME, PROJECTS_DIR, PLANS_DIR } from '../fsroots'
 
 // Files an agent made or pointed to (attachments in its chat and reports). Only files inside the agent's own folder,
 // the project folders it was given, or the office's projects folder can be looked at or downloaded (the manager's
@@ -15,7 +15,8 @@ export const IMAGE = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif',
 function allowedRoots(row: AgentRow) {
   const roots: string[] = []
   const team = row.kind === 'manager' ? agentsRepo.all().filter((a) => a.id !== row.id) : []
-  for (const d of [row.cwd, ...extraDirsOf(row), PROJECTS_DIR, ...team.flatMap((a) => [a.cwd, ...extraDirsOf(a)])]) {
+  // (the plans agents write outside the projects: anyone's, like the projects folder)
+  for (const d of [row.cwd, ...extraDirsOf(row), PROJECTS_DIR, PLANS_DIR, ...team.flatMap((a) => [a.cwd, ...extraDirsOf(a)])]) {
     try {
       roots.push(realpathSync(d))
     } catch {
