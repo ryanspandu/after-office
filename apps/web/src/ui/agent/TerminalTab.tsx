@@ -436,6 +436,20 @@ function TouchKeys({ send, ctrl, onCtrl, floating = false }: { send: (d: string)
       <input
         value={line}
         onChange={(e) => setLine(e.target.value)}
+        // phones (full screen): one tap brings the keyboard up (focused in the tap itself, before anything else
+        // around the terminal can take the focus back)
+        onTouchEnd={
+          floating
+            ? (e) => {
+                const el = e.currentTarget
+                if (document.activeElement === el) return
+                e.preventDefault()
+                el.focus({ preventScroll: true })
+                const end = el.value.length
+                el.setSelectionRange(end, end)
+              }
+            : undefined
+        }
         placeholder="Type a command…"
         autoCapitalize="off"
         autoCorrect="off"
