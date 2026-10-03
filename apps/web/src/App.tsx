@@ -21,6 +21,7 @@ import { ReportsPanel } from './ui/Reports'
 import { DeskLayout } from './ui/DeskLayout'
 import { useSpeechWatcher } from './state/speech'
 import { FollowUps } from './ui/FollowUps'
+import { MinimizedChips } from './ui/MinimizedChips'
 import { CronPanel, LeftSidebar, TaskPanel } from './ui/LeftSidebar'
 import { ManagerPanel, useManager, useManagerPanel } from './ui/ManagerPanel'
 import { Navbar } from './ui/Navbar'
@@ -72,7 +73,13 @@ export function App() {
             daily: <CronPanel />,
             work: <TaskPanel />,
             office: stage,
-            attention: <FollowUps />,
+            // the minimized windows, a section of their own above For you while there are any
+            attention: (
+              <>
+                <MinimizedChips docked />
+                <FollowUps />
+              </>
+            ),
             reports: <ReportsPanel />,
             agents: <AgentsCard />,
           }}

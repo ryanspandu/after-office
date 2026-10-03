@@ -1,3 +1,4 @@
+import { create } from 'zustand'
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { horizontalListSortingStrategy, SortableContext, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -8,7 +9,7 @@ import { useLive } from '../state/live'
 import { useMinimized, type MinimizedFolder } from '../state/minimized'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { usePresence } from '../state/usePresence'
-import { openUrl } from '../state/url'
+import { openUrl, useParam } from '../state/url'
 
 const tilde = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, '~')
 /** How a minimized window shows: its name, what's under it in a list, its icon, and how it opens again. */
@@ -45,10 +46,22 @@ function useWindowLabels() {
 
 /**
  * The minimized folder windows: a click opens one again as it was left, ✕ closes it for good. Larger screens: chips at
- * the bottom centre. Phones: one round button on the 3D stage, above the menu button (the dock, the menu and the app's
+ * the bottom centre. Phones: one round button on the 3D stage, left of the menu button (the dock, the menu and the app's
  * reload button keep their places), with the list opening upwards from it.
  */
-export function MinimizedChips({ current, currentNote }: { current?: string; currentNote?: string }) {
+/** Larger screens with the panel layout: the chips are a section of their own above For you (`docked`), not floating. */
+const useDock = create<{ docked: number }>(() => ({ docked: 0 }))
+
+export function MinimizedChips({ docked = false }: { docked?: boolean }) {
+  const current = useParam('folder') ?? undefined
+  const currentNote = useParam('note') ?? undefined
+  // the docked one is on the page: the floating one steps aside
+  const dockedHere = useDock((s) => s.docked > 0)
+  useEffect(() => {
+    if (!docked) return
+    useDock.setState((s) => ({ docked: s.docked + 1 }))
+    return () => useDock.setState((s) => ({ docked: s.docked - 1 }))
+  }, [docked])
   const live = useMinimized((s) => s.folders).filter((f) => (f.kind === 'note' ? f.path !== currentNote : f.path !== current))
   // a chip that goes (opened again, or closed) stays a moment to shrink away; a new one grows in (styles/projects.css)
   const folders = useLeaving(live)
@@ -59,13 +72,65 @@ export function MinimizedChips({ current, currentNote }: { current?: string; cur
   // the click that ends a drag (the pointer lifted over the chip it moved) doesn't open it
   const dragged = useRef(false)
   const mobile = useMediaQuery(MOBILE)
+  // docked: as many chips as fit on its one line (measured, again on every resize); "⋯" only for the rest
+  // (a callback ref: the section may only appear later, and the measuring starts when it does)
+  const [box, setBox] = useState<HTMLDivElement | null>(null)
+  const ruler = useRef<HTMLDivElement>(null)
+  const [fit, setFit] = useState(Infinity)
+  const sig = folders.map((f) => `${f.path}:${labels(f).name}`).join('|')
+  useLayoutEffect(() => {
+    const el = box
+    const r = ruler.current
+    if (!docked || !el || !r) return
+    const count = () => {
+      const style = getComputedStyle(el)
+      const room = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      const gap = parseFloat(style.columnGap) || 6
+      const widths = [...r.children].map((c) => (c as HTMLElement).offsetWidth)
+      const all = widths.reduce((sum, w) => sum + w, 0) + gap * Math.max(0, widths.length - 1)
+      if (all <= room) return setFit(widths.length)
+      // not all of them: leave room for "⋯"
+      let used = MORE_W
+      let n = 0
+      for (const w of widths) {
+        if (used + gap + w > room) break
+        used += gap + w
+        n++
+      }
+      setFit(Math.max(1, n))
+    }
+    count()
+    const ro = new ResizeObserver(count)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [docked, sig, box])
   if (!folders.length) return null
-  if (mobile) return <MinimizedMenu folders={folders} remove={remove} />
-  // many of them: the first few as chips, the rest behind "⋯" (with how many)
-  const shown = folders.length > MAX_CHIPS ? folders.slice(0, MAX_CHIPS - 1) : folders
+  if (mobile) return docked ? null : <MinimizedMenu folders={folders} remove={remove} />
+  if (!docked && dockedHere) return null
+  // many of them: the first few as chips, the rest behind "⋯" (with how many); docked: what fits on the line
+  const shown = docked ? folders.slice(0, fit) : folders.length > MAX_CHIPS ? folders.slice(0, MAX_CHIPS - 1) : folders
   const rest = folders.slice(shown.length)
   return (
-    <div className="fmin" role="toolbar" aria-label="Minimized folders">
+    <div ref={setBox} className={`fmin${docked ? ' fmin--docked' : ''}`} role="toolbar" aria-label="Minimized windows">
+      {/* docked: every chip laid out out of sight, to measure what fits */}
+      {docked && (
+        <div ref={ruler} className="fmin__ruler" aria-hidden>
+          {folders.map((f) => {
+            const w = labels(f)
+            return (
+              <span key={f.path} className="fmin__chip">
+                <span className="fmin__open">
+                  {w.icon}
+                  <span className="truncate">{w.name}</span>
+                </span>
+                <span className="fmin__close">
+                  <LuX />
+                </span>
+              </span>
+            )
+          })}
+        </div>
+      )}
       {/* dragged into another order (a few pixels first: a plain click still opens one) */}
       <DndContext
         sensors={sensors}
@@ -139,8 +204,10 @@ function useLeaving(list: MinimizedFolder[], ms = 200): (MinimizedFolder & { lea
   return out
 }
 
-/** Chips shown at most (larger screens); past that, the last place is the "⋯" button. */
+/** Chips shown at most (floating); past that, the last place is the "⋯" button. */
 const MAX_CHIPS = 5
+/** the "⋯" button's width (styles/projects.css .fmin__more) */
+const MORE_W = 34
 
 /** The list of minimized folders opening upwards from a button: the round one on the stage (phones), or "⋯" (`more`). */
 function MinimizedMenu({ folders, remove, more }: { folders: MinimizedFolder[]; remove: (path: string) => void; more?: boolean }) {

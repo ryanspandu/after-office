@@ -299,7 +299,7 @@
 .fmin__close:hover { background: var(--accent-soft); }
 /* phones: a round button on the stage, right above the menu button (.nav-burger: right 12px, bottom 12px, 42px) */
 .fmin-fab {
-  all: unset; box-sizing: border-box; position: absolute; right: 12px; bottom: 64px; z-index: 5;
+  all: unset; box-sizing: border-box; position: absolute; right: 62px; bottom: 12px; z-index: 5; /* left of the menu button (.nav-burger: 42px at the corner) */
   display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; cursor: pointer; font-size: 18px; color: var(--hl);
   background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); box-shadow: var(--shadow);
   animation: fmin-in .18s ease-out;
@@ -369,3 +369,16 @@
 /* minimized chips: dragged into another order (ui/MinimizedChips.tsx) */
 .fmin__chip { touch-action: none; }
 .fmin__chip.is-dragging { z-index: 2; cursor: grabbing; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2); opacity: 0.95; }
+/* larger screens (panel layout): the chips as a section above For you, only while something is minimized */
+.fmin.fmin--docked {
+  position: relative; transform: none; left: auto; bottom: auto; z-index: auto; width: auto; max-width: none;
+  flex: 0 0 auto; flex-wrap: nowrap; justify-content: flex-start; overflow: hidden; margin-bottom: 8px; padding: 8px;
+  border: 0; border-radius: 18px; background: var(--card);
+}
+/* …its chips: rounded tiles, not pills */
+.fmin--docked .fmin__chip, .fmin--docked .fmin__more { border-radius: 10px; }
+.fmin--docked .fmin__close { border-radius: 7px; }
+/* the docked chips' ruler: all of them, laid out out of sight (what fits on the line is measured on it) */
+.fmin__ruler { position: absolute; left: 0; top: 0; display: flex; gap: 6px; visibility: hidden; pointer-events: none; white-space: nowrap; }
+.fmin__ruler .fmin__chip { flex-shrink: 0; animation: none; }
+.fmin--docked > .fmin__chip, .fmin--docked > .fmin__more { flex-shrink: 0; }

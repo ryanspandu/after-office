@@ -61,7 +61,7 @@ export function UrlModals() {
         />
       )}
       <FolderWindows current={p.folder} />
-      <MinimizedChips current={p.folder} currentNote={p.note} />
+      <MinimizedChips />
       {p.newfolder && (
         <NewFolderModal onClose={clear(['newfolder'])} onCreated={(folder) => setUrl({ newfolder: null, folder: folder.path }, 'push')} />
       )}
