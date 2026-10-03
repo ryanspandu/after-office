@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import { LuArrowDown, LuArrowLeft, LuArrowRight, LuArrowUp, LuCheck, LuCopy, LuCornerDownLeft, LuPlugZap, LuRotateCw, LuTextSelect, LuX } from 'react-icons/lu'
+import { LuArrowDown, LuArrowLeft, LuArrowRight, LuArrowUp, LuCheck, LuCopy, LuCornerDownLeft, LuPlugZap, LuRotateCw, LuSquareTerminal, LuTextSelect, LuX } from 'react-icons/lu'
+import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
+import { getParam, openUrl, setUrl, useParam } from '../../state/url'
 
 // The real Claude Code TUI: xterm.js attached to the agent's tmux session through /api/agents/:id/term.
 // Typing here is exactly like typing in the terminal on the server.
+// Phones: it opens full screen, on its own layer (?tfull=1; Back closes it), at one size for as long as it's open: a
+// sheet's drag or the keyboard never resize it (xterm loses its screen when resized there). The keys row and the
+// command line float at the bottom, above the keyboard when it's up; the screen slides up so the cursor's row shows.
 
 type State = 'connecting' | 'open' | 'closed'
 
@@ -45,9 +51,37 @@ export function TerminalTab({
   const redrawRef = useRef<(() => void) | null>(null)
   // touch screens can't select in xterm: its text as plain text instead (selected the phone's own way), or copied whole
   const [picking, setPicking] = useState<string | null>(null)
+  const phone = useMediaQuery(MOBILE)
+  const full = useParam('tfull') === '1'
+  const fullPhone = phone && full
+  // the full-screen layer's height: fixed when it opens (the keyboard coming up mustn't shrink it)
+  const [fullH, setFullH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 0))
+  const frameRef = useRef<HTMLDivElement>(null)
+  const dockRef = useRef<HTMLDivElement>(null)
+  const openFull = () => (setFullH(window.innerHeight), openUrl({ tfull: '1' }))
+  const closeFull = () => setUrl({ tfull: null })
+  // phones: opening the Terminal tab opens the terminal (once; closed, the tab offers it again)
+  useEffect(() => {
+    if (phone && !offline && !getParam('tfull')) openFull()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone, offline])
+  // turned sideways: the layer takes the new height (and the terminal its new size, once)
+  useEffect(() => {
+    if (!fullPhone) return
+    const turn = () => setTimeout(() => setFullH(window.innerHeight), 300)
+    // opened with the keyboard up: it grows to the whole screen once the keyboard goes (never shrinks for it)
+    const grow = () => setFullH((h) => Math.max(h, window.innerHeight))
+    window.addEventListener('orientationchange', turn)
+    window.addEventListener('resize', grow)
+    return () => {
+      window.removeEventListener('orientationchange', turn)
+      window.removeEventListener('resize', grow)
+    }
+  }, [fullPhone])
 
   useEffect(() => {
-    if (offline || !host.current) return
+    // (phones: only while the full-screen layer is open; host is there then)
+    if (offline || !host.current || (phone && !full)) return
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
@@ -179,7 +213,33 @@ export function TerminalTab({
       clearTimeout(kbTimer)
       kbTimer = window.setTimeout(settle, 250)
     }
-    window.visualViewport?.addEventListener('resize', onViewport)
+    // phones (full screen): the keyboard doesn't resize the terminal; the floating keys go above it, and the screen
+    // slides up just enough for the cursor's row to show above them
+    let placeFrame = 0
+    const place = () => {
+      cancelAnimationFrame(placeFrame)
+      placeFrame = requestAnimationFrame(() => {
+        const frame = frameRef.current
+        const dock = dockRef.current
+        if (!frame || !dock) return
+        const vv = window.visualViewport
+        const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0
+        dock.style.bottom = `${kb}px`
+        frame.style.transform = ''
+        const screen = el.querySelector<HTMLElement>('.xterm-screen')
+        if (!screen) return
+        const rowH = screen.clientHeight / term.rows
+        const cursorBottom = screen.getBoundingClientRect().top + (term.buffer.active.cursorY + 1) * rowH
+        const over = cursorBottom - (dock.getBoundingClientRect().top - 6)
+        if (over > 0) frame.style.transform = `translateY(${-Math.ceil(over)}px)`
+      })
+    }
+    const cursorMoved = fullPhone ? term.onCursorMove(place) : null
+    if (fullPhone) {
+      window.visualViewport?.addEventListener('resize', place)
+      window.visualViewport?.addEventListener('scroll', place)
+      window.addEventListener('resize', place)
+    } else window.visualViewport?.addEventListener('resize', onViewport)
     // (only the frames around xterm: its own viewport scrolls through the scrollback)
     const frames = [el, el.parentElement].filter((n): n is HTMLElement => !!n)
     for (const f of frames) f.addEventListener('scroll', unscroll)
@@ -190,6 +250,11 @@ export function TerminalTab({
       document.removeEventListener('visibilitychange', back)
       clearTimeout(kbTimer)
       window.visualViewport?.removeEventListener('resize', onViewport)
+      cancelAnimationFrame(placeFrame)
+      cursorMoved?.dispose()
+      window.visualViewport?.removeEventListener('resize', place)
+      window.visualViewport?.removeEventListener('scroll', place)
+      window.removeEventListener('resize', place)
       for (const f of frames) f.removeEventListener('scroll', unscroll)
       el.removeEventListener('click', tapFocus)
       cancelPress()
@@ -205,37 +270,77 @@ export function TerminalTab({
       ws.close()
       term.dispose()
     }
-  }, [agentId, offline, attempt, session, url])
+  }, [agentId, offline, attempt, session, url, phone, full])
 
   if (offline) return <div className="empty">The agent is offline. It restarts automatically, or use Restart in Overview.</div>
 
+  const bar = (
+    <div className="term__bar">
+      <span className={`live-dot${state === 'open' ? ' live-dot--on' : ''}`} />
+      <span className="muted term__state">{state === 'open' ? `Attached · ${label}` : state === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
+      {state === 'closed' && (
+        <button className="small" onClick={() => (setState('connecting'), setAttempt((n) => n + 1))}>
+          <LuRotateCw /> Reconnect
+        </button>
+      )}
+      <span className="grow" />
+      <span className="muted term__hint">
+        <LuPlugZap /> Closing this only detaches; it keeps running
+      </span>
+      {state === 'open' && (
+        <button className="small term__select" onClick={() => setPicking(termText(termRef.current))} data-tip="The terminal's text, to select and copy">
+          <LuTextSelect /> Select
+        </button>
+      )}
+      {actions}
+      {fullPhone && (
+        <button className="icon-btn small term-full__close" onClick={closeFull} aria-label="Close the terminal (it keeps running)">
+          <LuX />
+        </button>
+      )}
+    </div>
+  )
+  // padding lives on the frame; xterm measures the inner box, so fit() doesn't count the padding as rows
+  const screen = (
+    <div className="term__screen" ref={frameRef}>
+      <div className="term__host" ref={host} />
+      {picking !== null && <TextPick text={picking} onClose={() => (setPicking(null), redrawRef.current?.(), termRef.current?.focus())} />}
+    </div>
+  )
+  const keys = (touch || phone) && state === 'open' && <TouchKeys send={(d) => sendRef.current?.(d)} ctrl={ctrl} onCtrl={() => setCtrl((v) => !v)} />
+
+  if (!phone)
+    return (
+      <div className="term">
+        {bar}
+        {screen}
+        {keys}
+      </div>
+    )
+
+  // phones: the tab only opens it; the terminal is a full-screen layer of its own
   return (
-    <div className="term">
-      <div className="term__bar">
-        <span className={`live-dot${state === 'open' ? ' live-dot--on' : ''}`} />
-        <span className="muted">{state === 'open' ? `Attached · ${label}` : state === 'connecting' ? 'Connecting…' : 'Disconnected'}</span>
-        {state === 'closed' && (
-          <button className="small" onClick={() => (setState('connecting'), setAttempt((n) => n + 1))}>
-            <LuRotateCw /> Reconnect
-          </button>
-        )}
-        <span className="grow" />
-        <span className="muted term__hint">
-          <LuPlugZap /> Closing this only detaches; it keeps running
-        </span>
-        {state === 'open' && (
-          <button className="small term__select" onClick={() => setPicking(termText(termRef.current))} data-tip="The terminal's text, to select and copy">
-            <LuTextSelect /> Select
-          </button>
-        )}
-        {actions}
+    <div className="term term--launch">
+      <div className="term-launch">
+        <LuSquareTerminal className="term-launch__icon" />
+        <p className="muted">Opens full screen. Closing it only detaches; it keeps running.</p>
+        <button className="primary" onClick={openFull}>
+          <LuSquareTerminal /> Open terminal
+        </button>
+        {actions && <div className="term-launch__actions">{actions}</div>}
       </div>
-      {/* padding lives on the frame; xterm measures the inner box, so fit() doesn't count the padding as rows */}
-      <div className="term__screen">
-        <div className="term__host" ref={host} />
-        {picking !== null && <TextPick text={picking} onClose={() => (setPicking(null), redrawRef.current?.(), termRef.current?.focus())} />}
-      </div>
-      {touch && state === 'open' && <TouchKeys send={(d) => sendRef.current?.(d)} ctrl={ctrl} onCtrl={() => setCtrl((v) => !v)} />}
+      {fullPhone &&
+        createPortal(
+          <div className="term-full" style={{ height: fullH }} role="dialog" aria-modal="true" aria-label="Terminal">
+            {bar}
+            {screen}
+            {/* floats at the bottom, above the keyboard when it's up (moved there by place()) */}
+            <div className="term-full__dock" ref={dockRef}>
+              {keys}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
