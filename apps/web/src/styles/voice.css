@@ -1,0 +1,24 @@
+/* ── voice: talking to an agent (ui/Voice.tsx) ─────────────────── */
+.mic-btn.is-listening { color: #fff; background: var(--danger); }
+.mic-btn.is-listening:hover:not(:disabled) { color: #fff; background: color-mix(in srgb, var(--danger) 85%, #000); }
+.mic-btn.is-listening svg { font-size: 12px; }
+.voice-dot { width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; background: var(--danger); animation: voice-pulse 1.1s ease-in-out infinite; }
+@keyframes voice-pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
+@media (prefers-reduced-motion: reduce) { .voice-dot { animation: none; } }
+.voice-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; padding: 8px 10px 8px 12px; border-radius: 12px; font-size: 13px; background: var(--card-2); border: 1px solid var(--line); }
+.voice-bar--error { color: var(--danger); }
+.voice-bar__text { min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.voice-lang { display: inline-flex; flex-shrink: 0; padding: 2px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+.voice-lang button { all: unset; cursor: pointer; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; color: var(--muted); }
+.voice-lang button.is-on { color: var(--accent-fg); background: var(--accent); }
+.manager-voice.is-on { color: var(--hl); background: var(--hl-soft); }
+.voice-pop { position: fixed; z-index: 1500; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22); }
+.voice-pop__head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.voice-pop__head b { flex: 1; }
+.voice-pop__live { display: flex; align-items: flex-start; gap: 10px; min-height: 64px; padding: 10px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; background: var(--card-2); overflow-wrap: anywhere; }
+.voice-pop__live .voice-dot { margin-top: 5px; }
+.voice-pop__draft { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; font-size: 13.5px; }
+.voice-pop__foot { display: flex; align-items: center; gap: 8px; }
+.voice-pop__hint { font-size: 12px; }
+.voice-pop__note { margin: 0; font-size: 12.5px; }
+.voice-pop__sent { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #2fbf71; }

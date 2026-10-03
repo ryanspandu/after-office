@@ -1,3 +1,4 @@
+import { ManagerVoiceButton } from './Voice'
 import { useLayout } from '../state/layout'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { OwnerAvatar } from './EditProfile'
@@ -153,6 +154,7 @@ export function Navbar() {
             <InstallButton />
             <AutomationButton />
             <ManagerButton />
+            <ManagerVoiceButton />
             <div className="seg">
               {MODES.map((m) => (
                 <button key={m.id} data-tip={m.title} aria-label={m.title} className={mode === m.id ? 'active' : ''} onClick={() => setMode(m.id)}>

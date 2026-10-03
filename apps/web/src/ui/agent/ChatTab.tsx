@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, useMemo } from 'react'
+import { MicButton, ListeningBar } from '../Voice'
+import { useDictation } from '../../state/dictation'
 import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX } from 'react-icons/lu'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import type { ChatItem, LiveMode } from '@after-office/shared'
@@ -53,6 +55,11 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   const [items, setItems] = useState<ChatItem[]>([])
   const [loaded, setLoaded] = useState(false)
   const [text, setText] = useState('')
+  // talking instead of typing: what was said lands in the message box, to check (or fix) and send
+  const dict = useDictation((said) => {
+    setText((cur) => (cur.trim() ? `${cur.trimEnd()} ${said}` : said))
+    requestAnimationFrame(() => box.current?.focus())
+  })
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -590,6 +597,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
           <ChatContextBar value={context.value} onChange={context.set} manager={agent.kind === 'manager'} />
         </div>
       </div>
+      {(dict.listening || dict.error) && <ListeningBar dict={dict} />}
       <div className="chat__composer">
         <input
           ref={fileInput}
@@ -642,6 +650,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
           placeholder={offline ? (session ? 'The session is starting…' : 'The agent is offline') : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
           disabled={offline}
         />
+        {dict.supported && <MicButton dict={dict} disabled={offline} />}
         <button className="icon-btn primary" onClick={send} disabled={!canSend} data-tip={pending.uploading ? 'Waiting for the upload…' : 'Send'} aria-label="Send">
           {sending ? <LuLoader className="spin" /> : <LuSend />}
         </button>
