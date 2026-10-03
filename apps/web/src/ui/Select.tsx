@@ -39,6 +39,14 @@ export function Select<T extends string>({ value, options, onChange, ariaLabel, 
       value={options.find((o) => o.value === value) ?? null}
       options={options}
       onChange={(o) => o && onChange(o.value)}
+      // opened: the list starts at what's picked (a long list, e.g. the timezones, would otherwise open at its top)
+      onMenuOpen={() =>
+        setTimeout(() => {
+          const sel = document.querySelector<HTMLElement>('.rs__menu .rs__option--selected')
+          const list = sel?.closest<HTMLElement>('.rs__menu-list')
+          if (sel && list) list.scrollTop = Math.max(0, sel.offsetTop - list.clientHeight / 2 + sel.offsetHeight / 2)
+        }, 0)
+      }
       // render the menu on <body> so cards with overflow don't clip it
       menuPortalTarget={document.body}
       menuPlacement="auto"

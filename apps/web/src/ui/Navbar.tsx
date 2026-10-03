@@ -5,7 +5,7 @@ import { OwnerAvatar } from './EditProfile'
 import { useShallow } from 'zustand/react/shallow'
 import { createPortal } from 'react-dom'
 import { usePresence } from '../state/usePresence'
-import { LuMonitorDown, LuShare, LuSmartphone, LuBell, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuSun, LuSunMoon, LuLayoutDashboard } from 'react-icons/lu'
+import { LuMonitorDown, LuShare, LuSmartphone, LuBell, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuSun, LuSunMoon, LuLayoutDashboard, LuX, LuChevronDown, LuSearch, LuCheck } from 'react-icons/lu'
 import { useAuth } from '../state/auth'
 import { TIMEZONES, useClock, useNow, zonedParts, type ThemeMode } from '../state/clock'
 import { formatTokens, rangeBounds, useDashboard } from '../state/dashboard'
@@ -111,12 +111,8 @@ export function Navbar() {
       <div className="nav-right">
         <div className="clock">
           <ClockTime timezone={timezone} />
-          {/* the office's timezone: a small arrow by the clock (the name in its tooltip), the list opens from it */}
-          {!mobile && (
-            <span className="tz-pick" {...tip(`Timezone: ${TZ_OPTIONS.find((o) => o.value === timezone)?.label.replace(/ · [^·]+ · /, ' · ') ?? timezone}`)}>
-              <Select ariaLabel="Timezone" searchable className="tz-select tz-select--arrow" value={timezone} options={TZ_OPTIONS} onChange={setTimezone} menuWidth={280} display={() => ''} />
-            </span>
-          )}
+          {/* the office's timezone: a small arrow by the clock (the name in its tooltip); the list opens in a popup */}
+          {!mobile && <TimezonePop value={timezone} onChange={setTimezone} />}
         </div>
         <BossModeBadge compact={mobile} />
         <PublicAccessBadge compact={mobile} />
@@ -345,5 +341,87 @@ function ArrangeButton() {
     <button className={`icon-btn${editing ? ' is-on' : ''}`} aria-pressed={editing} {...tip(editing ? 'Done arranging' : 'Arrange panels')} onClick={() => useLayout.getState().setEditing(!editing)}>
       <LuLayoutDashboard />
     </button>
+  )
+}
+
+/** Desktop: the timezone behind a small arrow; a popup with a search and the list (the picked one in view). */
+function TimezonePop({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const [q, setQ] = useState('')
+  const btn = useRef<HTMLButtonElement>(null)
+  const pop = useRef<HTMLDivElement>(null)
+  const list = useRef<HTMLUListElement>(null)
+  const current = TZ_OPTIONS.find((o) => o.value === value)
+  const short = current?.label.replace(/ · [^·]+ · /, ' · ') ?? value
+  const needle = q.trim().toLowerCase()
+  const shown = needle ? TZ_OPTIONS.filter((o) => o.label.toLowerCase().includes(needle) || o.value.toLowerCase().includes(needle)) : TZ_OPTIONS
+  const close = () => (setPos(null), setQ(''))
+  const toggle = () => {
+    if (pos) return close()
+    const r = btn.current?.getBoundingClientRect()
+    if (!r) return
+    const width = 300
+    setPos({ top: r.bottom + 8, left: Math.max(8, Math.min(r.left + r.width / 2 - width / 2, window.innerWidth - width - 8)) })
+  }
+  useEffect(() => {
+    if (!pos) return
+    // the picked one in view
+    const sel = list.current?.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (sel && list.current) list.current.scrollTop = Math.max(0, sel.offsetTop - list.current.clientHeight / 2 + sel.offsetHeight / 2)
+    const away = (e: PointerEvent) => !pop.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node) && close()
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', esc)
+    window.addEventListener('resize', close)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('keydown', esc)
+      window.removeEventListener('resize', close)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos])
+  return (
+    <>
+      <button ref={btn} type="button" className={`icon-btn tz-btn${pos ? ' is-on' : ''}`} aria-expanded={!!pos} {...tip(`Timezone: ${short}`)} onClick={toggle}>
+        <LuChevronDown />
+      </button>
+      {pos &&
+        createPortal(
+          <div ref={pop} className="tz-pop" style={{ top: pos.top, left: pos.left }} role="dialog" aria-label="Timezone">
+            <div className="tz-pop__head">
+              <b>Timezone</b>
+              <span className="muted truncate">{short}</span>
+              <button type="button" className="icon-btn small ghost" aria-label="Close" onClick={close}>
+                <LuX />
+              </button>
+            </div>
+            <label className="search-box tz-pop__search">
+              <LuSearch />
+              <input
+                autoFocus
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search a city or region"
+                aria-label="Search timezones"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && shown[0]) (onChange(shown[0].value), close())
+                }}
+              />
+            </label>
+            <ul className="tz-pop__list" ref={list} role="listbox">
+              {shown.map((o) => (
+                <li key={o.value}>
+                  <button type="button" role="option" aria-selected={o.value === value} className={o.value === value ? 'is-on' : ''} onClick={() => (onChange(o.value), close())}>
+                    <span className="truncate">{o.label}</span>
+                    {o.value === value && <LuCheck />}
+                  </button>
+                </li>
+              ))}
+              {!shown.length && <li className="empty">No timezone matches.</li>}
+            </ul>
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
