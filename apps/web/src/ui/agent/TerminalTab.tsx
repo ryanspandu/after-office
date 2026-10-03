@@ -72,6 +72,28 @@ export function TerminalTab({
     const el = host.current
     const tapFocus = () => term.focus()
     el.addEventListener('click', tapFocus)
+    // phones: a long press can't select in xterm (it only offers Paste), so it opens the terminal's text to select
+    let press = 0
+    let at: { x: number; y: number } | null = null
+    const cancelPress = () => (clearTimeout(press), (at = null))
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return cancelPress()
+      at = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      clearTimeout(press)
+      press = window.setTimeout(() => {
+        if (!at) return
+        at = null
+        term.blur()
+        setPicking(termText(term))
+      }, 450)
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      if (at && Math.hypot(e.touches[0].clientX - at.x, e.touches[0].clientY - at.y) > 8) cancelPress()
+    }
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: true })
+    el.addEventListener('touchend', cancelPress)
+    el.addEventListener('touchcancel', cancelPress)
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(`${proto}://${location.host}${url ?? `/api/agents/${agentId}/term${session ? `?session=${session}` : ''}`}`)
@@ -132,6 +154,11 @@ export function TerminalTab({
       clearTimeout(redrawTimer)
       document.removeEventListener('visibilitychange', back)
       el.removeEventListener('click', tapFocus)
+      cancelPress()
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', cancelPress)
+      el.removeEventListener('touchcancel', cancelPress)
       termRef.current = null
       sendRef.current = null
       ro.disconnect()
@@ -291,7 +318,7 @@ function TextPick({ text, onClose }: { text: string; onClose: () => void }) {
   return (
     <div className="term-pick ui-drop">
       <div className="term-pick__bar">
-        <span className="muted">Long-press to select, or copy</span>
+        <span className="muted">Long-press a word to select it, drag the handles, then Copy (or Copy for all of it)</span>
         <span className="grow" />
         <button type="button" className="small" onClick={() => void copy()}>
           {copied ? <LuCheck /> : <LuCopy />} {copied ? 'Copied' : 'Copy'}
