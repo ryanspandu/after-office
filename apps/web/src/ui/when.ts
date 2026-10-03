@@ -14,3 +14,10 @@ export function dateTime(ms: number, timeZone?: string) {
   const year = parts.year === thisYear ? '' : ` ${parts.year}`
   return `${Number(parts.day)} ${MONTHS[Number(parts.month) - 1]}${year}, ${parts.hour}:${parts.minute}`
 }
+
+/** A chat message's time: "14:22" today, else with its date ("3 Oct, 14:22"). */
+export function chatTime(ms: number, timeZone?: string) {
+  const day = (t: number) => new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(t)
+  if (day(ms) !== day(Date.now())) return dateTime(ms, timeZone)
+  return new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(ms)
+}

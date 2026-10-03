@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, useMemo } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, useMemo } from 'react'
+import { useClock } from '../../state/clock'
+import { chatTime, dateTime } from '../when'
 import { MicButton, ListeningBar, SpeakingChip } from '../Voice'
 import { useDictation } from '../../state/dictation'
 import { primeSpeech, talkedByVoice } from '../../state/speech'
-import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX } from 'react-icons/lu'
+import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
 import { openUrl } from '../../state/url'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
-import type { ChatItem, LiveMode } from '@after-office/shared'
+import type { ChatItem, LiveMode, WorkReport } from '@after-office/shared'
+import { useDashboard } from '../../state/dashboard'
 import { mentionedPaths, modelChoiceOf, MODELS } from '@after-office/shared'
 import { api } from '../../state/auth'
 import { liveApi, useLive } from '../../state/live'
@@ -53,6 +56,10 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
 }
 
 function ChatView({ agent, session, header }: { agent: OfficeAgent; session: string; header: ReactNode }) {
+  // message times, in the office's timezone
+  const timezone = useClock((s) => s.timezone)
+  // the reports a message is, or names: links under it
+  const links = useReportLinks()
   const sk = session || undefined
   const [items, setItems] = useState<ChatItem[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -574,21 +581,33 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
                 )}
                 {said && <div className={`msg msg--user${i.id === current ? ' msg--hit' : ''}`}>{said}</div>}
                 <ContextChips folder={folder} tags={tags} />
+                {/* the manager's chat: a forwarded report names its task (whose report has the same title) */}
+                {agent.kind === 'manager' && <ReportLinks reports={links.forText(null, said)} />}
+                <time className="msg__time" dateTime={new Date(i.at).toISOString()} data-tip={dateTime(i.at, timezone)}>
+                  {chatTime(i.at, timezone)}
+                </time>
               </div>
             )
           }
           if (i.kind === 'assistant') {
             const files = (attachmentPaths.get(i.id) ?? []).map((p) => agentFiles.get(p)).filter((f) => !!f)
             return (
-              <div key={i.id} data-mid={i.id} className={`msg msg--agent${isNew(i.id)}${i.id === current ? ' msg--hit' : ''}`}>
-                <FileLinksProvider agentId={agent.id} files={files}>
-                  <Markdown text={i.text} />
-                </FileLinksProvider>
-                <Attachments agentId={agent.id} files={files} />
-              </div>
+              <Fragment key={i.id}>
+                <div data-mid={i.id} className={`msg msg--agent${isNew(i.id)}${i.id === current ? ' msg--hit' : ''}`}>
+                  <FileLinksProvider agentId={agent.id} files={files}>
+                    <Markdown text={i.text} />
+                  </FileLinksProvider>
+                  <Attachments agentId={agent.id} files={files} />
+                </div>
+                <ReportLinks reports={links.forText(agent.id, i.text)} agent />
+                {/* when it said this, small under the bubble */}
+                <time className="msg__time msg__time--agent" dateTime={new Date(i.at).toISOString()} data-tip={dateTime(i.at, timezone)}>
+                  {chatTime(i.at, timezone)}
+                </time>
+              </Fragment>
             )
           }
-          if (i.kind === 'tool') return <ToolRow key={i.id} item={i} result={results.get(i.id)} />
+          if (i.kind === 'tool') return <ToolRow key={i.id} item={i} result={results.get(i.id)} report={links.forTool(agent.id, i)} />
           return null
         })}
         {outgoing && !delivered && (
@@ -757,16 +776,24 @@ function statusText(a: OfficeAgent) {
   return a.costUsd != null ? `Idle · $${a.costUsd.toFixed(2)} this session` : 'Idle'
 }
 
-function ToolRow({ item, result }: { item: Extract<ChatItem, { kind: 'tool' }>; result?: Extract<ChatItem, { kind: 'tool-result' }> }) {
+function ToolRow({ item, result, report }: { item: Extract<ChatItem, { kind: 'tool' }>; result?: Extract<ChatItem, { kind: 'tool-result' }>; report?: WorkReport }) {
   const [open, setOpen] = useState(false)
   return (
     <div className={`tool${result && !result.ok ? ' tool--err' : ''}`}>
-      <button className="tool__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <LuChevronRight className={`tool__chev${open ? ' open' : ''}`} />
-        <b data-tip={item.tool !== toolLabel(item.tool) ? item.tool : undefined}>{toolLabel(item.tool)}</b>
-        <span className="truncate mono">{item.summary}</span>
-        {!result && <LuLoader className="spin muted" />}
-      </button>
+      <div className="tool__row">
+        <button className="tool__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          <LuChevronRight className={`tool__chev${open ? ' open' : ''}`} />
+          <b data-tip={item.tool !== toolLabel(item.tool) ? item.tool : undefined}>{toolLabel(item.tool)}</b>
+          <span className="truncate mono">{item.summary}</span>
+          {!result && <LuLoader className="spin muted" />}
+        </button>
+        {/* the note it posted to Reports (notify_user): open it */}
+        {report && (
+          <button className="small tool__report" onClick={() => openUrl({ report: report.id })} data-tip={report.title}>
+            <LuFileText /> Open report
+          </button>
+        )}
+      </div>
       {open && (
         <div className="tool__body ui-drop">
           <pre className="md-code">{JSON.stringify(item.input, null, 2)}</pre>
@@ -816,6 +843,55 @@ function InlineRequest({ item, onOpen, onError }: { item: Item; onOpen: (i: Item
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── links to reports ──
+
+/** too plain to tell one report from another when a message names it */
+const PLAIN_TITLES = new Set(['note from the manager', 'report', 'summary', 'update'])
+
+/**
+ * The reports a chat message is about: the one it is (an agent's last answer, filed as its task's report; a note the
+ * manager posted with notify_user), and the ones it names by their title.
+ */
+function useReportLinks() {
+  const reports = useDashboard((s) => s.reports)
+  return useMemo(() => {
+    const byText = new Map(reports.map((r) => [r.text?.trim(), r]))
+    const titled = reports.filter((r) => (r.title?.trim().length ?? 0) >= 8 && !PLAIN_TITLES.has(r.title.trim().toLowerCase()))
+    const forText = (agentId: string | null, text: string): WorkReport[] => {
+      const out: WorkReport[] = []
+      const own = byText.get(text.trim())
+      if (own && (!agentId || own.agentId === agentId)) out.push(own)
+      const low = text.toLowerCase()
+      for (const r of titled) {
+        if (out.length >= 4) break
+        if (!out.some((o) => o.id === r.id) && low.includes(r.title.trim().toLowerCase())) out.push(r)
+      }
+      return out
+    }
+    const forTool = (agentId: string, item: Extract<ChatItem, { kind: 'tool' }>) => {
+      if (!/notify_user$/.test(item.tool)) return undefined
+      const title = String((item.input as { title?: unknown })?.title ?? '').trim()
+      return title ? reports.find((r) => r.agentId === agentId && r.kind === 'note' && r.title.trim() === title) : undefined
+    }
+    return { forText, forTool }
+  }, [reports])
+}
+
+/** Links under a message to the reports it is or names. */
+function ReportLinks({ reports, agent }: { reports: WorkReport[]; agent?: boolean }) {
+  if (!reports.length) return null
+  return (
+    <div className={`msg__reports${agent ? ' msg__reports--agent' : ''}`}>
+      {reports.map((r) => (
+        <button key={r.id} type="button" className="msg__report" onClick={() => openUrl({ report: r.id })} data-tip="Open the report">
+          <LuFileText />
+          <span className="truncate">{r.title}</span>
+        </button>
+      ))}
     </div>
   )
 }
