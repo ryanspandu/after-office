@@ -47,7 +47,7 @@ async function post(url: string, body: unknown) {
   return out
 }
 
-type Menu = { entry: FolderEntry; x: number; y: number }
+type Menu = { entry: FolderEntry; x: number; y: number; above?: number }
 
 /**
  * `onTrashed`: something went to the trash (the folder details count it). `fill`: the list takes the height it's given
@@ -382,7 +382,7 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
                       aria-label={`Actions for ${e.name}`}
                       onClick={(ev) => {
                         const r = ev.currentTarget.getBoundingClientRect()
-                        setMenu(menu?.entry.name === e.name ? null : { entry: e, x: r.right, y: r.bottom })
+                        setMenu(menu?.entry.name === e.name ? null : { entry: e, x: r.right, y: r.bottom, above: r.top })
                       }}
                     >
                       {copied === e.name ? <LuCheck /> : <LuEllipsis />}
@@ -461,5 +461,5 @@ function RenameField({ name, dir, onDone }: { name: string; dir: boolean; onDone
 
 /** The actions of one entry (its ⋯ button, or a right-click), on the page itself so no panel clips it. */
 function EntryMenu({ at, actions, onClose }: { at: Menu; actions: MenuAction[]; onClose: () => void }) {
-  return <ActionMenu x={at.x} y={at.y} title={at.entry.name} actions={actions} onClose={onClose} />
+  return <ActionMenu x={at.x} y={at.y} above={at.above} title={at.entry.name} actions={actions} onClose={onClose} />
 }

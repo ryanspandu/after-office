@@ -11,18 +11,20 @@ export interface MenuAction {
   run: () => void
 }
 
-/** `x`/`y`: the point it opens from (usually the button's bottom right). */
-export function ActionMenu({ x, y, title, actions, onClose }: { x: number; y: number; title?: string; actions: MenuAction[]; onClose: () => void }) {
+/** `x`/`y`: the point it opens from (the button's bottom right: the menu's top right corner goes there); `above`: the button's top, where it opens
+ *  upward from when there's no room below (so it never covers its button). */
+export function ActionMenu({ x, y, above, title, actions, onClose }: { x: number; y: number; above?: number; title?: string; actions: MenuAction[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
-  // kept inside the screen: opens to the left / above when there's no room
+  // kept inside the screen: opens above when there's no room below
   useEffect(() => {
     const el = ref.current
     if (!el) return
     const w = el.offsetWidth
     const h = el.offsetHeight
-    setPos({ left: Math.max(8, Math.min(x - (x + w > innerWidth - 8 ? w : 0), innerWidth - w - 8)), top: y + h > innerHeight - 8 ? Math.max(8, y - h) : y })
-  }, [x, y])
+    // its right edge under the button's (it opens toward the left); rightward only when there's no room on the left
+    setPos({ left: Math.max(8, Math.min(x - w >= 8 ? x - w : x, innerWidth - w - 8)), top: y + h > innerHeight - 8 ? Math.max(8, (above ?? y) - h) : y })
+  }, [x, y, above])
   useEffect(() => {
     const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && onClose()
     const key = (e: KeyboardEvent) => e.key === 'Escape' && (e.stopPropagation(), onClose())

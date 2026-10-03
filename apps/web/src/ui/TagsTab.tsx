@@ -21,7 +21,7 @@ export function TagsTab({ q = '' }: { q?: string }) {
   // the tag being edited (a new one is made from the + beside the search box, ui/LeftSidebar.tsx)
   const [editing, setEditing] = useState<Tag | null>(null)
   // a tag's ⋯ menu (Edit, Delete)
-  const [menu, setMenu] = useState<{ tag: Tag; x: number; y: number } | null>(null)
+  const [menu, setMenu] = useState<{ tag: Tag; x: number; y: number; above: number } | null>(null)
 
   const uses = (id: string) => ({ tasks: tasks.filter((t) => t.tags?.includes(id)).length, reports: reports.filter((r) => r.tags?.includes(id)).length })
   const remove = async (t: Tag) => {
@@ -61,7 +61,7 @@ export function TagsTab({ q = '' }: { q?: string }) {
                   aria-expanded={menu?.tag.id === t.id}
                   onClick={(e) => {
                     const r = e.currentTarget.getBoundingClientRect()
-                    setMenu(menu?.tag.id === t.id ? null : { tag: t, x: r.right, y: r.bottom + 4 })
+                    setMenu(menu?.tag.id === t.id ? null : { tag: t, x: r.right, y: r.bottom + 4, above: r.top - 4 })
                   }}
                 >
                   <LuEllipsis />
@@ -75,6 +75,7 @@ export function TagsTab({ q = '' }: { q?: string }) {
         <ActionMenu
           x={menu.x}
           y={menu.y}
+          above={menu.above}
           title={menu.tag.name}
           onClose={() => setMenu(null)}
           actions={[
