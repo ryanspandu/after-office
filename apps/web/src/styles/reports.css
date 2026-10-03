@@ -74,6 +74,24 @@
 .metric__unit { font-size: 0.7em; font-weight: 500; color: var(--muted); }
 /* Reports "View all": the project / tags / dates / reset group (flat on desktop) */
 .reports-modal__filters { display: contents; }
+/* Mark all read: right end of the dates / reset row; on phones an icon beside the tabs instead */
+.reports-modal__mark--filters { margin-left: auto; height: 32px; flex-shrink: 0; }
+.reports-modal__mark--tabs { display: none; }
+/* agent / folder / tags: a row of their own, folded behind the button in the search box until it's pressed */
+.reports-modal__bar--filters .toolbar__fold { display: inline-grid; place-items: center; }
+.reports-modal__picks { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 100%; min-width: 0; }
+.reports-modal__picks.is-folded { display: none; }
+.reports-modal__picks:not(.is-folded) { animation: ui-drop-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.reports-modal__picks .reports-modal__tags { flex: 1 1 150px; min-width: 0; }
+.reports-modal__picks .reports-modal__tags .rs { width: 100%; max-width: none; }
+.toolbar__fold-count--narrow { display: none; }
+@media (max-width: 768px) {
+  .reports-modal__picks, .reports-modal__picks.is-folded { display: contents; }
+  .toolbar__fold-count--wide { display: none; }
+  .toolbar__fold-count--narrow { display: block; }
+  .reports-modal__mark--tabs { display: inline-grid; place-items: center; }
+  .reports-modal__mark--filters { display: none; }
+}
 @media (max-width: 768px) {
   /* the kind tabs scroll sideways; Mark all read is just its icon beside them */
   .reports-modal__bar--tabs { flex-wrap: nowrap; }
@@ -146,7 +164,7 @@
 .reports-modal__none { margin: auto; display: flex; align-items: center; gap: 8px; }
 .reports-modal__reader .report__text { max-height: none; overflow: visible; }
 /* the day a run of reports belongs to (Today, Yesterday, …): an inbox, not a log */
-.report-day { list-style: none; position: sticky; top: 0; z-index: 1; padding: 8px 4px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); background: var(--card); }
+.report-day { list-style: none; position: sticky; top: 0; z-index: 3; padding: 8px 4px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); background: var(--card); }
 .report-day + .report-row { border-top: none; }
 /* View all: pick reports, then one action on all of them. The pick box sits where the row's icon is (inside its
    highlight): it shows on hover, while any is picked, and on the picked ones */

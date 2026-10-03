@@ -411,7 +411,9 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
   const [error, setError] = useState<string | null>(null)
   const days = rangeDays(range)
   // shown on the folded filters button (phones): agent, folder, tags, dates
-  const activeFilters = [!!by, !!folder, tagIds.length > 0, !!days].filter(Boolean).length
+  // what the fold button hides: agent, folder and tags on larger screens; the dates too on phones
+  const pickedFilters = [!!by, !!folder, tagIds.length > 0].filter(Boolean).length
+  const activeFilters = pickedFilters + (days ? 1 : 0)
   const query = new URLSearchParams({
     // daily jobs are "cron" reports on the server
     filter: filter === 'daily' ? 'cron' : filter,
@@ -483,7 +485,8 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
             ))}
           </div>
           <span className="grow" />
-          <button className="small reports-modal__mark" onClick={markAllReportsRead} disabled={!anyUnread} aria-label="Mark all read" data-tip="Mark all read">
+          {/* phones: just its icon beside the tabs (the filters row folds away there) */}
+          <button className="small reports-modal__mark reports-modal__mark--tabs" onClick={markAllReportsRead} disabled={!anyUnread} aria-label="Mark all read" data-tip="Mark all read">
             <LuCheckCheck /> <span className="reports-modal__mark-label">Mark all read</span>
           </button>
         </div>
@@ -496,7 +499,7 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
                 <LuX />
               </button>
             )}
-            {/* phones: agent, tags, dates and reset fold away behind this */}
+            {/* agent and tags fold away behind this (phones: the dates and reset too) */}
             <button
               type="button"
               className={`icon-btn small ghost toolbar__fold${filtersOpen ? ' is-on' : ''}`}
@@ -508,10 +511,12 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
               }}
             >
               {filtersOpen ? <LuX /> : <LuSlidersHorizontal />}
-              {!filtersOpen && activeFilters > 0 && <span className="toolbar__fold-count">{activeFilters}</span>}
+              {!filtersOpen && pickedFilters > 0 && <span className="toolbar__fold-count toolbar__fold-count--wide">{pickedFilters}</span>}
+              {!filtersOpen && activeFilters > 0 && <span className="toolbar__fold-count toolbar__fold-count--narrow">{activeFilters}</span>}
             </button>
           </label>
           <div className="reports-modal__filters">
+          <div className={`reports-modal__picks${filtersOpen ? '' : ' is-folded'}`}>
           {filter !== 'manager' && (
             <Select
               ariaLabel="Agent"
@@ -538,6 +543,7 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
             </span>
           )}
           <TagFilter className="reports-modal__tags" value={tagIds} onChange={(ids) => setUrl({ tag: ids.join(',') || null, page: null })} />
+          </div>
           <RangePicker
             value={range}
             presets={RANGE_PRESETS}
@@ -562,6 +568,10 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
             aria-label="Reset filters"
           >
             <LuRotateCcw />
+          </button>
+          {/* larger screens: on the right of the dates / reset row */}
+          <button className="small reports-modal__mark reports-modal__mark--filters" onClick={markAllReportsRead} disabled={!anyUnread}>
+            <LuCheckCheck /> Mark all read
           </button>
           </div>
         </div>
