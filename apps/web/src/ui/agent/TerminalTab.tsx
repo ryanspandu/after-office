@@ -42,6 +42,7 @@ export function TerminalTab({
   ctrlRef.current = ctrl
   const touch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
   const termRef = useRef<Terminal | null>(null)
+  const redrawRef = useRef<(() => void) | null>(null)
   // touch screens can't select in xterm: its text as plain text instead (selected the phone's own way), or copied whole
   const [picking, setPicking] = useState<string | null>(null)
 
@@ -103,6 +104,8 @@ export function TerminalTab({
       setState('open')
       send({ t: 'resize', cols: term.cols, rows: term.rows })
       term.focus()
+      // once tmux has attached (the first resize starts it): the whole screen, whatever the timing
+      setTimeout(() => redrawRef.current?.(), 300)
     }
     ws.onmessage = (e) => term.write(typeof e.data === 'string' ? e.data : new Uint8Array(e.data))
     let opened = false
@@ -119,34 +122,33 @@ export function TerminalTab({
     const input = term.onData((d) => send({ t: 'in', d: withCtrl(d) }))
     sendRef.current = (d) => send({ t: 'in', d: withCtrl(d) })
 
+    let redrawTimer = 0
+    // the whole screen sent again by tmux (the server runs refresh-client): it otherwise only repaints what changed,
+    // and a screen that missed a paint (a sheet still sliding up, a phone's keyboard) stays blank until something is typed
+    const redraw = () => {
+      clearTimeout(redrawTimer)
+      redrawTimer = window.setTimeout(() => send({ t: 'redraw' }), 150)
+    }
     const refit = () => {
       try {
+        const { cols, rows } = term
         fit.fit()
         send({ t: 'resize', cols: term.cols, rows: term.rows })
+        if (term.cols !== cols || term.rows !== rows) redraw()
       } catch {
         // element hidden
       }
     }
-    // the whole screen drawn again: tmux only repaints on a change of size, so it gets a row less and back. Without
-    // it, a terminal attached while its sheet was still sliding up can stay blank until something is typed.
-    let redrawTimer = 0
-    const redraw = () => {
-      refit()
-      if (ws.readyState !== WebSocket.OPEN || term.rows < 3) return
-      send({ t: 'resize', cols: term.cols, rows: term.rows - 1 })
-      clearTimeout(redrawTimer)
-      redrawTimer = window.setTimeout(() => {
-        send({ t: 'resize', cols: term.cols, rows: term.rows })
-        term.refresh(0, term.rows - 1)
-      }, 80)
-    }
+    redrawRef.current = redraw
     const ro = new ResizeObserver(refit)
     ro.observe(host.current)
-    // measured again once the font is in and a sheet has finished sliding up (the first size can be off by a row)
-    void document.fonts?.ready.then(redraw)
-    const late = setTimeout(redraw, 450)
+    // measured again once the font is in and a sheet has finished sliding up (the first size can be off by a row),
+    // then the whole screen once more
+    const settle = () => (refit(), redraw())
+    void document.fonts?.ready.then(settle)
+    const late = setTimeout(settle, 450)
     // back to the app (a phone locks, another app): the screen may have missed a repaint
-    const back = () => document.visibilityState === 'visible' && redraw()
+    const back = () => document.visibilityState === 'visible' && settle()
     document.addEventListener('visibilitychange', back)
 
     return () => {
@@ -160,6 +162,7 @@ export function TerminalTab({
       el.removeEventListener('touchend', cancelPress)
       el.removeEventListener('touchcancel', cancelPress)
       termRef.current = null
+      redrawRef.current = null
       sendRef.current = null
       ro.disconnect()
       input.dispose()
@@ -194,7 +197,7 @@ export function TerminalTab({
       {/* padding lives on the frame; xterm measures the inner box, so fit() doesn't count the padding as rows */}
       <div className="term__screen">
         <div className="term__host" ref={host} />
-        {picking !== null && <TextPick text={picking} onClose={() => (setPicking(null), termRef.current?.focus())} />}
+        {picking !== null && <TextPick text={picking} onClose={() => (setPicking(null), redrawRef.current?.(), termRef.current?.focus())} />}
       </div>
       {touch && state === 'open' && <TouchKeys send={(d) => sendRef.current?.(d)} ctrl={ctrl} onCtrl={() => setCtrl((v) => !v)} />}
     </div>

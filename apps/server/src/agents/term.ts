@@ -9,7 +9,7 @@ import { tmux, tmuxCmd } from './tmux'
 // Browser terminal: a WebSocket bridged to `tmux attach` running in a Bun PTY (Bun.Terminal).
 // The browser sees and types into the exact Claude Code TUI.
 //
-// Protocol: client → server text frames `{"t":"in","d":"…"}` / `{"t":"resize","cols":N,"rows":N}`;
+// Protocol: client → server text frames `{"t":"in","d":"…"}` / `{"t":"resize","cols":N,"rows":N}` / `{"t":"redraw"}`;
 // server → client binary frames with raw terminal output.
 
 /** Refuse cross-site WebSocket handshakes: the session cookie alone must not open a terminal. */
@@ -44,7 +44,7 @@ export const requireSameOriginOnly: MiddlewareHandler = async (c, next) => {
 /** The browser side of a folder's shell (work/shells.ts): only one that is running (it's opened with the code). */
 export const shellSocket = upgradeWebSocket((c) => bridge(c.get('shellTarget' as never) as string))
 
-type Msg = { t: 'in'; d: string } | { t: 'resize'; cols: number; rows: number }
+type Msg = { t: 'in'; d: string } | { t: 'resize'; cols: number; rows: number } | { t: 'redraw' }
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.floor(Number(n) || lo)))
 
@@ -91,6 +91,8 @@ export function bridge(target: string): WSEvents {
         })
       } else if (msg.t === 'in' && term && typeof msg.d === 'string') {
         term.write(msg.d)
+      } else if (msg.t === 'redraw' && proc) {
+        void redrawClient(proc.pid)
       }
     },
     onClose() {
@@ -99,5 +101,25 @@ export function bridge(target: string): WSEvents {
       term?.close()
       void (proc?.exited ?? Promise.resolve()).then(() => tmux.resetSize(target))
     },
+  }
+}
+
+/**
+ * Has tmux send its attach client (`pid`, ours) the whole screen again. The browser asks once it has settled (a sheet
+ * sliding up, a phone's keyboard, coming back to the app): tmux otherwise only repaints on a change of size, and a
+ * screen it thinks the client has can stay blank in the browser until something is typed.
+ */
+async function redrawClient(pid: number) {
+  try {
+    const list = Bun.spawn(tmuxCmd('list-clients', '-F', '#{client_pid} #{client_tty}'), { stdout: 'pipe', stderr: 'ignore' })
+    const out = await new Response(list.stdout).text()
+    const tty = out
+      .split('\n')
+      .map((l) => l.trim().split(' '))
+      .find(([p]) => Number(p) === pid)?.[1]
+    if (!tty) return
+    await Bun.spawn(tmuxCmd('refresh-client', '-t', tty), { stdout: 'ignore', stderr: 'ignore' }).exited
+  } catch {
+    // tmux gone: nothing to redraw
   }
 }
