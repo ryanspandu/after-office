@@ -70,7 +70,7 @@ export function ReportRow({ r, now, onOpen, showJob = true, picked }: { r: WorkR
                 <LuLayers /> {r.job.title}
               </span>
             )}
-            <TagChips ids={r.tags} />
+            <TagChips ids={r.tags} max={1} />
           </span>
         </span>
         {!r.read && <span className="report-row__dot" aria-label="Unread" />}

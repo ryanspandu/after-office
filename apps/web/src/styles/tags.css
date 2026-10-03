@@ -99,3 +99,10 @@
 .rs--inline .rs__placeholder { color: var(--muted); font-size: 12.5px; }
 .rs--inline .rs__indicators { display: none; }
 .rs--inline .rs__control:hover .rs__indicators, .rs--inline .rs__control--focused .rs__indicators { display: flex; }
+/* chips filling a row: the (empty) typing box doesn't open a row of its own below them while you're not typing; it
+   comes back when the picker is focused (rs__value-container keeps one line per row of chips) */
+.rs--multi:not(:focus-within) .rs__value-container--has-value .rs__input-container { position: absolute; width: 1px; min-width: 0; overflow: hidden; opacity: 0; }
+.rs--multi .rs__value-container--has-value { position: relative; }
+/* "+N": the tags that didn't fit (named on hover) */
+.tag-chip--more { --c: var(--muted); flex-shrink: 0; }
+.tag-chips .tag-chip:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

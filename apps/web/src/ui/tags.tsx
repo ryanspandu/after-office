@@ -1,3 +1,4 @@
+import { tip } from './Tooltip'
 import ReactSelect from 'react-select'
 import CreatableSelect from 'react-select/creatable'
 import type { Tag } from '@after-office/shared'
@@ -16,10 +17,13 @@ export function nextTagColor(tags: Tag[]) {
 }
 
 /** A task's or report's tags as small coloured chips. */
-export function TagChips({ ids, className = '' }: { ids?: string[]; className?: string }) {
+/** A thing's tags as chips; with `max`, the first few and "+N" for the rest (named on hover). */
+export function TagChips({ ids, className = '', max }: { ids?: string[]; className?: string; max?: number }) {
   const tags = useDashboard((s) => s.tags)
-  const shown = (ids ?? []).map((id) => tags.find((t) => t.id === id)).filter((t): t is Tag => !!t)
-  if (!shown.length) return null
+  const all = (ids ?? []).map((id) => tags.find((t) => t.id === id)).filter((t): t is Tag => !!t)
+  if (!all.length) return null
+  const shown = max ? all.slice(0, max) : all
+  const more = all.slice(shown.length)
   return (
     <span className={`tag-chips ${className}`}>
       {shown.map((t) => (
@@ -27,6 +31,11 @@ export function TagChips({ ids, className = '' }: { ids?: string[]; className?: 
           {t.name}
         </span>
       ))}
+      {more.length > 0 && (
+        <span className="tag-chip tag-chip--more" {...tip(more.map((t) => t.name).join(', '))}>
+          +{more.length}
+        </span>
+      )}
     </span>
   )
 }

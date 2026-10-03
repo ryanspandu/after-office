@@ -97,7 +97,7 @@ export function NoteRow({ n, now, onOpen, sortable = false }: { n: OwnerNoteSumm
               {by} · {ago(now - n.updatedAt)}
             </span>
             <NotePlace folder={n.folder} />
-            <TagChips ids={n.tags} />
+            <TagChips ids={n.tags} max={1} />
           </span>
         </span>
       </button>

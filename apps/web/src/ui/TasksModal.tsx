@@ -303,7 +303,7 @@ function TaskRow({ task: t, onOpen }: { task: OfficeTask; onOpen: () => void }) 
       <button className="row__title truncate task-table__title" data-tip="Open task" onClick={onOpen}>
         <BlockedBadge task={t} />
         <CheckBadge task={t} /> <span className="truncate">{t.title}</span>
-        <TagChips ids={t.tags} />
+        <TagChips ids={t.tags} max={2} />
       </button>
       <StatusSelect size="sm" value={t.status} onChange={(status) => updateTask(t.id, { status })} />
       <Deadline ms={t.deadline} due={done ? null : due} />
@@ -421,7 +421,7 @@ function Card({ task: t, overlay, onOpen, grip }: { task: OfficeTask; overlay?: 
       )}
       <button className="card-task__main" onClick={onOpen}>
         <div className="card-task__top">
-          <TagChips ids={t.tags} />
+          <TagChips ids={t.tags} max={2} />
           {/* only a high priority is worth a mark (medium is the default, low needs none) */}
           {t.priority === 'high' && <span className="prio-high">High</span>}
         </div>
