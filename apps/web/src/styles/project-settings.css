@@ -4,3 +4,32 @@
 .project-settings__logo-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .project-settings__reset { margin-right: auto; }
 .profile__who .small { flex-shrink: 0; }
+/* Office settings → Move this office (ui/MoveOffice.tsx) */
+.project-settings__move { padding-top: 12px; border-top: 1px solid var(--line); }
+.project-settings__move-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.move-office { display: flex; flex-direction: column; gap: 12px; }
+.move-office__what { display: flex; flex-direction: column; gap: 6px; }
+.move-office__what .check { align-items: flex-start; font-size: 13px; line-height: 1.4; }
+.move-office__what .check.is-fixed { color: var(--muted); }
+.move-office__code { font: 600 18px ui-monospace, Menlo, monospace; letter-spacing: 0.3em; text-align: center; }
+.move-office__note { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 12.5px; line-height: 1.45; }
+.move-office__note svg { flex-shrink: 0; margin-top: 2px; }
+.move-office__file { justify-content: flex-start; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.move-office__progress { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 0; text-align: center; }
+.move-office__progress p { margin: 0; }
+.move-office__icon { font-size: 30px; color: var(--muted); }
+.move-office__hint { font-size: 12px; }
+.move-office__bar { width: 100%; height: 6px; border-radius: 999px; background: var(--card-2); overflow: hidden; }
+.move-office__bar span { display: block; height: 100%; background: var(--hl); transition: width 0.2s; }
+.move-office__drop {
+  all: unset; box-sizing: border-box; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 132px; padding: 18px; border: 1.5px dashed var(--line); border-radius: 16px; background: var(--card-2); text-align: center;
+  font-size: 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.move-office__drop:hover, .move-office__drop:focus-visible { border-color: var(--muted); }
+.move-office__drop.is-over { border-color: var(--hl); background: color-mix(in srgb, var(--hl) 10%, var(--card-2)); transform: scale(1.01); }
+.move-office__drop.has-file { border-style: solid; }
+.move-office__drop .muted { font-size: 12px; }
+.move-office__drop-icon { font-size: 26px; color: var(--muted); margin-bottom: 4px; }
+.move-office__drop.is-over .move-office__drop-icon, .move-office__drop.has-file .move-office__drop-icon { color: var(--hl); }
+.move-office__drop-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

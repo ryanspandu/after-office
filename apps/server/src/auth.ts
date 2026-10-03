@@ -595,14 +595,15 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
  * - the body must be JSON (exactly `application/json`, which a cross-site form or no-cors fetch can't send);
  * - a browser request must come from this very origin (Origin / Sec-Fetch-Site), not a sibling subdomain.
  * Together with the SameSite=Strict session cookie.
- * The one exception is a chat attachment (POST …/uploads): raw bytes (`application/octet-stream`) with the file name in
+ * The exceptions are a chat attachment (POST …/uploads) and a piece of an office being imported (POST
+ * /api/migrate/upload/<id>): raw bytes (`application/octet-stream`) with the file name in
  * `X-File-Name`. Neither that type nor a custom header can be sent cross-site without a CORS preflight, which this
  * server never allows, and the origin checks below still apply.
  */
 export const requireJsonForWrites: MiddlewareHandler = async (c, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) return next()
   const type = c.req.header('content-type')?.split(';')[0].trim().toLowerCase()
-  const upload = type === 'application/octet-stream' && c.req.method === 'POST' && /^\/api\/(agents\/[^/]+\/uploads|workspaces\/files)$/.test(c.req.path) && !!c.req.header('x-file-name')
+  const upload = type === 'application/octet-stream' && c.req.method === 'POST' && /^\/api\/(agents\/[^/]+\/uploads|workspaces\/files|migrate\/upload\/[\w-]+)$/.test(c.req.path) && !!c.req.header('x-file-name')
   if (type !== 'application/json' && !upload) return c.json({ error: 'Expected application/json' }, 415)
   const site = c.req.header('sec-fetch-site')
   if (site && site !== 'same-origin' && site !== 'none') return c.json({ error: 'Cross-site request refused' }, 403)

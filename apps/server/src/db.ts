@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite'
-import { chmodSync, existsSync, mkdirSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { ActivityEntry, AgentKind, CronJob, LiveMode, OfficeTask, OwnerNote, TaskComment, WorkReport } from '@after-office/shared'
 
@@ -15,6 +15,14 @@ export const DATA_DIR = resolve(process.env.OFFICE_DATA_DIR ?? resolve(import.me
 mkdirSync(DATA_DIR, { recursive: true })
 // prompts, reports, sessions: for this user's eyes only
 chmodSync(DATA_DIR, 0o700)
+
+// an imported office (work/migrate.ts) waiting to be put in place: it replaces this one before it's opened (the one
+// it replaces was backed up first, in backups/)
+if (existsSync(resolve(DATA_DIR, 'import-pending.db'))) {
+  for (const f of ['after-office.db', 'after-office.db-wal', 'after-office.db-shm']) rmSync(resolve(DATA_DIR, f), { force: true })
+  renameSync(resolve(DATA_DIR, 'import-pending.db'), resolve(DATA_DIR, 'after-office.db'))
+  console.log('[migrate] the imported office is in place')
+}
 
 export const db = new Database(resolve(DATA_DIR, 'after-office.db'), { create: true })
 for (const f of ['after-office.db', 'after-office.db-wal', 'after-office.db-shm']) if (existsSync(resolve(DATA_DIR, f))) chmodSync(resolve(DATA_DIR, f), 0o600)

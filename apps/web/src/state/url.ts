@@ -5,7 +5,7 @@ import { create } from 'zustand'
 // shows what the parameters ask for, and Back closes what was opened last.
 //
 //   ?task=<id>  ?report=<id>  ?reports=<filter>&folder=&q=&range=&from=&to=&page=&per=&ri=<id> (the one read in the inbox)  ?tasks=1&tq=&tsort=title|deadline|status|priority|agent&tdir=asc|desc&tpage=&tper=  ?archive=1  ?statuses=1 (the task statuses' editor)
-//   ?folder=<path>  ?newfolder=1  ?newtask=1&nt_agent=&nt_folder=&nt_status=&nt_tag=  ?note=<id>|new&nfolder=  ?notes=1  ?daily=<id>|new  ?addagent=1|manager
+//   ?folder=<path>  ?newfolder=1  ?newtask=1&nt_agent=&nt_folder=&nt_status=&nt_tag=  ?note=<id>|new&nfolder=&ntag=  ?notes=1&nq=&nview=  ?daily=<id>|new  ?addagent=1|manager
 //   ?agent=<id>&tab=<tab>  ?manager=1&mtab=chat|team  ?automation=1  ?profile=1  ?settings=1 (office branding)  ?password=1  ?twofa=1  ?activity=1
 //   reports view also: &tag=<id,id>
 //   phones: ?sheet=attention|cron|tasks|reports|agents (the dock's bottom sheets, ui/MobileDock.tsx)

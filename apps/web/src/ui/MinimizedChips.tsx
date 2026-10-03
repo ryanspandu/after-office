@@ -1,4 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { horizontalListSortingStrategy, SortableContext, useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { LuEllipsis, LuFileText, LuFolder, LuFolders, LuListTodo, LuNotebookPen, LuX } from 'react-icons/lu'
 import { useLive } from '../state/live'
@@ -18,6 +21,14 @@ function useWindowLabels() {
           sub: 'Report',
           icon: <LuFileText />,
           open: () => (useMinimized.getState().remove(f.path), openUrl({ report: f.path.slice('report:'.length) })),
+        }
+      : f.kind === 'notes'
+      ? {
+          name: 'Notes',
+          sub: 'Notes',
+          icon: <LuNotebookPen />,
+          // back as it was left (the tag it was in, the search)
+          open: () => (useMinimized.getState().remove(f.path), openUrl({ notes: '1', ...f.params })),
         }
       : f.kind === 'tasks' || f.kind === 'reports'
       ? {
@@ -43,6 +54,10 @@ export function MinimizedChips({ current, currentNote }: { current?: string; cur
   const folders = useLeaving(live)
   const labels = useWindowLabels()
   const remove = useMinimized((s) => s.remove)
+  const move = useMinimized((s) => s.move)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  // the click that ends a drag (the pointer lifted over the chip it moved) doesn't open it
+  const dragged = useRef(false)
   const mobile = useMediaQuery(MOBILE)
   if (!folders.length) return null
   if (mobile) return <MinimizedMenu folders={folders} remove={remove} />
@@ -51,22 +66,47 @@ export function MinimizedChips({ current, currentNote }: { current?: string; cur
   const rest = folders.slice(shown.length)
   return (
     <div className="fmin" role="toolbar" aria-label="Minimized folders">
-      {shown.map((f) => {
-        const w = labels(f)
-        return (
-          <span key={f.path} className={`fmin__chip${f.leaving ? ' is-leaving' : ''}`}>
-            <button className="fmin__open" onClick={w.open} data-tip={w.sub}>
-              {w.icon}
-              <span className="truncate">{w.name}</span>
-            </button>
-            <button className="fmin__close" aria-label={`Close ${w.name}`} data-tip="Close" onClick={() => remove(f.path)}>
-              <LuX />
-            </button>
-          </span>
-        )
-      })}
+      {/* dragged into another order (a few pixels first: a plain click still opens one) */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={() => (dragged.current = true)}
+        onDragCancel={() => setTimeout(() => (dragged.current = false))}
+        onDragEnd={(e: DragEndEvent) => {
+          setTimeout(() => (dragged.current = false))
+          if (e.over && e.active.id !== e.over.id) move(String(e.active.id), String(e.over.id))
+        }}
+      >
+        <SortableContext items={shown.map((f) => f.path)} strategy={horizontalListSortingStrategy}>
+          {shown.map((f) => {
+            const w = labels(f)
+            return <Chip key={f.path} id={f.path} leaving={!!f.leaving} icon={w.icon} name={w.name} sub={w.sub} onOpen={() => !dragged.current && w.open()} onClose={() => !dragged.current && remove(f.path)} />
+          })}
+        </SortableContext>
+      </DndContext>
       {rest.length > 0 && <MinimizedMenu folders={rest} remove={remove} more />}
     </div>
+  )
+}
+
+function Chip({ id, leaving, icon, name, sub, onOpen, onClose }: { id: string; leaving: boolean; icon: ReactNode; name: string; sub: string; onOpen: () => void; onClose: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: leaving })
+  return (
+    <span
+      ref={setNodeRef}
+      className={`fmin__chip${leaving ? ' is-leaving' : ''}${isDragging ? ' is-dragging' : ''}`}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      {...attributes}
+      {...listeners}
+    >
+      <button className="fmin__open" onClick={onOpen} data-tip={sub}>
+        {icon}
+        <span className="truncate">{name}</span>
+      </button>
+      <button className="fmin__close" aria-label={`Close ${name}`} data-tip="Close" onClick={onClose}>
+        <LuX />
+      </button>
+    </span>
   )
 }
 

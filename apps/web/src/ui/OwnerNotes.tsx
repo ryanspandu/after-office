@@ -9,14 +9,16 @@ import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
 import { useOffice } from '../state/store'
 import { useLive } from '../state/live'
-import { openUrl } from '../state/url'
+import { openUrl, setUrl, useParam } from '../state/url'
+import { NOTES, useMinimized } from '../state/minimized'
 import { confirm } from './Confirm'
 import { ago } from './FollowUps'
 import { useModalMaximize } from './Maximize'
 import { Modal } from './Modal'
 import { Select } from './Select'
 import { ProjectFolderPicker } from './ProjectFolderPicker'
-import { TagChips, TagFilter, TagPicker } from './tags'
+import { TagChips, TagPicker } from './tags'
+import { NoteTagCards, NoteTagHeader } from './TagCards'
 
 // The owner's own notes (Reports → Notes): written in the dashboard with the same rich text editor as a folder's notes,
 // with a folder and tags like a report. Only the owner writes them; no agent is given them.
@@ -197,14 +199,32 @@ const matches = (n: OwnerNoteSummary, q: string) => {
   return words.every((w) => hay.includes(w))
 }
 
-/** "View all" on the Notes tab: every note, by search, folder and tags. */
-export function NotesModal({ onClose }: { onClose: () => void }) {
+/** "View all" on the Notes tab: the tags as cards, then a tag's notes (by search and folder too). */
+export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMinimize?: () => void }) {
   const notes = useLive((s) => s.notes)
   const now = useNow(60_000).getTime()
-  const [q, setQ] = useState('')
+  // its view lives in the address bar (?notes=1&nq=…&nview=<tag>|*), so a minimized one comes back as it was left
+  const nq = useParam('nq') ?? ''
+  const [q, setQ] = useState(nq)
+  useEffect(() => setQ(nq), [nq])
+  useEffect(() => {
+    if (q === nq) return
+    const t = setTimeout(() => setUrl({ nq: q.trim() || null }), 250)
+    return () => clearTimeout(t)
+  }, [q, nq])
+  // open again: its chip goes
+  useEffect(() => useMinimized.getState().remove(NOTES), [])
   // a folder's notes, or those about no folder ("none")
   const [place, setPlace] = useState('')
-  const [tags, setTags] = useState<string[]>([])
+  // the tags as cards first (like Tasks); one opens its notes ('*': every note). A search looks through all of them.
+  const nview = useParam('nview')
+  const inTag = nview !== null
+  const tagId = nview ?? '*'
+  // (replacing the entry: closing the window from inside a tag must leave no copy of it behind for Back)
+  const openTag = (id: string | null) => setUrl({ nview: id })
+  const allTags = useDashboard((s) => s.tags)
+  const tag = allTags.some((t) => t.id === tagId) ? tagId : '*'
+  const atCards = !inTag && !q.trim()
   const folders = [...new Set(notes.map((n) => n.folder).filter((f): f is string => !!f))]
   // full size (remembered), like the dock's sheets
   const max = useModalMaximize(720, 'after-office:sheet-max:Notes list')
@@ -212,7 +232,7 @@ export function NotesModal({ onClose }: { onClose: () => void }) {
     (n) =>
       (!q.trim() || matches(n, q)) &&
       (!place || (place === 'none' ? !n.folder : n.folder === place)) &&
-      (!tags.length || tags.some((t) => n.tags?.includes(t))),
+      (!inTag || q.trim() || tag === '*' || !!n.tags?.includes(tag)),
   )
   return (
     <Modal
@@ -221,18 +241,22 @@ export function NotesModal({ onClose }: { onClose: () => void }) {
       title="Notes"
       description="Your own notes. Shared ones (Share with agents) can be read and changed by the agents; the rest only by you."
       {...max.modalProps}
+      // a click beside it puts it aside (a chip brings it back as it was)
+      onBackdrop={onMinimize}
       actions={
         <>
-          <button className="small" onClick={() => openUrl({ note: 'new' })}>
-            <LuPlus /> New note
-          </button>
+          {onMinimize && (
+            <button className="icon-btn small ghost" data-tip="Minimize" aria-label="Minimize" onClick={onMinimize}>
+              <LuMinus />
+            </button>
+          )}
           {max.modalProps.actions}
         </>
       }
     >
       <div className="modal__body reports-modal notes-modal" ref={max.bodyRef}>
         <div className="reports-modal__bar notes-modal__bar">
-          <label className="search-box grow">
+          <label className="search-box">
             <LuSearch />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes" aria-label="Search notes" maxLength={200} />
             {q && (
@@ -241,6 +265,7 @@ export function NotesModal({ onClose }: { onClose: () => void }) {
               </button>
             )}
           </label>
+          {!atCards && (
           <Select
             ariaLabel="Folder"
             searchable
@@ -253,13 +278,25 @@ export function NotesModal({ onClose }: { onClose: () => void }) {
             ]}
             onChange={setPlace}
           />
-          <TagFilter className="reports-modal__tags" value={tags} onChange={setTags} />
+          )}
+          <span className="grow notes-modal__gap" />
+          {/* like Tasks: search on the left, New note on the right (inside a tag, the new note starts in it) */}
+          <button className="small primary notes-modal__new" onClick={() => openUrl({ note: 'new', ntag: inTag && tag !== '*' ? tag : null })}>
+            <LuPlus /> New note
+          </button>
         </div>
+        {atCards ? (
+          <NoteTagCards notes={notes} onChange={(id) => openTag(id)} />
+        ) : (
+        <div className="tag-detail">
+        {!q.trim() && <NoteTagHeader notes={notes} tagId={tag} onBack={() => openTag(null)} />}
         <ul className="list reports-modal__list">
           {/* dragged into another order only when every note is shown (not while searching or filtering) */}
           <NoteItems notes={shown} now={now} sortable={shown.length === notes.length} />
           {!shown.length && <li className="empty">{notes.length ? 'No notes match.' : 'No notes yet.'}</li>}
         </ul>
+        </div>
+        )}
       </div>
     </Modal>
   )
@@ -271,12 +308,12 @@ type Draft = Pick<OwnerNote, 'title' | 'html'> & { tags: string[]; shared: boole
  * One note being edited (a window, or a folder's details): loaded, saved as it changes (one save at a time, in order:
  * the first makes a new note, the rest change it). A new one is stored on its first change; left empty, it's dropped.
  */
-function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?: string }; onCreated?: (id: string) => void }) {
+function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?: string; tags?: string[] }; onCreated?: (id: string) => void }) {
   const noteId = useRef<string | null>(id === 'new' ? null : id)
   const [loaded, setLoaded] = useState<OwnerNote | null>(id === 'new' ? { id: '', title: '', html: '', createdAt: 0, updatedAt: 0 } : null)
   const [error, setError] = useState<string | null>(null)
   const [title, setTitle] = useState('')
-  const [tags, setTags] = useState<string[]>([])
+  const [tags, setTags] = useState<string[]>(defaults?.tags ?? [])
   const [folder, setFolder] = useState<string | undefined>(defaults?.folder)
   // optional for each note, off to start with: the agents may read and change it
   const [shared, setShared] = useState(false)
@@ -284,7 +321,7 @@ function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?
   const draft = useRef<Draft>({
     title: '',
     html: '',
-    tags: [],
+    tags: defaults?.tags ?? [],
     shared: false,
     pinned: false,
     ...(defaults?.folder ? { folder: defaults.folder } : {}),
@@ -542,7 +579,7 @@ export function NoteModal({
 }: {
   id: string
   /** a new note made from somewhere: its folder (a folder's details) */
-  defaults?: { folder?: string }
+  defaults?: { folder?: string; tags?: string[] }
   onClose: () => void
   onCreated: (id: string) => void
   /** put aside (a chip brings it back) */

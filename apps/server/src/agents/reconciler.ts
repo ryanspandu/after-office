@@ -49,7 +49,11 @@ export async function restartAgentServer() {
   return rows.length
 }
 
+/** An import is replacing the office (work/migrate.ts): no reviving the agents being stopped until the restart. */
+export const revivePause = { on: false }
+
 export async function reconcile() {
+  if (revivePause.on) return
   const alive = new Set(await tmux.listSessions())
   const { starting } = await import('./manager')
   for (const row of agentsRepo.all()) {

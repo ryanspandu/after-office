@@ -9,12 +9,14 @@ const STORAGE_KEY = 'after-office:minimized-folders'
 export const TASKS = '@tasks'
 /** …and the Reports window's */
 export const REPORTS = '@reports'
+/** …and the Notes list's (View all) */
+export const NOTES = '@notes'
 
 export interface MinimizedFolder {
   /** a folder's path, or a note's id (kind 'note') */
   path: string
   /** unset: a folder window; 'note': one of the owner's notes (Reports → Notes); 'tasks' / 'reports': those windows */
-  kind?: 'note' | 'tasks' | 'reports' | 'report'
+  kind?: 'note' | 'tasks' | 'reports' | 'report' | 'notes'
   /** the Tasks / Reports window: its view as it was left (the address bar's parameters: search, sort, page…) */
   params?: Record<string, string>
   /** a note's title when it was put aside (the list's own title wins when there is one) */
@@ -39,9 +41,11 @@ interface MinimizedStore {
   addNote: (id: string, label: string) => void
   /** one report's window put aside (its id, its title) */
   addReport: (id: string, label: string) => void
-  /** the Tasks or Reports window put aside, with its view */
-  addView: (kind: 'tasks' | 'reports', params: Record<string, string>) => void
+  /** the Tasks, Reports or Notes window put aside, with its view */
+  addView: (kind: 'tasks' | 'reports' | 'notes', params: Record<string, string>) => void
   remove: (path: string) => void
+  /** the chip `from` moved to where `to` is (dragged into another order) */
+  move: (from: string, to: string) => void
   /** what a folder's window is showing, kept for when it opens again */
   setSection: (path: string, section: string) => void
 }
@@ -72,9 +76,18 @@ export const useMinimized = create<MinimizedStore>((set, get) => {
       save()
     },
     addView: (kind, params) => {
-      const path = kind === 'tasks' ? TASKS : REPORTS
+      const path = kind === 'tasks' ? TASKS : kind === 'notes' ? NOTES : REPORTS
       const rest = get().folders.filter((f) => f.path !== path)
-      set({ folders: [...rest, { path, kind, label: kind === 'tasks' ? 'Tasks' : 'Reports', params }] })
+      set({ folders: [...rest, { path, kind, label: kind === 'tasks' ? 'Tasks' : kind === 'notes' ? 'Notes' : 'Reports', params }] })
+      save()
+    },
+    move: (from, to) => {
+      const list = [...get().folders]
+      const a = list.findIndex((f) => f.path === from)
+      const b = list.findIndex((f) => f.path === to)
+      if (a < 0 || b < 0 || a === b) return
+      list.splice(b, 0, ...list.splice(a, 1))
+      set({ folders: list })
       save()
     },
     remove: (path) => {

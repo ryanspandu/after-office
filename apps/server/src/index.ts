@@ -36,6 +36,7 @@ import { agentRoutes } from './routes/agents'
 import { workRoutes } from './routes/work'
 import { checkTrigger, startWorkJobs, triggerCron } from './work/work'
 import { bodyLimit } from 'hono/body-limit'
+import { migrateRoutes } from './routes/migrate'
 import type { Context } from 'hono'
 import { AgentError } from './agents/manager'
 import { startBackups } from './backup'
@@ -104,6 +105,7 @@ app.route('/api', profileRoutes)
 setBrandNameSource(() => branding().name)
 setAvatarSource(avatarUrl)
 app.route('/api', workRoutes)
+app.route('/api', migrateRoutes)
 
 // Folder picker for new agents: directories under the allowed roots (fsroots.ts) only.
 app.get('/api/fs', async (c) => {

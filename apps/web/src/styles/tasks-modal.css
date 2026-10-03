@@ -201,7 +201,7 @@ span.statuses__base { display: inline-flex; align-items: center; gap: 5px; font-
 .tag-card__who { display: inline-flex; }
 .tag-card__who > * + * { margin-left: -5px; box-shadow: 0 0 0 1.5px var(--card); }
 .tag-card__go { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--muted); background: var(--card-2); flex-shrink: 0; }
-.tag-card.is-on .tag-card__go { color: #fff; background: var(--c); }
+.tag-card.is-on .tag-card__go { color: var(--card); background: var(--c); }
 .tag-card--new { align-items: center; justify-content: center; gap: 8px; min-height: 150px; font-size: 13px; color: var(--muted); border-style: dashed; background: transparent; box-shadow: none; }
 .tag-card__plus { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; font-size: 17px; background: var(--card-2); }
 .tag-card--naming { cursor: default; align-items: stretch; padding: 14px; }
@@ -298,3 +298,9 @@ span.statuses__base { display: inline-flex; align-items: center; gap: 5px; font-
   .tasks-modal .toolbar > .toolbar__view-m { display: flex; }
   .tag-head__view { display: none; }
 }
+/* a tag card's footer: its line stays the card's own colour on hover (no white edge); the focused card's arrow nudges
+   to the right, over and over, asking to be tapped */
+.tag-card .tag-card__open, .tag-card .tag-card__open:hover, .tag-card .tag-card__open:focus { border-top: 1px solid var(--line); border-left: 0; border-right: 0; border-bottom: 0; }
+@keyframes tag-go-nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
+.tag-card.is-on .tag-card__go svg { animation: tag-go-nudge 1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .tag-card.is-on .tag-card__go svg { animation: none; } }

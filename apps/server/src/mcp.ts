@@ -6,10 +6,11 @@ import { DEFAULT_MODEL, divisionOf, MODEL_CHOICES, RULE_PACKS, type OfficeTask, 
 import { agentsRepo, commentsRepo, connectorsOf, cronsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
 import { knownConnectors, listConnectors } from './agents/connectors'
 import { diffSince } from './work/git'
-import { AgentError } from './agents/manager'
+import { AgentError, restartAgent } from './agents/manager'
+import { restartWhenIdle } from './agents/reconciler'
 import { requestHire } from './work/hires'
 import { bossMode, countBoss } from './work/settings'
-import { noteManagerMessage } from './work/activity'
+import { logSystem, noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
 import { jobNamed } from './work/jobs'
 import { statusLabel } from './work/statuses'
@@ -31,6 +32,9 @@ const fail = (e: unknown): Text => ({ content: [{ type: 'text', text: e instance
 const json = (v: unknown) => text(JSON.stringify(v, null, 2))
 
 const iso = (ms?: number) => (ms ? new Date(ms).toISOString() : undefined)
+/** restart_agent: when the manager last restarted each agent (at most once every RESTART_EVERY_MS: no restart loops) */
+const lastRestart = new Map<string, number>()
+const RESTART_EVERY_MS = 10 * 60_000
 
 /** Connector names an agent may use ("all" for agents set up before connectors were managed). */
 function connectorNames(a: AgentRow) {
@@ -245,6 +249,50 @@ function buildServer(managerId: string) {
         countBoss('messages')
         if (target.id !== managerId) expectReply(target.id, managerId)
         return text(result === 'sent' ? `Sent to ${target.name}.` : `${target.name} is busy; queued.`)
+      } catch (e) {
+        return fail(e)
+      }
+    },
+  )
+
+  server.registerTool(
+    'restart_agent',
+    {
+      description:
+        "Restart an agent's Claude Code session (its conversation is kept: it resumes where it was). For an agent that's stuck, frozen, looping, or needs its CLAUDE.md / skills / settings read again. A busy agent restarts once it's idle, unless `now` (that stops what it's doing). Not yourself; the same agent at most once every 10 minutes. Tell the owner why.",
+      inputSchema: {
+        agent: z.string().describe('agent id or name'),
+        reason: z.string().min(3).max(300).describe('why, in a few words (shown in its activity log)'),
+        now: z.boolean().optional().describe('restart even if it is working (it stops mid-task); default: once it is idle'),
+      },
+    },
+    async ({ agent, reason, now }) => {
+      try {
+        const target = resolveAgent(agent, managerId)
+        if (target.id === managerId) return fail(new Error("You can't restart your own session. Ask the owner (agent drawer → Restart session)."))
+        const last = lastRestart.get(target.id) ?? 0
+        if (Date.now() - last < RESTART_EVERY_MS)
+          return fail(new Error(`${target.name} was restarted less than 10 minutes ago. Give it time, or tell the owner it still looks stuck.`))
+        // injection guard (as for message_agent): right after an agent's report, no stopping an agent mid-work
+        if (now && isReadingAgentOutput(managerId) && !bossMode())
+          return fail(new Error("Right after an agent's report, restarting an agent mid-work is off. Leave out `now` (it restarts once idle), or tell the owner."))
+        const status = runtimeOf(target.id).status
+        if (status === 'offline') {
+          lastRestart.set(target.id, Date.now())
+          await restartAgent(target.id)
+          logSystem(target.id, `Started again by the manager: ${reason}`)
+          return text(`${target.name} was offline; starting it again (conversation kept).`)
+        }
+        const busy = status === 'working' || status === 'waiting'
+        lastRestart.set(target.id, Date.now())
+        if (busy && !now) {
+          restartWhenIdle(target.id)
+          logSystem(target.id, `Restart asked by the manager (once idle): ${reason}`)
+          return text(`${target.name} is ${status}; it restarts once it's idle (conversation kept).`)
+        }
+        await restartAgent(target.id)
+        logSystem(target.id, `Restarted by the manager${busy ? ' (it was busy)' : ''}: ${reason}`)
+        return text(`${target.name} restarted (conversation kept).${busy ? ' It was busy: what it was doing stopped; check its task and send it on if needed.' : ''}`)
       } catch (e) {
         return fail(e)
       }

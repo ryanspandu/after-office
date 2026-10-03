@@ -366,3 +366,6 @@
 .fmin__chip.is-leaving { animation: fmin-chip-out 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; pointer-events: none; overflow: hidden; white-space: nowrap; }
 .fmin-fab { animation: fmin-chip-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 @media (prefers-reduced-motion: reduce) { .fmin__chip, .fmin__chip.is-leaving, .fmin-fab { animation: none; } }
+/* minimized chips: dragged into another order (ui/MinimizedChips.tsx) */
+.fmin__chip { touch-action: none; }
+.fmin__chip.is-dragging { z-index: 2; cursor: grabbing; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2); opacity: 0.95; }

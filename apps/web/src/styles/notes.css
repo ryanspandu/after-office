@@ -50,12 +50,17 @@
 @container (max-width: 300px) {
   .card__titletabs > button:not(.is-on) > .card__titletabs-label { display: none; }
 }
-/* Notes → View all: the search on a line of its own when it's narrow, project and tags sharing the next */
+/* Notes → View all: search on the left, New note on the right (like Tasks); the folder filter (inside a tag) between */
 .notes-modal__bar { flex-wrap: wrap; }
-.notes-modal__bar > .search-box { flex: 1 1 240px; min-width: 0; }
-.notes-modal__bar > .rs { flex: 1 1 160px; min-width: 0; }
+.notes-modal__bar { align-items: center; }
+.notes-modal__bar > .search-box { flex: 1 1 200px; max-width: 320px; min-width: 0; }
+.notes-modal__bar > .rs { flex: 0 1 200px; min-width: 0; }
+.notes-modal__new { flex-shrink: 0; white-space: nowrap; }
 @media (max-width: 768px) {
-  .notes-modal__bar > .search-box { flex-basis: 100%; }
+  /* phones: search and New note on one line, the folder filter under them */
+  .notes-modal__bar > .search-box { flex: 1 1 0; max-width: none; }
+  .notes-modal__gap { display: none; }
+  .notes-modal__bar > .rs { order: 3; flex: 1 1 100%; }
 }
 /* full size: the list takes the rest of the window */
 .modal--full .notes-modal { flex: 1; min-height: 0; }

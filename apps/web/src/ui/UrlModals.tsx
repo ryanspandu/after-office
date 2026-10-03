@@ -29,6 +29,7 @@ import { TasksModal } from './TasksModal'
 
 /** the Tasks window's view in the address bar */
 const TASKS_VIEW = ['tasks', 'tq', 'tsort', 'tdir', 'tpage', 'tper']
+const NOTES_VIEW = ['notes', 'nq', 'nview']
 const REPORTS_VIEW = ['reports', 'q', 'range', 'from', 'to', 'page', 'per', 'folder', 'tag', 'by', 'ri']
 const clear = (keys: string[]) => () => setUrl(Object.fromEntries(keys.map((k) => [k, null])))
 
@@ -73,7 +74,16 @@ export function UrlModals() {
           onMinimize={(title) => (useMinimized.getState().addReport(p.report!, title), clear(['report'])())}
         />
       )}
-      {p.notes && <NotesModal onClose={clear(['notes'])} />}
+      {p.notes && (
+        <NotesModal
+          onClose={clear(NOTES_VIEW)}
+          onMinimize={() => {
+            // put aside with its view (the tag it's in, the search)
+            useMinimized.getState().addView('notes', Object.fromEntries(NOTES_VIEW.filter((k) => k !== 'notes' && p[k]).map((k) => [k, p[k]])))
+            clear(NOTES_VIEW)()
+          }}
+        />
+      )}
       {/* a note opened from the list: above it */}
       <NoteWindows current={p.note} />
       {p.newtask && <NewTaskFromUrl />}
@@ -143,6 +153,7 @@ function NoteWindows({ current }: { current?: string }) {
   const minimized = useMinimized((s) => s.folders)
   // a new note from a folder's details: that folder
   const nfolder = useUrl((s) => s.params.nfolder)
+  const ntag = useUrl((s) => s.params.ntag)
   // a note made in a window opened as "new": the key that window had
   const born = useRef(new Map<string, string>())
   const fresh = useRef<string | null>(null)
@@ -159,20 +170,20 @@ function NoteWindows({ current }: { current?: string }) {
             // the note itself (a window that was opened as "new" keeps its key, but loads the note when it opens again)
             id={id}
             hidden={id !== current}
-            defaults={id === 'new' ? { folder: nfolder ?? undefined } : undefined}
+            defaults={id === 'new' ? { folder: nfolder ?? undefined, tags: ntag ? [ntag] : undefined } : undefined}
             onCreated={(nid) => {
               born.current.set(nid, key)
               fresh.current = null
-              setUrl({ note: nid, nfolder: null })
+              setUrl({ note: nid, nfolder: null, ntag: null })
             }}
             onClose={() => {
               born.current.delete(id)
               useMinimized.getState().remove(id)
-              if (id === current) setUrl({ note: null, nfolder: null })
+              if (id === current) setUrl({ note: null, nfolder: null, ntag: null })
             }}
             onMinimize={(nid, title) => {
               useMinimized.getState().addNote(nid, title)
-              setUrl({ note: null, nfolder: null })
+              setUrl({ note: null, nfolder: null, ntag: null })
             }}
           />
         )

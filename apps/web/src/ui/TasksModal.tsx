@@ -300,7 +300,7 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
 
         {atCards ? (
           // the tags as project cards; one opens its tasks (as a list or a board, picked in there)
-          <TagCards value={tags.some((t) => t.id === tagFilter) ? tagFilter : '*'} onSelect={setTagFilter} onChange={(id) => (setTagFilter(id), setInTag(true))} />
+          <TagCards onChange={(id) => (setTagFilter(id), setInTag(true))} />
         ) : (
         // a tag's tasks slide in over where its card was (styles: .tag-detail)
         <div className={live ? 'tag-detail' : undefined}>
