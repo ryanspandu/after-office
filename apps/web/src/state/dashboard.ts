@@ -271,9 +271,9 @@ export const useDashboard = create<DashboardStore>((set, get) => {
     tags: [],
     putTag: (tag) => {
       const id = tag.id ?? newId('tag')
-      const next: Tag = { id, name: tag.name.trim(), color: tag.color }
+      const next: Tag = { id, name: tag.name.trim(), color: tag.color, ...(tag.icon ? { icon: tag.icon } : {}) }
       set((s) => ({ tags: s.tags.some((t) => t.id === id) ? s.tags.map((t) => (t.id === id ? next : t)) : [...s.tags, next] }))
-      push(`/api/tags/${id}`, id, () => ({ name: next.name, color: next.color }))
+      push(`/api/tags/${id}`, id, () => ({ name: next.name, color: next.color, icon: next.icon }))
       return id
     },
     removeTag: (id) => {

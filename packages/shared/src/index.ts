@@ -408,6 +408,8 @@ export interface Tag {
   id: string
   name: string
   color: string
+  /** its icon (a name from the dashboard's tag icon set, e.g. "rocket"); none: the plain tag icon */
+  icon?: string
 }
 
 export interface OfficeTask {

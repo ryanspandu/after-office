@@ -114,16 +114,28 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
   const needle = search.trim().toLowerCase()
   // what it opens goes in the address bar (ui/UrlModals.tsx), on top of this list
   const setCreating = (d: Partial<OfficeTask>) =>
-    openUrl({ newtask: '1', nt_agent: d.agentId ?? null, nt_status: d.customStatus ?? d.status ?? null })
+    openUrl({ newtask: '1', nt_agent: d.agentId ?? null, nt_status: d.customStatus ?? d.status ?? null, nt_tag: live && inTag && tags.some((t) => t.id === tagFilter) ? tagFilter : null })
   const setOpenId = (id: string) => openUrl({ task: id })
   const live = useOffice((s) => s.source === 'live')
   const archived = useLive((s) => s.archivedTasks)
+  // live: the tags as cards first; List / Board is picked inside one (a search looks through every tag's tasks)
+  const atCards = live && !inTag && !needle
 
   const setPref = (patch: Partial<typeof prefs>) => {
     const next = { ...prefs, ...patch }
     setPrefs(next)
     savePrefs(next)
   }
+  const viewTabs = (className = '') => (
+    <div className={`seg ${className}`} role="tablist" aria-label="View">
+      <button className={prefs.view === 'list' ? 'active' : ''} onClick={() => setPref({ view: 'list' })}>
+        <LuList /> List
+      </button>
+      <button className={prefs.view === 'board' ? 'active' : ''} onClick={() => setPref({ view: 'board' })}>
+        <LuKanban /> Board
+      </button>
+    </div>
+  )
 
   const groups: Group[] = useMemo(() => {
     if (prefs.groupBy === 'status') return statusDefs.map((s) => ({ key: s.id, label: s.label, color: s.color }))
@@ -186,14 +198,8 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
     >
       <div className="modal__body tasks-modal" ref={max.bodyRef}>
         <div className={`toolbar${filtersOpen ? '' : ' toolbar--folded'}`}>
-          <div className="seg" role="tablist" aria-label="View">
-            <button className={prefs.view === 'list' ? 'active' : ''} onClick={() => setPref({ view: 'list' })}>
-              <LuList /> List
-            </button>
-            <button className={prefs.view === 'board' ? 'active' : ''} onClick={() => setPref({ view: 'board' })}>
-              <LuKanban /> Board
-            </button>
-          </div>
+          {/* live: List / Board is inside a tag (its header); on phones it sits up here, beside New task */}
+          {!live ? viewTabs() : !atCards && viewTabs('toolbar__view-m')}
           <label className="search-box toolbar__search">
             <LuSearch />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks" aria-label="Search tasks" maxLength={200} />
@@ -222,7 +228,7 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
           {/* the view, search and New task on top; grouping, filters and the other actions below */}
           <span className="toolbar__break" aria-hidden />
           {/* grouping is the board's columns; the list is one list, newest first */}
-          {prefs.view === 'board' && (
+          {prefs.view === 'board' && !atCards && (
           <div className="toolbar__field">
             <span className="muted">Group by</span>
             <Select
@@ -237,7 +243,7 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
             />
           </div>
           )}
-          {prefs.view === 'list' && (
+          {prefs.view === 'list' && !atCards && (
             <div className="toolbar__filter">
               <Select
                 ariaLabel="Filter by status"
@@ -248,6 +254,7 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
               />
             </div>
           )}
+          {!atCards && (
           <div className="toolbar__filter">
             <Select
               ariaLabel="Filter by agent"
@@ -258,7 +265,9 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
               onChange={setAgentFilter}
             />
           </div>
-          {!(prefs.view === 'list' && live) && (
+          )}
+          {/* live: the tag is picked from its card (and shown in the header above its tasks) */}
+          {!live && (
           <div className="toolbar__filter toolbar__filter--tags">
             <Select
               ariaLabel="Filter by tag"
@@ -281,27 +290,33 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
                 <LuArchive /> Archive{archived ? ` (${archived})` : ''}
               </button>
             )}
-            <label className="check">
-              <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done
-            </label>
+            {!atCards && (
+              <label className="check">
+                <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} /> Show done
+              </label>
+            )}
           </div>
         </div>
 
-        {prefs.view === 'list' && live && !inTag && !needle ? (
-          // the tags as project cards; one opens its tasks
-          <TagCards value={tags.some((t) => t.id === tagFilter) ? tagFilter : '*'} onChange={(id) => (setTagFilter(id), setInTag(true))} />
-        ) : prefs.view === 'list' ? (
-          // a tag's tasks slide in over where its card was (styles: .tag-detail)
-          <div className={live ? 'tag-detail' : undefined}>
-            {live && (
-              <TagHeader
-                tagId={tags.some((t) => t.id === tagFilter) ? tagFilter : '*'}
-                onBack={() => {
-                  setInTag(false)
-                  setSearch('')
-                }}
-              />
-            )}
+        {atCards ? (
+          // the tags as project cards; one opens its tasks (as a list or a board, picked in there)
+          <TagCards value={tags.some((t) => t.id === tagFilter) ? tagFilter : '*'} onSelect={setTagFilter} onChange={(id) => (setTagFilter(id), setInTag(true))} />
+        ) : (
+        // a tag's tasks slide in over where its card was (styles: .tag-detail)
+        <div className={live ? 'tag-detail' : undefined}>
+          {live && (
+            <TagHeader
+              tagId={tags.some((t) => t.id === tagFilter) ? tagFilter : '*'}
+              onBack={() => {
+                setInTag(false)
+                setSearch('')
+              }}
+            >
+              {viewTabs()}
+            </TagHeader>
+          )}
+        {prefs.view === 'list' ? (
+          <>
             {needle && !visible.length && <div className="empty">No tasks match “{search.trim()}”.</div>}
             <ListView tasks={newestFirst.slice(pageNow * perPage, (pageNow + 1) * perPage)} onOpen={setOpenId} sort={sort} onSort={setSort} />
             {newestFirst.length > 0 && (
@@ -329,7 +344,7 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
                 </button>
               </div>
             )}
-          </div>
+          </>
         ) : (
           <BoardView
             groups={groups}
@@ -348,6 +363,8 @@ export function TasksModal({ onClose, onMinimize }: { onClose: () => void; onMin
                 : undefined
             }
           />
+        )}
+        </div>
         )}
       </div>
     </Modal>

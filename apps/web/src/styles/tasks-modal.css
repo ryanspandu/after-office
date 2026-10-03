@@ -254,3 +254,47 @@ span.statuses__base { display: inline-flex; align-items: center; gap: 5px; font-
 .task-sort:hover .task-sort__idle { opacity: 0.6; }
 .task-sort:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .task-pager .rs { width: 76px; }
+/* inside a tag: List / Board on the right of its header (wraps under it on narrow screens) */
+.tag-head { flex-wrap: wrap; row-gap: 8px; }
+.tag-head__view { margin-left: auto; flex-shrink: 0; }
+.tag-head__view .seg { margin: 0; }
+/* a tag card reads on its own; only its footer opens the tag */
+.tag-card--static { cursor: pointer; }
+.tag-card--static:hover { border-color: var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+.tag-card--static.is-on:hover { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 6px 18px rgba(0, 0, 0, 0.06); }
+.tag-card__open { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; margin: 6px -8px -4px; padding: 10px 8px 4px; border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; cursor: pointer; transition: background 0.15s; }
+.tag-card__open:hover { background: var(--card-2); }
+.tag-card__open:hover .tag-card__go { color: #fff; background: var(--c); }
+.tag-card__open:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+/* phones: compact tag cards (icon, name and badge on one line, the footer under them) */
+@media (max-width: 768px) {
+  .tag-card--static { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 6px; align-items: center; padding: 10px 10px 8px; }
+  .tag-card--static .tag-card__top { display: contents; }
+  .tag-card--static .tag-card__icon { grid-column: 1; grid-row: 1; width: 26px; height: 26px; font-size: 12px; }
+  .tag-card--static .tag-card__title { grid-column: 2; grid-row: 1; margin: 0; font-size: 13.5px; }
+  .tag-card--static .tag-card__badge { grid-column: 3; grid-row: 1; padding: 1px 6px; font-size: 8.5px; }
+  .tag-card--static .tag-card__open { grid-column: 1 / -1; margin: 0 -4px -2px; padding: 6px 4px 2px; }
+  .tag-card--static .tag-card__count b { font-size: 15px; }
+  .tag-card--static .tag-card__go { width: 22px; height: 22px; font-size: 12px; }
+  .tag-card--new, .tag-card--more { flex-direction: row; min-height: 0; padding: 10px; font-size: 12.5px; }
+  .tag-card--new .tag-card__plus { width: 26px; height: 26px; font-size: 13px; }
+}
+/* phones: the list's rows a size smaller, the checkbox by the title's first line (not the row's middle) */
+.task-m__title { font-size: 13.5px; }
+.task-m > input[type='checkbox'] { align-self: flex-start; margin-top: 1px; }
+/* phones: tag cards a little taller; the footer's hover only where there's a mouse (a tap leaves it stuck) */
+@media (max-width: 768px) {
+  .tag-card--static { min-height: 96px; padding: 12px 12px 10px; row-gap: 10px; align-content: space-between; }
+  .tag-card--new, .tag-card--more { min-height: 96px; }
+}
+@media (hover: none) {
+  .tag-card__open:hover { background: none; }
+  .tag-card__open:hover .tag-card__go { color: var(--muted); background: var(--card-2); }
+  .tag-card.is-on .tag-card__open:hover .tag-card__go { color: #fff; background: var(--c); }
+}
+/* inside a tag: List / Board in its header; on phones in the toolbar's first row instead (left of New task) */
+.tasks-modal .toolbar > .toolbar__view-m { display: none; }
+@media (max-width: 768px) {
+  .tasks-modal .toolbar > .toolbar__view-m { display: flex; }
+  .tag-head__view { display: none; }
+}

@@ -3,6 +3,7 @@ import ReactSelect from 'react-select'
 import CreatableSelect from 'react-select/creatable'
 import type { Tag } from '@after-office/shared'
 import { useDashboard } from '../state/dashboard'
+import { TagIcon } from './tagIcons'
 
 // Tags: the owner's coloured labels for tasks and reports. Made right in the picker (type a new name), managed
 // (rename, colour, delete) in the Tags tab of the left sidebar (ui/TagsTab.tsx).
@@ -28,7 +29,10 @@ export function TagChips({ ids, className = '', max }: { ids?: string[]; classNa
     <span className={`tag-chips ${className}`}>
       {shown.map((t) => (
         <span key={t.id} className="tag-chip" style={{ ['--c' as string]: t.color }}>
-          {t.name}
+          <span className="tag-chip__icon" aria-hidden>
+            <TagIcon tag={t} />
+          </span>
+          <span className="tag-chip__name">{t.name}</span>
         </span>
       ))}
       {more.length > 0 && (
@@ -40,12 +44,23 @@ export function TagChips({ ids, className = '', max }: { ids?: string[]; classNa
   )
 }
 
-type TagOption = { value: string; label: string; color: string }
-const toOption = (t: Tag): TagOption => ({ value: t.id, label: t.name, color: t.color })
+type TagOption = { value: string; label: string; color: string; icon?: string }
+const toOption = (t: Tag): TagOption => ({ value: t.id, label: t.name, color: t.color, icon: t.icon })
 const optionLabel = (o: TagOption) => (
   <span className="tag-opt">
-    <span className="chip__dot" style={{ background: o.color }} />
+    <span className="tag-opt__icon" style={{ color: o.color }} aria-hidden>
+      <TagIcon icon={o.icon} />
+    </span>
     <span className="truncate">{o.label}</span>
+  </span>
+)
+/** a picked tag in the picker: its icon and name */
+const pickedLabel = (o: TagOption) => (
+  <span className="tag-mv__label">
+    <span className="tag-chip__icon" aria-hidden>
+      <TagIcon icon={o.icon} />
+    </span>
+    {o.label}
   </span>
 )
 const selectClassNames = {
@@ -72,7 +87,7 @@ export function TagPicker({ value, onChange, size = 'md', inline = false, menuPl
       classNamePrefix="rs"
       value={options.filter((o) => value.includes(o.value))}
       options={options}
-      formatOptionLabel={(o, meta) => (meta.context === 'menu' ? optionLabel(o) : o.label)}
+      formatOptionLabel={(o, meta) => (meta.context === 'menu' ? optionLabel(o) : pickedLabel(o))}
       formatCreateLabel={(name) => `Create tag "${name.trim()}"`}
       isValidNewOption={(name) => !!name.trim() && name.trim().length <= 32 && !tags.some((t) => t.name.toLowerCase() === name.trim().toLowerCase())}
       onCreateOption={(name) => onChange([...value, putTag({ name, color: nextTagColor(tags) })])}
@@ -102,7 +117,7 @@ export function TagFilter({ value, onChange, className = '' }: { value: string[]
         classNamePrefix="rs"
         value={options.filter((o) => value.includes(o.value))}
         options={options}
-        formatOptionLabel={(o, meta) => (meta.context === 'menu' ? optionLabel(o) : o.label)}
+        formatOptionLabel={(o, meta) => (meta.context === 'menu' ? optionLabel(o) : pickedLabel(o))}
         onChange={(list) => onChange(list.map((o) => o.value))}
         noOptionsMessage={() => 'No tags yet: add them on a task or report'}
         menuPortalTarget={document.body}

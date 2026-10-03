@@ -9,6 +9,8 @@ import { AgentError } from '../agents/errors'
 const KEY = 'tags'
 const COLOR_RE = /^#[0-9a-f]{6}$/i
 const ID_RE = /^[\w-]{1,64}$/
+/** an icon's name in the dashboard's set (ui/tagIcons.tsx), e.g. "rocket" or "chart-bar" */
+const ICON_RE = /^[a-z0-9-]{1,40}$/
 export const MAX_TAGS_PER_ITEM = 10
 
 export function listTags(): Tag[] {
@@ -22,14 +24,15 @@ export function listTags(): Tag[] {
 const save = (tags: Tag[]) => settingsRepo.set(KEY, JSON.stringify(tags))
 
 /** Create or change a tag (the dashboard makes the id). Names are unique, case-insensitively. */
-export function putTag(id: string, b: { name?: unknown; color?: unknown }): Tag {
+export function putTag(id: string, b: { name?: unknown; color?: unknown; icon?: unknown }): Tag {
   if (!ID_RE.test(id)) throw new AgentError('Invalid tag id', 400)
   const name = typeof b.name === 'string' ? b.name.replace(/\s+/g, ' ').trim().slice(0, 32) : ''
   if (!name) throw new AgentError('Give the tag a name', 400)
   const color = typeof b.color === 'string' && COLOR_RE.test(b.color) ? b.color : '#9a9a96'
   const tags = listTags()
   if (tags.some((t) => t.id !== id && t.name.toLowerCase() === name.toLowerCase())) throw new AgentError(`There is already a tag called ${name}`, 409)
-  const tag: Tag = { id, name, color }
+  const icon = typeof b.icon === 'string' && ICON_RE.test(b.icon) ? b.icon : undefined
+  const tag: Tag = { id, name, color, ...(icon ? { icon } : {}) }
   const at = tags.findIndex((t) => t.id === id)
   if (at === -1) tags.push(tag)
   else tags[at] = tag

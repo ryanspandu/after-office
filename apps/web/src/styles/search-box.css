@@ -3,3 +3,7 @@
 .search-box--sm .icon-btn { width: 22px; height: 22px; }
 .side-search { margin: 0 0 8px; }
 .activity-modal__search { flex: 1 1 200px; }
+/* the sidebar's search, and beside it the tab's own "+" (Tags: a new tag) */
+.side-search-row { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.side-search-row .side-search { flex: 1; min-width: 0; margin: 0; }
+.side-search-row__add { flex-shrink: 0; }

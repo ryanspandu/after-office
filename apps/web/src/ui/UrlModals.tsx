@@ -185,14 +185,17 @@ const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
 
 function NewTaskFromUrl() {
   const p = useUrl((s) => s.params)
-  const defaults: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus'>> = {
+  const tagIds = useDashboard((s) => s.tags).map((t) => t.id)
+  const defaults: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus' | 'tags'>> = {
     ...(p.nt_agent ? { agentId: p.nt_agent } : {}),
     ...(p.nt_folder ? { folder: p.nt_folder } : {}),
     ...(STATUSES.includes(p.nt_status as TaskStatus) ? { status: p.nt_status as TaskStatus } : {}),
     // one of the owner's own statuses (a board column's "Add card")
     ...(p.nt_status && !STATUSES.includes(p.nt_status as TaskStatus) ? { customStatus: p.nt_status } : {}),
+    // made from inside a tag (Tasks): it starts in that tag
+    ...(p.nt_tag && tagIds.includes(p.nt_tag) ? { tags: [p.nt_tag] } : {}),
   }
-  return <TaskModal defaults={defaults} onClose={clear(['newtask', 'nt_agent', 'nt_folder', 'nt_status'])} />
+  return <TaskModal defaults={defaults} onClose={clear(['newtask', 'nt_agent', 'nt_folder', 'nt_status', 'nt_tag'])} />
 }
 
 function CronFromUrl({ id }: { id: string }) {

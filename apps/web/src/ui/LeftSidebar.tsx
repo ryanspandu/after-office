@@ -22,6 +22,7 @@ import { MOBILE } from '../state/useMediaQuery'
 import { useWorkReady } from '../state/live'
 import { TagPicker } from './tags'
 import { TagsTab } from './TagsTab'
+import { TagModal } from './TagModal'
 import { ActivitySidebar } from './Activity'
 import { ScrollTabs } from './ScrollTabs'
 import { matchesSearch, SearchBox } from './SearchBox'
@@ -391,6 +392,7 @@ export function TaskPanel() {
 
   // one search for whichever tab is open
   const [q, setQ] = useState('')
+  const [newTag, setNewTag] = useState(false)
   const found = (t: OfficeTask) => matchesSearch(q, t.title, t.description, agents.find((a) => a.id === t.agentId)?.name)
   const open = tasks.filter((t) => t.status !== 'done' && found(t)).sort((a, b) => a.deadline - b.deadline || PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority])
   const done = tasks.filter((t) => t.status === 'done' && found(t))
@@ -455,12 +457,21 @@ export function TaskPanel() {
           </button>
         </ScrollTabs>
       </header>
-      <SearchBox
-        value={q}
-        onChange={setQ}
-        placeholder={tab === 'tasks' ? 'Search tasks' : tab === 'folders' ? 'Search folders' : tab === 'tags' ? 'Search tags' : 'Search activity'}
-        className="side-search"
-      />
+      <div className="side-search-row">
+        <SearchBox
+          value={q}
+          onChange={setQ}
+          placeholder={tab === 'tasks' ? 'Search tasks' : tab === 'folders' ? 'Search folders' : tab === 'tags' ? 'Search tags' : 'Search activity'}
+          className="side-search"
+        />
+        {/* Tags: a new one (name, colour, icon) in a modal */}
+        {tab === 'tags' && (
+          <button className="icon-btn small side-search-row__add" onClick={() => setNewTag(true)} {...tip('New tag')} aria-label="New tag">
+            <LuPlus />
+          </button>
+        )}
+      </div>
+      {newTag && <TagModal onClose={() => setNewTag(false)} />}
       {/* its own row under the tabs, so nothing gets squeezed in a narrow column */}
       {tab === 'tasks' && (
         <div className="task-bar">
@@ -516,7 +527,7 @@ export function TaskPanel() {
 }
 
 
-export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults?: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus' | 'description'>> }) {
+export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults?: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus' | 'description' | 'tags'>> }) {
   // started from one of the owner's own statuses (a board column): it counts as that status's built-in one
   const startDef = useStatuses().find((d) => d.id === defaults?.customStatus)
   const addTask = useDashboard((s) => s.addTask)
@@ -530,7 +541,7 @@ export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults
   const [description, setDescription] = useState(defaults?.description ?? '')
   const [run, setRun] = useState<TaskRun>({})
   const [blockedBy, setBlockedBy] = useState<string[]>([])
-  const [tags, setTags] = useState<string[]>([])
+  const [tags, setTags] = useState<string[]>(defaults?.tags ?? [])
   const live = useOffice((s) => s.source === 'live')
 
   // your own task: none of an agent's run (folder, start, waits for); the form keeps only what you need
