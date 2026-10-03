@@ -111,7 +111,12 @@ export function Navbar() {
       <div className="nav-right">
         <div className="clock">
           <ClockTime timezone={timezone} />
-          {!mobile && tzSelect}
+          {/* the office's timezone: a small arrow by the clock (the name in its tooltip), the list opens from it */}
+          {!mobile && (
+            <span className="tz-pick" {...tip(`Timezone: ${TZ_OPTIONS.find((o) => o.value === timezone)?.label.replace(/ · [^·]+ · /, ' · ') ?? timezone}`)}>
+              <Select ariaLabel="Timezone" searchable className="tz-select tz-select--arrow" value={timezone} options={TZ_OPTIONS} onChange={setTimezone} menuWidth={280} display={() => ''} />
+            </span>
+          )}
         </div>
         <BossModeBadge compact={mobile} />
         <PublicAccessBadge compact={mobile} />

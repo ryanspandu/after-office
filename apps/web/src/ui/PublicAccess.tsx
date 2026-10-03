@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { LuGlobe, LuLock, LuShieldCheck, LuTriangleAlert, LuX } from 'react-icons/lu'
+import { useEffect, useState } from 'react'
+import { create } from 'zustand'
+import { LuGlobe, LuLoader, LuLock, LuShieldCheck, LuTriangleAlert, LuX } from 'react-icons/lu'
 import { liveApi, useLive } from '../state/live'
 import { useNow } from '../state/clock'
 import { confirm } from './Confirm'
@@ -18,6 +19,8 @@ const HOURS = [1, 4, 24]
 const MAX_DAYS = 7
 const time = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 const when = (ms: number) => (new Date(ms).toDateString() === new Date().toDateString() ? time(ms) : new Date(ms).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))
+/** The navbar's short form: 04/10/2026, 11:23 (the full sentence is its tooltip). */
+const short = (ms: number) => new Date(ms).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const label = (h: number) => (h === 24 ? '1 day' : `${h} hour${h > 1 ? 's' : ''}`)
 
 /** On right now (with its end), or null. */
@@ -27,9 +30,14 @@ export function usePublicAccess() {
   return p.supported && p.public && (p.until ?? 0) > now ? p : null
 }
 
+/** Opening or closing right now (the server is moving the ports and the domain): the badge and the switch show it. */
+export const usePublicBusy = create<'opening' | 'closing' | null>(() => null)
+
 const turnOff = async () => {
   if (!(await confirm({ title: 'Turn public access off?', message: 'The dashboard goes back to your tailnet only. Devices without Tailscale lose it within a minute or two.', confirmLabel: 'Turn off', danger: false }))) return
+  usePublicBusy.setState('closing', true)
   const r = await liveApi.stopPublicAccess().catch((e: Error) => ({ warning: e.message }))
+  usePublicBusy.setState(null, true)
   if (r && 'warning' in r && r.warning) void confirm({ title: 'Public access', message: r.warning, confirmLabel: 'OK', danger: false })
 }
 
@@ -38,17 +46,25 @@ export function PublicAccessSwitch() {
   const info = useLive((s) => s.publicAccess)
   const on = usePublicAccess()
   const [open, setOpen] = useState(false)
+  const busy = usePublicBusy()
   if (!info.supported) return null
   return (
     <>
       <label className="switch-row">
         <span className="toggle">
-          <input type="checkbox" role="switch" checked={!!on} onChange={(e) => (e.target.checked ? setOpen(true) : void turnOff())} />
+          <input type="checkbox" role="switch" checked={busy ? busy === 'opening' : !!on} disabled={!!busy} onChange={(e) => (e.target.checked ? setOpen(true) : void turnOff())} />
           <span />
         </span>
         <span>
           <span className="switch-row__label">
-            Public access {on?.until && <span className="boss-chip public-chip">on until {when(on.until)}</span>}
+            Public access{' '}
+            {busy ? (
+              <span className={`boss-chip public-chip public-badge--busy public-badge--${busy}`}>
+                <LuLoader className="spin" /> {busy === 'opening' ? 'Opening…' : 'Closing…'}
+              </span>
+            ) : (
+              on?.until && <span className="boss-chip public-chip ui-pop">on until {when(on.until)}</span>
+            )}
           </span>
           <span className="field__hint">
             Open {info.domain} from any device, without Tailscale, until a time you pick. Tailscale keeps working throughout. Needs your two-factor code.
@@ -74,6 +90,7 @@ function PublicAccessModal({ domain, onClose }: { domain: string; onClose: () =>
     if (tooSoon) return setError('Pick an end time in the future.')
     setBusy(true)
     setError('')
+    usePublicBusy.setState('opening', true)
     try {
       await liveApi.startPublicAccess({ code: c, ...(hours === 'until' ? { until } : { hours }) })
       onClose()
@@ -82,6 +99,7 @@ function PublicAccessModal({ domain, onClose }: { domain: string; onClose: () =>
       setCode('')
     } finally {
       setBusy(false)
+      usePublicBusy.setState(null, true)
     }
   }
 
@@ -151,14 +169,14 @@ function PublicAccessModal({ domain, onClose }: { domain: string; onClose: () =>
           <span className="field__label">Code from your authenticator app</span>
           <CodeInput value={code} onChange={setCode} onComplete={(v) => void start(v)} autoFocus disabled={busy} />
         </label>
-        {busy && <p className="field__hint">Opening the ports and pointing {domain} at the server… this takes a few seconds.</p>}
+        {busy && <PublicSteps domain={domain} />}
         {error && <p className="danger-text">{error}</p>}
         <footer className="modal__foot">
           <button type="button" onClick={onClose}>
             Cancel
           </button>
           <button className="primary" disabled={busy || code.length !== 6}>
-            <LuGlobe /> {busy ? 'Opening…' : 'Open to the internet'}
+            {busy ? <LuLoader className="spin" /> : <LuGlobe />} {busy ? 'Opening…' : 'Open to the internet'}
           </button>
         </footer>
       </form>
@@ -166,14 +184,45 @@ function PublicAccessModal({ domain, onClose }: { domain: string; onClose: () =>
   )
 }
 
-/** Navbar badge while it's on: until when; click to close it now. */
+/** While it opens: what the server is doing, one step after another, under a moving bar. */
+function PublicSteps({ domain }: { domain: string }) {
+  const steps = ['Opening the web ports', `Pointing ${domain} at the server`, 'Checking it answers']
+  const [at, setAt] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setAt((n) => Math.min(n + 1, steps.length - 1)), 1600)
+    return () => clearInterval(t)
+  }, [steps.length])
+  return (
+    <div className="public-progress" role="status">
+      <span className="public-progress__bar" aria-hidden />
+      <ol className="public-progress__steps">
+        {steps.map((s, i) => (
+          <li key={s} className={i < at ? 'is-done' : i === at ? 'is-now' : ''}>
+            {i < at ? <LuShieldCheck /> : i === at ? <LuLoader className="spin" /> : <span className="public-progress__dot" />} {s}
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+/** Navbar badge while it's on: until when (the date and time; the whole sentence in its tooltip); click to close it
+ *  now. While it's opening or closing it says so, moving. */
 export function PublicAccessBadge({ compact = false }: { compact?: boolean }) {
   const on = usePublicAccess()
+  const busy = usePublicBusy()
+  if (busy)
+    return (
+      <span className={`boss-badge public-badge public-badge--busy public-badge--${busy}`} role="status" {...tip(busy === 'opening' ? 'Opening the dashboard to the internet…' : 'Closing it: back to your tailnet only…')}>
+        <LuLoader className="spin" />
+        {compact ? null : busy === 'opening' ? 'Opening…' : 'Closing…'}
+      </span>
+    )
   if (!on?.until) return null
   return (
-    <button className="boss-badge public-badge" onClick={() => void turnOff()} {...tip(`Public access: ${on.domain} is open on the internet until ${when(on.until)}. Click to close it now.`)}>
+    <button className="boss-badge public-badge ui-pop" onClick={() => void turnOff()} {...tip(`Public access: ${on.domain} is open on the internet until ${when(on.until)}. Click to close it now.`)}>
       <LuGlobe />
-      {compact ? time(on.until) : `Public · until ${when(on.until)}`}
+      {compact ? time(on.until) : short(on.until)}
       {!compact && <LuX className="boss-badge__x" />}
     </button>
   )

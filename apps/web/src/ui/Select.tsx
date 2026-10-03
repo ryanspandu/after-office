@@ -20,9 +20,11 @@ interface Props<T extends string> {
   searchable?: boolean
   /** Text shown in the closed control; defaults to the option label. */
   display?: (o: Option<T>) => ReactNode
+  /** The open list wider than the control (a small button). */
+  menuWidth?: number
 }
 
-export function Select<T extends string>({ value, options, onChange, ariaLabel, size = 'md', className, disabled, searchable, display }: Props<T>) {
+export function Select<T extends string>({ value, options, onChange, ariaLabel, size = 'md', className, disabled, searchable, display, menuWidth }: Props<T>) {
   return (
     <ReactSelect<Option<T>, false>
       unstyled
@@ -40,6 +42,14 @@ export function Select<T extends string>({ value, options, onChange, ariaLabel, 
       // render the menu on <body> so cards with overflow don't clip it
       menuPortalTarget={document.body}
       menuPlacement="auto"
+      styles={
+        menuWidth
+          ? {
+              // lined up with the control's left edge (a control that widens when opened grows to the right)
+              menuPortal: (base) => ({ ...base, width: menuWidth }),
+            }
+          : undefined
+      }
       classNames={{
         control: (s) => (s.isFocused ? 'rs__control--focused' : ''),
         option: (s) => [s.isSelected && 'rs__option--selected', s.isFocused && 'rs__option--focused'].filter(Boolean).join(' '),

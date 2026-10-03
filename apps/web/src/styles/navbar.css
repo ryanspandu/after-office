@@ -57,3 +57,16 @@
 .clock b { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .clock__sec { color: var(--muted); font-weight: 400; font-size: 14px; }
 .clock .rs { min-width: 150px; }
+/* desktop: the timezone is a small arrow by the clock; its list (wider, searchable) opens from it */
+.tz-select--arrow { min-width: 0; width: 30px; }
+.tz-select--arrow .rs__control { min-height: 28px !important; height: 28px; width: 30px; padding: 0 !important; justify-content: center; border-radius: 999px; }
+.tz-select--arrow .rs__value-container { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; padding: 0; }
+.tz-select--arrow .rs__indicators { margin: 0 auto; }
+.tz-select--arrow .rs__indicator-separator { display: none; }
+.tz-pick { display: inline-flex; }
+/* opened: it widens into the search box (type to find a city), the list under it */
+.tz-select--arrow { transition: width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.tz-select--arrow:focus-within { width: 190px; }
+.tz-select--arrow:focus-within .rs__control { width: 190px; justify-content: space-between; padding: 0 6px 0 12px !important; }
+.tz-select--arrow:focus-within .rs__value-container { position: static; width: auto; height: auto; opacity: 1; flex: 1; }
+.tz-select--arrow:focus-within .rs__indicators { margin: 0; }
