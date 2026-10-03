@@ -1,7 +1,7 @@
 import { OwnerAvatar } from './EditProfile'
-import { useState, type FormEvent, useEffect } from 'react'
+import { useState, type FormEvent, useEffect, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuTag, LuFolderGit2, LuCalendarClock, LuCrown, LuListChecks, LuListTodo, LuPlay, LuPlus, LuTrash2, LuX, LuActivity } from 'react-icons/lu'
+import { LuTag, LuFolderGit2, LuCalendarClock, LuCrown, LuListChecks, LuListTodo, LuPlay, LuPlus, LuSearch, LuTrash2, LuX, LuActivity } from 'react-icons/lu'
 import { tip } from './Tooltip'
 import { openUrl } from '../state/url'
 import type { CronJob, OfficeTask, TaskPriority, TaskStatus } from '@after-office/shared'
@@ -95,6 +95,15 @@ export function CronPanel() {
 
   const nowMin = toMin(hhmm)
   const [q, setQ] = useState('')
+  // the search stays folded behind its button until asked for
+  const [searching, setSearching] = useState(false)
+  const searchBox = useRef<HTMLDivElement>(null)
+  const toggleSearch = () => {
+    const next = !searching
+    setSearching(next)
+    if (next) setTimeout(() => searchBox.current?.querySelector('input')?.focus(), 60)
+    else setQ('')
+  }
   const sorted = [...crons]
     .filter((c) => matchesSearch(q, c.name, c.prompt, agents.find((a) => a.id === c.agentId)?.name))
     .sort((a, b) => Number(b.enabled) - Number(a.enabled) || nextRunIn(a, nowMin) - nextRunIn(b, nowMin))
@@ -106,11 +115,23 @@ export function CronPanel() {
           <LuCalendarClock /> Daily
         </h2>
         <span className="muted">{crons.filter((c) => c.enabled).length} active</span>
+        {crons.length > 0 && (
+          <button className={`icon-btn small icon-btn--toggle`} aria-pressed={searching} aria-expanded={searching} {...tip(searching ? 'Close search' : 'Search daily jobs')} onClick={toggleSearch}>
+            {searching ? <LuX /> : <LuSearch />}
+          </button>
+        )}
         <button className="icon-btn small" data-tip="New daily job" aria-label="New daily job" onClick={() => openUrl({ daily: 'new' })}>
           <LuPlus />
         </button>
       </header>
-      {crons.length > 0 && <SearchBox value={q} onChange={setQ} placeholder="Search daily jobs" className="side-search" />}
+      {crons.length > 0 && (
+        // folds open under the header (styles: .fold-search)
+        <div ref={searchBox} className={`fold-search${searching ? ' is-open' : ''}`} inert={!searching || undefined}>
+          <div>
+            <SearchBox value={q} onChange={setQ} placeholder="Search daily jobs" className="side-search" />
+          </div>
+        </div>
+      )}
       <ul className="list">
         {sorted.map((c) => (
           <CronRow

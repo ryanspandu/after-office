@@ -7,3 +7,9 @@
 .side-search-row { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
 .side-search-row .side-search { flex: 1; min-width: 0; margin: 0; }
 .side-search-row__add { flex-shrink: 0; }
+/* a search folded behind its button (Daily): opens under the header, sliding down; folds away again */
+.fold-search { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.18s ease; }
+.fold-search > div { min-height: 0; overflow: hidden; }
+.fold-search.is-open { grid-template-rows: 1fr; opacity: 1; }
+.fold-search > div > .side-search { margin-top: 1px; }
+@media (prefers-reduced-motion: reduce) { .fold-search { transition: none; } }
