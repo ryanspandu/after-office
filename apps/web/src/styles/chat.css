@@ -284,7 +284,8 @@ span.stab { padding: 0 4px 0 10px; }
 }
 .tkeys__key:active { background: var(--accent-soft); }
 .tkeys__key.is-on { background: var(--hl); border-color: var(--hl); color: #fff; }
-.tkeys__row--sym .tkeys__key { min-width: 34px; font-size: 14px; }
+.tkeys__sym { display: contents; }
+.tkeys__sym .tkeys__key { min-width: 34px; font-size: 14px; }
 .tkeys__row .tkeys__key svg { font-size: 15px; }
 .tkeys__line { display: flex; gap: 6px; align-items: center; }
 .tkeys__line input { flex: 1; min-width: 0; height: 36px; font: 13px ui-monospace, Menlo, monospace; }

@@ -91,9 +91,19 @@ export function TerminalTab({
     const onTouchMove = (e: TouchEvent) => {
       if (at && Math.hypot(e.touches[0].clientX - at.x, e.touches[0].clientY - at.y) > 8) cancelPress()
     }
+    // a tap (no long press, no scroll): the keyboard up, right away. Android won't bring it back for a field that's
+    // still focused after the keyboard was put away, so the field lets go first and is focused again in the tap.
+    const onTouchEnd = (e: TouchEvent) => {
+      const tap = !!at
+      cancelPress()
+      if (!tap || !ta) return
+      e.preventDefault() // no click after it (that would focus a second time)
+      ta.blur()
+      ta.focus()
+    }
     el.addEventListener('touchstart', onTouchStart, { passive: true })
     el.addEventListener('touchmove', onTouchMove, { passive: true })
-    el.addEventListener('touchend', cancelPress)
+    el.addEventListener('touchend', onTouchEnd)
     el.addEventListener('touchcancel', cancelPress)
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
@@ -127,13 +137,26 @@ export function TerminalTab({
     // and a screen that missed a paint (a sheet still sliding up, a phone's keyboard) stays blank until something is typed
     const redraw = () => {
       clearTimeout(redrawTimer)
-      redrawTimer = window.setTimeout(() => send({ t: 'redraw' }), 150)
+      redrawTimer = window.setTimeout(() => {
+        send({ t: 'redraw' })
+        // and painted once tmux's screen is in
+        setTimeout(unscroll, 250)
+      }, 150)
+    }
+    // a phone scrolls the box around xterm's hidden field into view when its keyboard opens: the screen slides out
+    // of its frame (the cursor still blinking where it was). Put back, and every row painted again.
+    const unscroll = () => {
+      for (let n: HTMLElement | null = el; n && n !== el.parentElement?.parentElement; n = n.parentElement) if (n.scrollTop) n.scrollTop = 0
+      const screen = el.querySelector<HTMLElement>('.xterm-screen')
+      if (screen?.parentElement?.scrollLeft) screen.parentElement.scrollLeft = 0
+      term.refresh(0, term.rows - 1)
     }
     const refit = () => {
       try {
         const { cols, rows } = term
         fit.fit()
         send({ t: 'resize', cols: term.cols, rows: term.rows })
+        unscroll()
         if (term.cols !== cols || term.rows !== rows) redraw()
       } catch {
         // element hidden
@@ -150,16 +173,29 @@ export function TerminalTab({
     // back to the app (a phone locks, another app): the screen may have missed a repaint
     const back = () => document.visibilityState === 'visible' && settle()
     document.addEventListener('visibilitychange', back)
+    // the phone's keyboard opening or closing (the visible part of the page changes size): after it has finished
+    let kbTimer = 0
+    const onViewport = () => {
+      clearTimeout(kbTimer)
+      kbTimer = window.setTimeout(settle, 250)
+    }
+    window.visualViewport?.addEventListener('resize', onViewport)
+    // (only the frames around xterm: its own viewport scrolls through the scrollback)
+    const frames = [el, el.parentElement].filter((n): n is HTMLElement => !!n)
+    for (const f of frames) f.addEventListener('scroll', unscroll)
 
     return () => {
       clearTimeout(late)
       clearTimeout(redrawTimer)
       document.removeEventListener('visibilitychange', back)
+      clearTimeout(kbTimer)
+      window.visualViewport?.removeEventListener('resize', onViewport)
+      for (const f of frames) f.removeEventListener('scroll', unscroll)
       el.removeEventListener('click', tapFocus)
       cancelPress()
       el.removeEventListener('touchstart', onTouchStart)
       el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', cancelPress)
+      el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('touchcancel', cancelPress)
       termRef.current = null
       redrawRef.current = null
@@ -232,7 +268,7 @@ const SYMBOLS = ['|', '/', '~', '-', '_', '.', ':', ';', '=', '>', '<', '&', '*'
 
 /**
  * Phones: the keys a touch keyboard lacks (Esc, Tab, Ctrl and its shortcuts, arrows, Home/End, the symbols a shell
- * needs), and a line to type a command and send it.
+ * needs) in one row that scrolls sideways, and a line to type a command and send it.
  */
 function TouchKeys({ send, ctrl, onCtrl }: { send: (d: string) => void; ctrl: boolean; onCtrl: () => void }) {
   const [line, setLine] = useState('')
@@ -254,10 +290,17 @@ function TouchKeys({ send, ctrl, onCtrl }: { send: (d: string) => void; ctrl: bo
         >
           Ctrl
         </button>
-        {CONTROL.map(([l, d, n]) => key(l, d, n))}
+        {CONTROL.slice(0, 2).map(([l, d, n]) => key(l, d, n))}
+        {/* one row, scrolled sideways: Ctrl, Esc, Tab, the arrows, then the shortcuts, the other moves and the symbols */}
+        {MOVE.slice(0, 4).map(([l, d, n]) => key(l, d, n))}
+        {CONTROL.slice(2).map(([l, d, n]) => key(l, d, n))}
+        {MOVE.slice(4).map(([l, d, n]) => key(l, d, n))}
+        {SYMBOLS.map((c) => (
+          <span key={`sym-${c}`} className="tkeys__sym">
+            {key(c, c, c)}
+          </span>
+        ))}
       </div>
-      <div className="tkeys__row">{MOVE.map(([l, d, n]) => key(l, d, n))}</div>
-      <div className="tkeys__row tkeys__row--sym">{SYMBOLS.map((c) => key(c, c, c))}</div>
       <form
         className="tkeys__line"
         onSubmit={(e) => {
