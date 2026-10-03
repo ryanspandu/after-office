@@ -1,0 +1,31 @@
+/* ── a text file in the editor (ui/FileEditor.tsx): VS Code's look, as tall as the screen allows ── */
+.code-editor .modal__scroll { display: flex; flex-direction: column; }
+.code-editor__body { display: flex; flex-direction: column; gap: 8px; height: min(72vh, 820px); min-height: 320px; padding-top: 4px; }
+.modal--full .code-editor__body { height: auto; flex: 1; }
+.code-editor__cm { flex: 1; min-height: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); font-size: 13px; }
+.code-editor__cm .cm-editor { height: 100%; }
+.code-editor__cm .cm-scroller { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; line-height: 1.55; }
+.code-editor__cm .cm-editor.cm-focused { outline: none; }
+.code-editor__preview { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px; }
+.code-editor__error { margin: 0; font-size: 12.5px; }
+.code-editor__state { font-size: 12px; white-space: nowrap; }
+.code-editor__ro { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; color: var(--muted); background: var(--card-2); white-space: nowrap; }
+@media (max-width: 768px) {
+  .code-editor__body { height: auto; flex: 1; min-height: 60vh; }
+  .code-editor__cm { font-size: 12.5px; }
+}
+/* the Files browser: hidden entries a little dimmer; the "show hidden" button on */
+.fb__item.is-hidden .fb__name, .fb__item.is-hidden .fb__icon { opacity: 0.6; }
+.fb__bar .icon-btn.is-on { color: var(--hl); }
+/* the Files browser: the folder's git repo in one line under its bar, and a letter by each changed entry (VS Code's colours) */
+.fb__git { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 12px; white-space: nowrap; overflow: hidden; }
+.fb__git-branch { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; flex-shrink: 0; }
+.fb__git-sync { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.fb__git-dirty { color: #d97706; flex-shrink: 0; }
+.fb__git-clean { display: inline-flex; align-items: center; gap: 3px; color: #2f8f57; flex-shrink: 0; }
+.fb__git-last { min-width: 0; flex: 1; }
+.fb__git-mark { margin-left: 8px; flex-shrink: 0; font: 600 11px ui-monospace, Menlo, monospace; }
+.fb__git-mark--M, .fb__git-mark--R { color: #d7a022; }
+.fb__git-mark--U, .fb__git-mark--A { color: #2fae6b; }
+.fb__git-mark--D { color: #e05252; }
+@media (max-width: 768px) { .fb__git-last { display: none; } }

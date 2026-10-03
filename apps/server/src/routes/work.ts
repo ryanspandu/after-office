@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
 import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, ownerNotesRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
-import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
+import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, readTextFile, writeTextFile, folderGit, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
 import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder, renameProjectFolder } from '../work/projectFolders'
 import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDevice, sendPush } from '../push'
@@ -339,7 +339,17 @@ workRoutes.put('/workspaces/order', async (c) => {
 // the folder picker's search: folders by name, however deep (a few levels)
 workRoutes.get('/workspaces/search', (c) => c.json(searchFolders((c.req.query('q') ?? '').slice(0, 100))))
 // file manager: read-only, inside a folder the Projects tab shows
-workRoutes.get('/workspaces/files', (c) => c.json(listFolder(c.req.query('root') ?? '', c.req.query('path') ?? '')))
+workRoutes.get('/workspaces/files', (c) => c.json(listFolder(c.req.query('root') ?? '', c.req.query('path') ?? '', c.req.query('hidden') === '1')))
+// the git repo of the folder on screen: branch, what's not committed, which entries that touches
+workRoutes.get('/workspaces/git', async (c) => c.json(await folderGit(c.req.query('root') ?? '', c.req.query('path') ?? '')))
+// a text file in the editor: read it, save it (refused if it changed since it was opened, unless forced)
+workRoutes.get('/workspaces/text', (c) => c.json(readTextFile(c.req.query('root') ?? '', c.req.query('path') ?? '')))
+workRoutes.put('/workspaces/text', async (c) => {
+  const b = await c.req.json<{ root?: unknown; path?: unknown; text?: unknown; since?: unknown; force?: unknown }>().catch(() => null)
+  if (!b || typeof b.text !== 'string') throw new AgentError('Send the text', 400)
+  const str = (v: unknown) => (typeof v === 'string' ? v : '')
+  return c.json(writeTextFile(str(b.root), str(b.path), b.text, typeof b.since === 'number' ? b.since : undefined, b.force === true))
+})
 // a file the owner uploads into the folder on screen (raw bytes; x-file-name, ?root= the folder, ?path= inside it)
 workRoutes.post('/workspaces/files', requireSameOrigin, async (c) => {
   let name = 'file'

@@ -8,6 +8,8 @@ import {
   LuDownload,
   LuEllipsis,
   LuEye,
+  LuEyeOff,
+  LuFileCode,
   LuFile,
   LuFileArchive,
   LuFileImage,
@@ -15,6 +17,7 @@ import {
   LuFolder,
   LuFolderOpen,
   LuFolderPlus,
+  LuGitBranch,
   LuLink,
   LuPencil,
   LuRefreshCw,
@@ -22,13 +25,14 @@ import {
   LuUpload,
   LuX,
 } from 'react-icons/lu'
-import type { FolderEntry, FolderListing } from '@after-office/shared'
+import type { FolderEntry, FolderGit, FolderListing } from '@after-office/shared'
 import { api } from '../state/auth'
 import { useNow } from '../state/clock'
 import { canPreview, FilePreview, formatSize, saveUrl } from './Attachments'
 import { confirm } from './Confirm'
 import { ago } from './FollowUps'
 import { SearchBox } from './SearchBox'
+import { FileEditor, isTextFile } from './FileEditor'
 import { ActionMenu, type MenuAction } from './ActionMenu'
 
 // A file manager for a folder the agents work in (the folder details, an agent's Folder tab): browse, preview, upload,
@@ -74,6 +78,35 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
   const [menu, setMenu] = useState<Menu | null>(null)
   const [filter, setFilter] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
+  // the git repo the folder on screen is in (branch, what's not committed), if any
+  const [gitLine, setGitLine] = useState<FolderGit | null>(null)
+  const loadGit = useCallback(
+    (dir: string) =>
+      void api(`/api/workspaces/git?${new URLSearchParams({ root, path: dir })}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((g: FolderGit | null) => (here.current === dir ? setGitLine(g) : undefined))
+        .catch(() => setGitLine(null)),
+    [root],
+  )
+  // a text file open in the editor (its path)
+  const [editing, setEditing] = useState<string | null>(null)
+  // hidden files (.env, .gitignore, .claude…) shown too: remembered in this browser
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem('after-office:files-hidden') === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleHidden = () =>
+    setHidden((v) => {
+      try {
+        localStorage.setItem('after-office:files-hidden', v ? '0' : '1')
+      } catch {
+        // not remembered
+      }
+      return !v
+    })
 
   const rootName = root.split('/').filter(Boolean).pop() ?? root
   // the folder on screen, for load() (a refresh keeps the filter; going elsewhere clears it)
@@ -83,11 +116,12 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
       setLoading(true)
       setError(null)
       try {
-        const r = await api(`/api/workspaces/files?${new URLSearchParams({ root, path: dir })}`)
+        const r = await api(`/api/workspaces/files?${new URLSearchParams({ root, path: dir, ...(hidden ? { hidden: '1' } : {}) })}`)
         if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Could not read the folder (${r.status})`)
         setListing(await r.json())
         if (dir !== here.current) setFilter('')
         here.current = dir
+        loadGit(dir)
         setPath(dir)
         if (!keepPicked) setPicked(new Set())
       } catch (e) {
@@ -96,10 +130,14 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
         setLoading(false)
       }
     },
-    [root],
+    [root, hidden, loadGit],
   )
+  // a new folder opens at its top; showing / hiding hidden files reloads the folder on screen
+  const lastRoot = useRef(root)
   useEffect(() => {
-    void load('')
+    const same = lastRoot.current === root
+    lastRoot.current = root
+    void load(same ? here.current : '', same)
   }, [load])
 
   const act = async (label: string, fn: () => Promise<unknown>) => {
@@ -189,6 +227,8 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
     if (e.link) return
     const p = join(path, e.name)
     if (e.dir) return void load(p)
+    // text and code: straight into the editor
+    if (isTextFile(e.name)) return void setEditing(p)
     const att = { path: p, size: e.size, ...(e.image ? { image: true } : {}) }
     if (canPreview(att)) setPreview(att)
     else saveUrl(fileUrl(root, p), e.name)
@@ -199,7 +239,7 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
     const q = filter.trim().toLowerCase()
     return q ? all.filter((e) => e.name.toLowerCase().includes(q)) : all
   }, [listing, filter])
-  const pickable = entries.filter((e) => !e.link)
+  const pickable = entries.filter((e) => !e.link && !e.name.startsWith('.'))
   const allPicked = pickable.length > 0 && pickable.every((e) => picked.has(e.name))
   // a click ticks one; Shift-click ticks everything between it and the last one ticked
   const toggle = (name: string, range: boolean) =>
@@ -263,10 +303,14 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
         <button className="icon-btn small ghost" onClick={() => uploadInput.current?.click()} disabled={uploading > 0} data-tip={uploading ? `Adding ${uploading}…` : 'Upload files here (or drop them on the list)'} aria-label="Upload files">
           {uploading ? <LuRefreshCw className="spin" /> : <LuUpload />}
         </button>
+        <button className={`icon-btn small ghost${hidden ? ' is-on' : ''}`} aria-pressed={hidden} onClick={toggleHidden} data-tip={hidden ? 'Hide hidden files' : 'Show hidden files (.env, .gitignore…)'} aria-label="Show hidden files">
+          {hidden ? <LuEye /> : <LuEyeOff />}
+        </button>
         <button className="icon-btn small ghost" onClick={() => void load(path, true)} disabled={loading} data-tip="Refresh" aria-label="Refresh">
           <LuRefreshCw className={loading ? 'spin' : ''} />
         </button>
       </div>
+      {gitLine && <GitLine git={gitLine} now={now} />}
       {newFolder !== null && (
         <div className="fb__new">
           <LuFolder className="fb__new-icon" />
@@ -343,7 +387,7 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
                 return (
                   <li
                     key={e.name}
-                    className={`fb__item${picked.has(e.name) ? ' is-picked' : ''}${menu?.entry.name === e.name ? ' is-menu' : ''}`}
+                    className={`fb__item${picked.has(e.name) ? ' is-picked' : ''}${menu?.entry.name === e.name ? ' is-menu' : ''}${e.name.startsWith('.') ? ' is-hidden' : ''}`}
                     onContextMenu={(ev) => {
                       if (e.link) return
                       ev.preventDefault()
@@ -354,7 +398,7 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
                       className="check"
                       type="checkbox"
                       checked={picked.has(e.name)}
-                      disabled={e.link}
+                      disabled={e.link || e.name.startsWith('.')}
                       onChange={() => undefined}
                       onClick={(ev) => toggle(e.name, ev.shiftKey)}
                       aria-label={`Select ${e.name}`}
@@ -372,6 +416,11 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
                           {e.link ? <LuLink /> : e.dir ? <LuFolder className="fb__folder" /> : e.image ? <LuFileImage /> : previewable ? <LuFileText /> : <LuFile />}
                         </span>
                         <span className="fb__name truncate">{e.name}</span>
+                        {gitLine?.entries[e.name] && (
+                          <span className={`fb__git-mark fb__git-mark--${gitLine.entries[e.name]}`} data-tip={GIT_MARK[gitLine.entries[e.name]]}>
+                            {gitLine.entries[e.name]}
+                          </span>
+                        )}
                       </button>
                     )}
                     <span className="fb__col-size muted">{e.dir ? '—' : formatSize(e.size)}</span>
@@ -405,15 +454,18 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
               label: menu.entry.dir ? 'Open' : canPreview({ path: menu.entry.name, size: menu.entry.size }) ? 'Preview' : 'Download',
               run: () => open(menu.entry),
             },
-            { icon: <LuPencil />, label: 'Rename', run: () => setRenaming(menu.entry.name) },
+            ...(!menu.entry.dir && !menu.entry.image ? [{ icon: <LuFileCode />, label: 'Edit', run: () => setEditing(join(path, menu.entry.name)) }] : []),
+            // hidden ones (.env, .claude…): read and edited here, not renamed or moved
+            ...(menu.entry.name.startsWith('.') ? [] : [{ icon: <LuPencil />, label: 'Rename', run: () => setRenaming(menu.entry.name) }]),
             ...(menu.entry.dir || canPreview({ path: menu.entry.name, size: menu.entry.size })
               ? [{ icon: menu.entry.dir ? <LuFileArchive /> : <LuDownload />, label: menu.entry.dir ? 'Download .zip' : 'Download', run: () => download(menu.entry) }]
               : []),
             { icon: <LuCopy />, label: 'Copy path', run: () => copyPath(menu.entry) },
-            { icon: <LuTrash2 />, label: 'Move to Trash', danger: true, run: () => void trash([menu.entry.name]) },
+            ...(menu.entry.name.startsWith('.') ? [] : [{ icon: <LuTrash2 />, label: 'Move to Trash', danger: true, run: () => void trash([menu.entry.name]) }]),
           ]}
         />
       )}
+      {editing && <FileEditor root={root} path={editing} onClose={() => setEditing(null)} onSaved={() => void load(here.current, true)} />}
       {preview && <FilePreview file={{ path: `${root}/${preview.path}`, size: preview.size }} url={fileUrl(root, preview.path)} onClose={() => setPreview(null)} />}
     </div>
   )
@@ -462,4 +514,42 @@ function RenameField({ name, dir, onDone }: { name: string; dir: boolean; onDone
 /** The actions of one entry (its ⋯ button, or a right-click), on the page itself so no panel clips it. */
 function EntryMenu({ at, actions, onClose }: { at: Menu; actions: MenuAction[]; onClose: () => void }) {
   return <ActionMenu x={at.x} y={at.y} above={at.above} title={at.entry.name} actions={actions} onClose={onClose} />
+}
+
+const GIT_MARK: Record<FolderGit['entries'][string], string> = {
+  M: 'Changed, not committed',
+  A: 'Added, not committed',
+  D: 'Deleted, not committed',
+  U: 'New, not in git yet',
+  R: 'Renamed, not committed',
+}
+
+/** The folder's git repo in one line: branch, ahead / behind, what's not committed, the last commit. */
+function GitLine({ git, now }: { git: FolderGit; now: number }) {
+  return (
+    <div className="fb__git">
+      <span className="fb__git-branch" data-tip={`Git repo: ${git.repo}`}>
+        <LuGitBranch /> {git.branch ?? 'detached HEAD'}
+      </span>
+      {git.ahead !== undefined && (git.ahead > 0 || (git.behind ?? 0) > 0) && (
+        <span className="fb__git-sync" data-tip={`${git.ahead} to push, ${git.behind ?? 0} to pull`}>
+          {git.ahead > 0 && <>↑{git.ahead}</>} {(git.behind ?? 0) > 0 && <>↓{git.behind}</>}
+        </span>
+      )}
+      {git.dirty > 0 ? (
+        <span className="fb__git-dirty">
+          {git.dirty} uncommitted change{git.dirty === 1 ? '' : 's'}
+        </span>
+      ) : (
+        <span className="fb__git-clean">
+          <LuCheck /> All committed
+        </span>
+      )}
+      {git.lastCommit && (
+        <span className="fb__git-last muted truncate" data-tip={`${git.lastCommit.subject}${git.lastCommit.author ? ` · ${git.lastCommit.author}` : ''}`}>
+          Last commit: {git.lastCommit.subject} · {ago(now - git.lastCommit.at)}
+        </span>
+      )}
+    </div>
+  )
 }

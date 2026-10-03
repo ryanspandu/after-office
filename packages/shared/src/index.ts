@@ -681,6 +681,23 @@ export interface GitInfo {
   lastCommit: { subject: string; at: number } | null
 }
 
+/** The git repo a folder in the Files browser belongs to (the folder on screen, or one of its parents). */
+export interface FolderGit {
+  /** the repo's folder name */
+  repo: string
+  /** null: a detached HEAD */
+  branch: string | null
+  /** commits not pushed / not pulled yet (unset: no upstream branch) */
+  ahead?: number
+  behind?: number
+  /** files changed, added or deleted and not committed yet (all of the repo) */
+  dirty: number
+  lastCommit: { subject: string; at: number; author: string } | null
+  /** what's changed inside the folder on screen, by the name of its entry there (a folder: something inside it):
+   *  M changed, A added (staged), D deleted, U untracked, R renamed */
+  entries: Record<string, 'M' | 'A' | 'D' | 'U' | 'R'>
+}
+
 export interface WorkspaceFolder {
   path: string
   name: string

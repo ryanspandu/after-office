@@ -4,7 +4,7 @@ import type { FolderEntry, FolderListing } from '@after-office/shared'
 import { IMAGE, MAX_BYTES } from '../agents/files'
 import { deleteAgentFolder } from './projectFolders'
 import { basename, dirname, extname, join, sep } from 'node:path'
-import type { GitCommit, GitInfo, Workspace, WorkspaceFolder } from '@after-office/shared'
+import type { FolderGit, GitCommit, GitInfo, Workspace, WorkspaceFolder } from '@after-office/shared'
 import { agentsRepo, extraDirsOf, folderNotesRepo, ownerNotesRepo } from '../db'
 import { AgentError } from '../agents/errors'
 import { AGENTS_DIR, PROJECTS_DIR } from '../fsroots'
@@ -42,6 +42,52 @@ async function gitInfo(path: string): Promise<GitInfo | null> {
     branch: branch.ok ? branch.out.trim() || null : null,
     dirty: status.ok ? status.out.split('\n').filter(Boolean).length : 0,
     lastCommit: subject !== undefined && at ? { subject: subject.slice(0, 200), at: Number(at) * 1000 } : null,
+  }
+}
+
+/**
+ * The git repo of a folder in the Files browser (it or a parent of it): branch, ahead / behind its upstream, what's
+ * not committed yet (and which entries of the folder on screen that touches), the last commit. null: not in a repo.
+ */
+export async function folderGit(root: string, rel = ''): Promise<FolderGit | null> {
+  const { real } = inside(root, rel)
+  if (!lstatSync(real).isDirectory()) throw new AgentError('Not a folder', 400)
+  const top = await git(real, ['rev-parse', '--show-toplevel'])
+  if (!top.ok) return null
+  const repoTop = top.out.trim()
+  const [branch, status, last, counts, prefix] = await Promise.all([
+    git(real, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    git(real, ['status', '--porcelain=v1', '--untracked-files=normal']),
+    git(real, ['log', '-1', '--format=%s%x00%ct%x00%an']),
+    git(real, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD']),
+    git(real, ['rev-parse', '--show-prefix']),
+  ])
+  // paths in `git status` are from the repo's top; the folder on screen is `here` below it
+  const here = prefix.ok ? prefix.out.trim() : ''
+  const entries: FolderGit['entries'] = {}
+  const lines = status.ok ? status.out.split('\n').filter(Boolean) : []
+  for (const line of lines) {
+    const xy = line.slice(0, 2)
+    let path = line.slice(3)
+    if (path.includes(' -> ')) path = path.split(' -> ')[1]
+    path = path.replace(/^"|"$/g, '')
+    if (!path.startsWith(here)) continue
+    const name = path.slice(here.length).split('/')[0]
+    if (!name) continue
+    const code: FolderGit['entries'][string] = xy === '??' ? 'U' : xy.includes('D') ? 'D' : xy.includes('R') ? 'R' : xy[0] === 'A' ? 'A' : 'M'
+    // a folder with several changes inside: changed (M) unless they're all the same kind
+    entries[name] = entries[name] && entries[name] !== code ? 'M' : code
+  }
+  const [subject, at, author] = last.ok ? last.out.trim().split('\0') : []
+  const [behind, ahead] = counts.ok ? counts.out.trim().split(/\s+/).map(Number) : []
+  const head = branch.ok ? branch.out.trim() : ''
+  return {
+    repo: basename(repoTop),
+    branch: head && head !== 'HEAD' ? head : null,
+    ...(counts.ok && Number.isFinite(ahead) ? { ahead, behind } : {}),
+    dirty: lines.length,
+    lastCommit: subject !== undefined && at ? { subject: subject.slice(0, 200), at: Number(at) * 1000, author: (author ?? '').slice(0, 80) } : null,
+    entries,
   }
 }
 
@@ -201,14 +247,14 @@ function inside(root: string, rel: string) {
   return { base, real }
 }
 
-/** The entries of a folder inside `root`: folders first, hidden ones (.git, .claude…) left out. */
-export function listFolder(root: string, rel = ''): FolderListing {
+/** The entries of a folder inside `root`: folders first, hidden ones (.git, .claude, .env…) left out unless `hidden`. */
+export function listFolder(root: string, rel = '', hidden = false): FolderListing {
   const { base, real } = inside(root, rel)
   if (!lstatSync(real).isDirectory()) throw new AgentError('Not a folder', 400)
   const entries: FolderEntry[] = []
   let total = 0
   for (const d of readdirSync(real, { withFileTypes: true })) {
-    if (d.name.startsWith('.')) continue
+    if (!hidden && d.name.startsWith('.')) continue
     total++
     if (entries.length >= MAX_ENTRIES) continue
     try {
@@ -228,6 +274,62 @@ export function listFolder(root: string, rel = ''): FolderListing {
   }
   entries.sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name))
   return { root: base, path: real === base ? '' : real.slice(base.length + 1), entries, more: Math.max(0, total - entries.length) }
+}
+
+// ── text files: read and edited in place (the Files browser's editor) ──
+
+/** Largest text file the editor opens. */
+export const TEXT_MAX = 1024 * 1024
+
+/** Files the office keeps as they are (its hooks, its MCP connection) or that git owns: read, never written here. */
+const keptByOffice = (rel: string) => {
+  const parts = rel.split('/').filter(Boolean)
+  return parts.includes('.git') || parts.at(-1) === '.mcp.json' || /(^|\/)\.claude\/settings(\.local)?\.json$/.test(parts.join('/'))
+}
+
+/** A plain file inside `root` (no symlink), for the editor. */
+function textTarget(root: string, rel: string) {
+  if (!rel || rel.split('/').some((p) => p === '..')) throw new AgentError('Invalid path', 400)
+  const { real } = inside(root, rel)
+  const st = lstatSync(real)
+  if (st.isSymbolicLink() || !st.isFile()) throw new AgentError('Not a file', 400)
+  return { real, st }
+}
+
+/** A text file's contents (UTF-8, no NUL bytes, at most TEXT_MAX), when it was changed, and whether it may be edited. */
+export function readTextFile(root: string, rel: string) {
+  const { real, st } = textTarget(root, rel)
+  if (st.size > TEXT_MAX) throw new AgentError(`Too big to edit here (over ${TEXT_MAX / 1024 / 1024} MB)`, 413)
+  const bytes = readFileSync(real)
+  if (bytes.subarray(0, 8000).includes(0)) throw new AgentError("That isn't a text file", 400)
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    throw new AgentError("That isn't a UTF-8 text file", 400)
+  }
+  return { text, size: st.size, updatedAt: st.mtimeMs, editable: !keptByOffice(rel) }
+}
+
+/**
+ * Save a text file in place (its owner and mode stay: the agents can still edit it). `since`: when it was changed as
+ * the editor opened it; changed after that (an agent wrote it meanwhile), the save is refused unless forced.
+ */
+export function writeTextFile(root: string, rel: string, text: string, since?: number, force = false) {
+  if (keptByOffice(rel)) throw new AgentError('The office manages this file: it can be read here, not changed', 403)
+  const { real, st } = textTarget(root, rel)
+  const data = new TextEncoder().encode(text)
+  if (data.byteLength > TEXT_MAX) throw new AgentError(`Too big to save here (over ${TEXT_MAX / 1024 / 1024} MB)`, 413)
+  if (!force && since !== undefined && Math.abs(st.mtimeMs - since) > 1)
+    throw new AgentError('It changed since you opened it (an agent may have written it). Reload it, or save anyway.', 409)
+  const fd = openSync(real, constants.O_WRONLY | constants.O_TRUNC | constants.O_NOFOLLOW)
+  try {
+    writeSync(fd, data)
+  } finally {
+    closeSync(fd)
+  }
+  const after = lstatSync(real)
+  return { size: after.size, updatedAt: after.mtimeMs }
 }
 
 /** A file inside `root` for preview / download: a real file (no symlink), not too big. */
