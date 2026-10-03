@@ -2,9 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PublicAccess } from '@after-office/shared'
 import { AgentError } from '../agents/manager'
-import { agentsRepo } from '../db'
 import { notify } from '../notify'
-import { notifyUser } from './reports'
 import { publishWork, timezone } from './work'
 
 // Public access: the dashboard also on the open internet for a while (a server on a domain on the tailnet: setup-vps.sh
@@ -70,10 +68,8 @@ export async function ask(action: string, timeoutMs = 90_000): Promise<HelperSta
 
 const clock = (ms: number) => new Intl.DateTimeFormat('en-GB', { timeZone: timezone(), weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(ms)
 
-/** A report (if there's a manager to file it under) and a security notification, for every change. */
+/** A security notification for every change (not a report: the header badge already shows it). */
 function tell(title: string, text: string) {
-  const manager = agentsRepo.manager()
-  if (manager) notifyUser(manager.id, title, text)
   void notify('security', title, text)
 }
 
