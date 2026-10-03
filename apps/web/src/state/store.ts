@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { AgentFigure, AgentInfo, AgentProfile, AgentStatus } from '@after-office/shared'
-import { FIXED_SPOTS, spotById, type SpotKind, type Vec2 } from '../scene/layout'
+import { bossSpot, colsForDesks, FIXED_SPOTS, isBossSpot, spotById, type BossPlace, type SpotKind, type Vec2 } from '../scene/layout'
 
 export type HairStyle =
   | 'short' | 'buzz' | 'curly' | 'mullet' | 'bun' | 'fluffy' | 'wolf' | 'spiky'
@@ -184,17 +184,57 @@ export function makeLook(desk: number, style?: number, figure?: AgentFigure): Lo
   }
 }
 
-/** Choose where an agent should be for a given status, avoiding spots other agents hold. */
-function assignSpot(agent: Pick<OfficeAgent, 'id' | 'desk'>, status: AgentStatus, agents: OfficeAgent[]): string {
-  const desk = `desk-${agent.desk}`
+/**
+ * Interviews going on: someone the manager just hired sits across its desk for a while (INTERVIEW_MS) before going
+ * to their own; the manager talks with them from its chair.
+ */
+const INTERVIEW_MS = 3 * 60_000
+const interviews = new Map<string, { manager: string; until: number }>()
+const interviewing = (id: string) => {
+  const iv = interviews.get(id)
+  return iv && iv.until > Date.now() ? iv : null
+}
+const hosting = (id: string) => [...interviews.values()].some((iv) => iv.manager === id && iv.until > Date.now())
+
+/** The manager's idle time: mostly in its own office, now and then out to the pantry, the pool table or the cat. */
+const BOSS_IDLE: { place: BossPlace; w: number }[] = [
+  { place: '', w: 4 },
+  { place: '-sofa0', w: 4 },
+  { place: '-sofa1', w: 2 },
+  { place: '-shelf', w: 3 },
+]
+const BOSS_OUTING = 0.6
+
+/** Choose where an agent should be for a given status, avoiding spots other agents hold. `fresh`: pick again even
+ *  if it's somewhere idle already (the manager's occasional change of scene). */
+function assignSpot(agent: Pick<OfficeAgent, 'id' | 'desk'> & { kind?: OfficeAgent['kind'] }, status: AgentStatus, agents: OfficeAgent[], fresh = false): string {
+  // the manager works in its own office (the first one, if there were ever two); everyone else at an open-plan desk
+  const boss = agent.kind === 'manager' && !agents.some((a) => a.id !== agent.id && a.kind === 'manager' && isBossSpot(a.spotId))
+  // the office sits left of the open plan, which grows with the desks (scene/layout.ts bossRoom)
+  const cols = colsForDesks(Math.max(agent.desk, ...agents.map((a) => a.desk)))
+  // an interview: the new one across the desk, the manager in its chair talking
+  if (interviewing(agent.id)) return bossSpot(cols, '-guest0')
+  if (boss && hosting(agent.id)) return bossSpot(cols, '-host')
+  const desk = boss ? bossSpot(cols) : `desk-${agent.desk}`
   if (status === 'working' || status === 'waiting' || status === 'offline') return desk
   const taken = new Set(agents.filter((a) => a.id !== agent.id).map((a) => a.spotId))
   const free = (kind: SpotKind) => FIXED_SPOTS.filter((s) => s.kind === kind && !taken.has(s.id))
+  const current = agents.find((a) => a.id === agent.id)?.spotId
+
+  if (boss && status === 'idle') {
+    if (!fresh && current && current !== desk && (isBossSpot(current) || /^(cat|pool|sofa|pantry)/.test(current))) return current
+    const options = [
+      ...BOSS_IDLE.map((o) => ({ id: bossSpot(cols, o.place), w: o.w })),
+      ...[...free('pantry'), ...free('billiards'), ...free('cat')].map((s) => ({ id: s.id, w: BOSS_OUTING })),
+    ].filter((o) => o.id !== current && !taken.has(o.id))
+    let r = Math.random() * options.reduce((sum, o) => sum + o.w, 0)
+    for (const o of options) if ((r -= o.w) <= 0) return o.id
+    return desk
+  }
 
   if (status === 'meeting') return free('meeting')[0]?.id ?? desk
 
   // idle → pet the cat, shoot some pool, watch TV on the sofa, or grab a snack in the pantry
-  const current = agents.find((a) => a.id === agent.id)?.spotId
   if (current && /^(cat|pool|sofa|pantry)/.test(current)) return current
   const options = [
     ...free('cat').map((s) => ({ s, w: 4 })),
@@ -233,6 +273,10 @@ interface OfficeStore {
   finishDeparture: (id: string) => void
   /** Called after the offline grace period: start the leaving animation if the agent is still offline. */
   leaveIfStillOffline: (id: string) => void
+  /** The manager just hired `agentId`: they sit together in the manager's office for a while (then each goes back). */
+  startInterview: (agentId: string, managerId: string) => void
+  /** Now and then: an idle manager gets up and goes somewhere else (mostly within its office). */
+  changeOfScene: () => void
   /** After the wind-down at the desk: go to an idle spot if the agent is still idle there. */
   leaveDeskIfStillIdle: (id: string) => void
   selectedId: string | null
@@ -257,7 +301,7 @@ function createAgent(agents: OfficeAgent[], info: Partial<AgentInfo>, atSpot: bo
   const i = seq++
   const id = info.id ?? `agent-${i}`
   const status = info.status ?? 'working'
-  const base = { id, desk }
+  const base = { id, desk, kind: info.kind }
   const spotId = assignSpot(base, status, agents)
   const spot = spotById(spotId)
   // names cycle through NAMES; add a number once they repeat so names and tmux sessions stay unique
@@ -310,8 +354,11 @@ function fromLive(raw: AgentInfo, all: OfficeAgent[], prev?: OfficeAgent, atSpot
   const status = raw.status === 'offline' || raw.status === 'waiting' || !side ? raw.status : raw.status === 'working' ? 'working' : side
   const info: AgentInfo = { ...raw, status }
   const desk = info.desk ?? prev?.desk ?? 0
-  const base = { id: info.id, desk }
-  const spotId = prev && prev.status === info.status ? prev.spotId : assignSpot(base, info.status, all)
+  const base = { id: info.id, desk, kind: info.kind }
+  // the manager's place (its office) comes from its kind, and moves when the open plan grows: worked out again then
+  const cols = colsForDesks(Math.max(desk, ...all.map((a) => a.desk)))
+  const stale = info.kind === 'manager' && (prev?.spotId === `desk-${desk}` || (isBossSpot(prev?.spotId) && prev?.spotId !== bossSpot(cols)))
+  const spotId = prev && prev.status === info.status && !stale ? prev.spotId : assignSpot(base, info.status, all)
   const spot = spotById(spotId)
   return {
     ...info,
@@ -381,10 +428,36 @@ export const useOffice = create<OfficeStore>((set, get) => ({
       }
     }),
 
+  startInterview: (agentId, managerId) => {
+    interviews.set(agentId, { manager: managerId, until: Date.now() + INTERVIEW_MS })
+    const place = () =>
+      set(({ agents }) => ({
+        agents: agents.map((a) => (a.id === agentId || a.id === managerId ? { ...a, spotId: assignSpot(a, a.status, agents, true) } : a)),
+      }))
+    place()
+    setTimeout(() => {
+      interviews.delete(agentId)
+      // done: the new one goes to its own desk (to settle in), the manager back to what it was doing
+      set(({ agents }) => ({
+        agents: agents.map((a) =>
+          a.id === agentId ? { ...a, spotId: a.status === 'offline' ? a.spotId : `desk-${a.desk}` } : a.id === managerId ? { ...a, spotId: assignSpot(a, a.status, agents, true) } : a,
+        ),
+      }))
+      setTimeout(() => useOffice.getState().leaveDeskIfStillIdle(agentId), DESK_WIND_DOWN_MS)
+    }, INTERVIEW_MS + 50)
+  },
+
+  changeOfScene: () =>
+    set(({ agents }) => {
+      const m = agents.find((a) => a.kind === 'manager' && a.status === 'idle' && !hosting(a.id) && a.spotId !== `desk-${a.desk}`)
+      if (!m) return {}
+      return { agents: agents.map((a) => (a.id === m.id ? { ...a, spotId: assignSpot(a, 'idle', agents, true) } : a)) }
+    }),
+
   leaveDeskIfStillIdle: (id) =>
     set(({ agents }) => {
       const a = agents.find((x) => x.id === id)
-      if (!a || a.status !== 'idle' || a.spotId !== `desk-${a.desk}`) return {}
+      if (!a || a.status !== 'idle' || (a.spotId !== `desk-${a.desk}` && !a.spotId.startsWith('boss@'))) return {}
       return { agents: agents.map((x) => (x.id === id ? { ...x, spotId: assignSpot(x, 'idle', agents) } : x)) }
     }),
 

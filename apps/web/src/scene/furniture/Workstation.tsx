@@ -4,6 +4,7 @@ import type { Group, Mesh, MeshStandardMaterial } from 'three'
 import type { OfficeAgent } from '../../state/store'
 import { env } from '../DayNight'
 import { CHAIR_OFFSET, DESK_LAMP, DESK_SIZE, type Vec2 } from '../layout'
+import { isBossSpot } from '../layout'
 import { Box, Cyl } from '../prims'
 import { Chair } from './Chair'
 import { DeskLamp } from './Lamps'
@@ -142,7 +143,7 @@ export function Workstation({ at, owner, index }: { at: Vec2; owner?: OfficeAgen
       : owner.status === 'waiting'
         ? 'wait'
         : // done but still sitting there (the wind-down after a reply): playing a game
-          owner.status === 'idle' && owner.spotId === `desk-${owner.desk}`
+          owner.status === 'idle' && (owner.spotId === `desk-${owner.desk}` || isBossSpot(owner.spotId))
           ? 'play'
           : 'sleep'
   const { w, d, h } = DESK_SIZE

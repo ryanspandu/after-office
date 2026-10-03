@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { windowGlass } from './DayNight'
 import { Box, Cyl } from './prims'
-import { LOUNGE, MEETING, PANTRY, WALL_H, type Layout, type Rect, type Vec2 } from './layout'
+import { LOUNGE, MEETING, PANTRY, WALL_H, type BossRoom, type Layout, type Rect, type Vec2 } from './layout'
 import { StaticBatch } from './StaticBatch'
 import { WallSign } from './WallSign'
 
@@ -12,7 +12,8 @@ export function Room({ layout }: { layout: Layout }) {
   const W = floor.maxX - floor.minX
   const D = floor.maxZ - floor.minZ
   const cx = (floor.minX + floor.maxX) / 2
-  const deskMinX = floor.minX
+  // the open plan starts right of the manager's office
+  const deskMinX = layout.openMinX
   const deskMaxX = MEETING.bounds.minX - 0.3
   const deskColsX = Array.from({ length: cols }, (_, c) => -1 - 4 * c)
 
@@ -35,6 +36,8 @@ export function Room({ layout }: { layout: Layout }) {
       {/* meeting room floor */}
       <Box size={[MEETING.bounds.maxX - MEETING.bounds.minX, 0.02, 6.4]} position={[(MEETING.bounds.minX + MEETING.bounds.maxX) / 2, 0.02, -4.75]} color="#b9bec7" noShadow />
       <PantryFloor />
+      {/* the manager's office: a warm wood floor of its own */}
+      <Box size={[layout.boss.bounds.maxX - layout.boss.bounds.minX, 0.02, layout.boss.bounds.maxZ - layout.boss.bounds.minZ]} position={[(layout.boss.bounds.minX + layout.boss.bounds.maxX) / 2, 0.021, (layout.boss.bounds.minZ + layout.boss.bounds.maxZ) / 2]} color="#b98a63" noShadow />
       {/* lounge rugs */}
       <Cyl r={1.6} h={0.02} position={[LOUNGE.catPlay[0], 0.025, LOUNGE.catPlay[1]]} color="#e7c7a0" seg={32} noShadow />
       <Box size={[4.2, 0.02, 3.4]} position={[LOUNGE.sofa.x, 0.025, 0.9]} color="#c07a5b" noShadow />
@@ -63,7 +66,7 @@ export function Room({ layout }: { layout: Layout }) {
       {layout.plants.map((p, i) => (
         <Plant key={i} at={p} tall={i % 2 === 0} />
       ))}
-      <GlassRooms />
+      <GlassRooms boss={layout.boss} />
     </StaticBatch>
   )
 }
@@ -168,14 +171,19 @@ export function Plant({ at, tall }: { at: Vec2; tall?: boolean }) {
 }
 
 /** Glass walls of the meeting room and the pantry. */
-function GlassRooms() {
+function GlassRooms({ boss }: { boss: BossRoom }) {
   const h = 2.2
   const glass = { color: '#cfe8f5', opacity: 0.22, roughness: 0.1 }
   const frame = '#4a4f5c'
   // [x1, z1, x2, z2] segments; doors are the gaps
   const { bounds: mb, door: md } = MEETING
   const { bounds: pb, door: pd } = PANTRY
+  const { bounds: bb, door: bd } = boss
   const segs: [number, number, number, number][] = [
+    // the manager's office: glass on its right (the open plan's end), its front has the door
+    [bb.maxX, bb.minZ, bb.maxX, bb.maxZ],
+    [bb.minX, bb.maxZ, bd.from, bb.maxZ],
+    [bd.to, bb.maxZ, bb.maxX, bb.maxZ],
     [mb.minX, mb.maxZ, md.from, mb.maxZ],
     [md.to, mb.maxZ, mb.maxX, mb.maxZ],
     [mb.minX, mb.minZ, mb.minX, mb.maxZ],
@@ -186,6 +194,7 @@ function GlassRooms() {
   const posts = [
     [mb.minX, mb.maxZ], [md.from, mb.maxZ], [md.to, mb.maxZ], [pb.minX, pb.maxZ],
     [pd.from, pb.maxZ], [pd.to, pb.maxZ], [pb.maxX - 0.05, pb.maxZ],
+    [bb.minX + 0.05, bb.maxZ], [bd.from, bb.maxZ], [bd.to, bb.maxZ], [bb.maxX, bb.maxZ],
   ]
   return (
     <group>

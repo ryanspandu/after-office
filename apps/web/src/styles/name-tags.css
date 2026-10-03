@@ -15,6 +15,7 @@
 .tag[data-pose='sofa'] [data-icon='sofa'],
 .tag[data-pose='relax'] [data-icon='relax'],
 .tag[data-pose='eat'] [data-icon='eat'],
+.tag[data-pose='read'] [data-icon='read'],
 .tag[data-pose='pet'] [data-icon='pet'],
 .tag[data-pose='billiards'] [data-icon='billiards'] { display: grid; }
 .tag [data-icon='wait'] { background: var(--hl); color: #fff; }

@@ -13,6 +13,8 @@ import { MeetingRoom } from './furniture/MeetingRoom'
 import { Pantry } from './furniture/Pantry'
 import { Parking } from './Parking'
 import { Workstation } from './furniture/Workstation'
+import { MEETING } from './layout'
+import { BossOffice } from './furniture/BossOffice'
 import { useQuality, useRenderConfig } from './quality'
 import { useLayout } from './useLayout'
 
@@ -47,6 +49,16 @@ export function Office() {
       return a ? `${a.look.shirt}:${a.kind ?? ''}` : '-'
     })
     .join(',')
+
+  // now and then an idle manager gets up and goes elsewhere (mostly within its office): every 2–4 minutes
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>
+    const next = () => {
+      t = setTimeout(() => (useOffice.getState().changeOfScene(), next()), 120_000 + Math.random() * 120_000)
+    }
+    next()
+    return () => clearTimeout(t)
+  }, [])
 
   return (
     <Canvas
@@ -94,9 +106,11 @@ export function Office() {
       {/* desks are static except their screens, LEDs and lamps; rebuilt only when a desk's owner changes */}
       <StaticBatch version={deskVersion}>
         {layout.desks.map((at, i) => (
-          <Workstation key={i} at={at} index={i} owner={agents.find((a) => a.desk === i)} />
+          // the manager works in its own office (below): its open-plan desk stays free
+          <Workstation key={i} at={at} index={i} owner={agents.find((a) => a.desk === i && a.kind !== 'manager')} />
         ))}
       </StaticBatch>
+      <BossOffice room={layout.boss} manager={agents.find((a) => a.kind === 'manager')} />
       <MeetingRoom />
       <Pantry />
       <Lounge />
@@ -120,10 +134,15 @@ function bounds(layout: Layout) {
   return { minX, maxX, minZ, maxZ }
 }
 
+/** Where the camera looks to start with: the building (the parking in front of it is a pan away). */
 function center(layout: Layout): [number, number, number] {
-  const b = bounds(layout)
-  return [(b.minX + b.maxX) / 2, 0, (b.minZ + b.maxZ) / 2]
+  // the manager's office, the open plan and the meeting room in the middle (the pantry's end a pan away)
+  const f = layout.floor
+  return [(f.minX + MEETING.bounds.maxX) / 2, 0, (f.minZ + f.maxZ) / 2 - 1.5]
 }
+
+/** How close the camera starts: the building filling the stage, a little cropped (closer than everything fitting). */
+const START_CLOSER = 1.5
 
 /** Zoom so the whole scene fits and keep the camera on the isometric diagonal from its center. */
 function FitCamera({ layout }: { layout: Layout }) {
@@ -138,14 +157,16 @@ function FitCamera({ layout }: { layout: Layout }) {
     if (prev && prev.key === key && Math.abs(prev.w - size.width) < 32 && Math.abs(prev.h - size.height) < 32) return
     last.current = { w: size.width, h: size.height, key }
     const [cx, , cz] = center(layout)
-    const span = b.maxX - b.minX + (b.maxZ - b.minZ)
+    // the building's footprint (not the lot): the office is what's looked at
+    const f = layout.floor
+    const span = f.maxX - f.minX + (f.maxZ - f.minZ)
     // isometric footprint: width ≈ span·cos45°, height ≈ span·sin45°·sin35° + wall height
     const byWidth = size.width / (span * 0.72)
     const byHeight = size.height / (span * 0.42 + 3)
     // a tall stage (a phone held upright): fitting the width leaves the office a small strip in the middle, so fill
     // the height instead and let the sides run off (it pans)
     const portrait = size.height > size.width * 1.2
-    camera.zoom = Math.max(4, portrait ? byHeight * 0.95 : Math.min(byWidth, byHeight))
+    camera.zoom = Math.max(4, portrait ? byHeight * 0.95 : Math.min(byWidth, byHeight) * START_CLOSER)
     camera.position.set(cx + 22, 20, cz + 22)
     camera.lookAt(cx, 0, cz)
     camera.updateProjectionMatrix()

@@ -6,7 +6,7 @@ import { agentsRepo, settingsRepo } from '../db'
 import { AGENTS_DIR, PROJECT_DIR, PROJECTS_DIR, rootOf } from '../fsroots'
 import { relative, sep } from 'node:path'
 import { AgentError, createAgent, resolveCwd } from '../agents/manager'
-import { addPending, getPending, resolvePending, updateRuntime } from '../agents/registry'
+import { addPending, getPending, publish, resolvePending, updateRuntime } from '../agents/registry'
 import { deliver, notifyUser } from './work'
 
 // The manager may propose new agents; the owner decides. A hire waits under "For you" (kept in the
@@ -165,6 +165,8 @@ export async function decideHire(f: LiveFollowUp, d: FollowUpDecision) {
     profile: h.brief?.trim() ? { claudeMd: h.brief } : undefined,
   })
   updateRuntime(row.id, (rt) => rt)
+  // the office plays the interview: the new one sits with the manager in its room for a while, then goes to its desk
+  publish({ type: 'hired', agent: row.id, manager: h.managerId })
   notifyUser(h.managerId, `${h.name} joined the office`, `Hired by ${managerName} with your approval: ${h.role}, ${h.model}, ${h.folder}.`)
   if (agentsRepo.get(h.managerId))
     await deliver(

@@ -368,6 +368,8 @@ export type OfficeEvent =
   | { type: 'comment-removed'; id: string; taskId: string }
   /** the manager just handed `to` a task (drives a short "briefing" marker in the office) */
   | { type: 'briefing'; from: string; to: string; title: string }
+  /** the manager just hired `agent` (the office plays its interview in the manager's room) */
+  | { type: 'hired'; agent: string; manager: string }
 
 /** One entry of an agent's conversation, simplified from the Claude Code transcript. */
 export type ChatItem =

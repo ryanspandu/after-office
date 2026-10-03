@@ -88,6 +88,10 @@ function apply(e: OfficeEvent) {
       }, BRIEFING_MS + 50)
       break
     }
+    case 'hired':
+      // the manager's new hire: their interview plays in the manager's office (state/store.ts)
+      office.startInterview(e.agent, e.manager)
+      break
     case 'agent':
       office.upsertLiveAgent(e.agent)
       break

@@ -7,7 +7,7 @@
 export type Vec2 = [x: number, z: number]
 
 /** What an agent does once it reaches a spot. */
-export type SpotKind = 'desk' | 'meeting' | 'sofa' | 'cat' | 'billiards' | 'pantry'
+export type SpotKind = 'desk' | 'meeting' | 'sofa' | 'cat' | 'billiards' | 'pantry' | 'read'
 
 export interface Spot {
   id: string
@@ -64,6 +64,80 @@ export const PANTRY = {
   counter: { x: 14.5, z: -7.6, w: 4.4, d: 0.7 },
   fridge: { x: 17.25, z: -7.5, w: 0.9, d: 0.8 },
   table: { x: 15, z: -4.4, r: 0.75 },
+}
+
+// ── The manager's office (glass box, back-left, next to the open plan; it moves left as the open plan grows) ──
+/** How wide it is (the building grows by this much on the left). */
+export const BOSS_W = 6.5
+export interface BossRoom {
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number }
+  /** the door in its glass front, at the open plan's end */
+  door: { from: number; to: number }
+  /** the executive desk: the manager sits behind it (back-wall side), facing the door */
+  desk: Rect
+  seat: Vec2
+  guests: Vec2[]
+  shelf: Rect
+  rug: Rect
+  plant: Vec2
+  lamp: Vec2
+  /** a two-seat sofa against its left wall */
+  sofa: Rect
+}
+/** The open plan's left edge with `cols` desk columns (the manager's office is left of it). */
+export const openMinX = (cols: number) => -1 - DESK_COL_GAP * (cols - 1) - 3
+export function bossRoom(cols: number): BossRoom {
+  const maxX = openMinX(cols)
+  const minX = maxX - BOSS_W
+  const cx = minX + BOSS_W / 2
+  return {
+    bounds: { minX, maxX, minZ: MIN_Z, maxZ: 0.5 },
+    door: { from: maxX - 2.1, to: maxX - 0.6 },
+    desk: { x: cx + 0.3, z: -4.4, w: DESK_SIZE.w, d: DESK_SIZE.d },
+    seat: [cx + 0.3, -4.4 - CHAIR_OFFSET],
+    guests: [
+      [cx - 0.5, -3.0],
+      [cx + 1.1, -3.0],
+    ],
+    shelf: { x: cx + 0.3, z: MIN_Z + 0.38, w: 3.6, d: 0.5 },
+    rug: { x: cx + 0.3, z: -4.2, w: 4.4, d: 4.4 },
+    plant: [maxX - 0.55, MIN_Z + 0.6],
+    lamp: [minX + 0.55, MIN_Z + 0.55],
+    sofa: { x: minX + 0.6, z: -3.0, w: 0.85, d: 2.0 },
+  }
+}
+/**
+ * Places in the manager's office, as `boss<name>@<desk columns>` (the room moves with them): its chair (`boss@N`,
+ * working / waiting / offline, and idle at its desk), the sofa's two seats and the bookcase (idle), the chair when it
+ * interviews someone (`boss-host`) and the visitors' chairs (`boss-guest0/1`, the one being interviewed).
+ */
+export type BossPlace = '' | '-sofa0' | '-sofa1' | '-shelf' | '-host' | '-guest0' | '-guest1'
+export const bossSpot = (cols: number, place: BossPlace = '') => `boss${place}@${cols}`
+export const isBossSpot = (id?: string) => !!id && id.startsWith('boss')
+
+function bossPlaceSpot(id: string): Spot {
+  const [name, colsRaw] = id.slice(4).split('@')
+  const room = bossRoom(Number(colsRaw) || MIN_DESK_COLS)
+  const [sx, sz] = room.seat
+  switch (name as BossPlace) {
+    case '-sofa0':
+    case '-sofa1':
+      // on the sofa against the left wall, facing into the room (+x)
+      return { id, kind: 'sofa', x: room.sofa.x + 0.12, z: room.sofa.z + (name === '-sofa0' ? -0.45 : 0.45), rotY: Math.PI / 2 }
+    case '-shelf':
+      // browsing the bookcase, facing it
+      return { id, kind: 'read', x: room.shelf.x - 1.1, z: room.shelf.z + 0.75, rotY: Math.PI }
+    case '-host':
+      // at its desk, talking to whoever sits across
+      return { id, kind: 'meeting', x: sx, z: sz, rotY: 0 }
+    case '-guest0':
+    case '-guest1': {
+      const [gx, gz] = room.guests[name === '-guest0' ? 0 : 1]
+      return { id, kind: 'meeting', x: gx, z: gz, rotY: Math.PI }
+    }
+    default:
+      return { id, kind: 'desk', x: sx, z: sz, rotY: 0 }
+  }
 }
 
 // ── Lounge (front-right, open) ──
@@ -151,6 +225,7 @@ export function deskSpot(i: number): Spot {
 }
 
 export function spotById(id: string): Spot {
+  if (isBossSpot(id)) return bossPlaceSpot(id)
   if (id.startsWith('desk-')) return deskSpot(Number(id.slice(5)))
   return FIXED_BY_ID.get(id) ?? deskSpot(0)
 }
@@ -159,6 +234,9 @@ export function spotById(id: string): Spot {
 
 export interface Layout {
   cols: number
+  /** the open plan's left edge (the manager's office is left of it) */
+  openMinX: number
+  boss: BossRoom
   floor: { minX: number; maxX: number; minZ: number; maxZ: number }
   /** Outdoor ground (parking + road), wide enough for every parking slot in use. */
   lot: { minX: number; maxX: number; minZ: number; maxZ: number }
@@ -175,8 +253,10 @@ export function getLayout(cols: number): Layout {
   const hit = cache.get(cols)
   if (hit) return hit
 
-  const minX = -1 - DESK_COL_GAP * (cols - 1) - 3
-  const floor = { minX, maxX: MAX_X, minZ: MIN_Z, maxZ: MAX_Z }
+  // the open plan, and the manager's office left of it
+  const minX = openMinX(cols)
+  const boss = bossRoom(cols)
+  const floor = { minX: boss.bounds.minX, maxX: MAX_X, minZ: MIN_Z, maxZ: MAX_Z }
   const desks = Array.from({ length: cols * DESK_ROWS.length }, (_, i) => deskPos(i))
   const plants: Vec2[] = [
     [minX + 0.7, MIN_Z + 0.7],
@@ -186,9 +266,11 @@ export function getLayout(cols: number): Layout {
     [0.9, -0.9],
     [MAX_X - 0.6, -0.9],
     [10.2, MAX_Z - 0.6],
+    [boss.bounds.minX + 0.7, MAX_Z - 0.8],
   ]
-  const bookshelf: Rect = { x: minX + 0.35, z: 5.2, w: 0.5, d: 2.4 }
-  const waterCooler: Vec2 = [minX + 0.6, 1.2]
+  // against the building's left wall (in front of the manager's office)
+  const bookshelf: Rect = { x: floor.minX + 0.35, z: 5.2, w: 0.5, d: 2.4 }
+  const waterCooler: Vec2 = [floor.minX + 0.6, 1.4]
   const { bounds: mb, door: md } = MEETING
   const { bounds: pb, door: pd } = PANTRY
 
@@ -207,6 +289,16 @@ export function getLayout(cols: number): Layout {
     PANTRY.counter,
     PANTRY.fridge,
     { x: PANTRY.table.x, z: PANTRY.table.z, w: PANTRY.table.r * 2, d: PANTRY.table.r * 2 },
+    // the manager's office: glass on its right (the open plan's end) and in front (door gap), its furniture
+    { x: boss.bounds.maxX, z: (boss.bounds.minZ + boss.bounds.maxZ) / 2, w: 0.1, d: boss.bounds.maxZ - boss.bounds.minZ },
+    { x: (boss.bounds.minX + boss.door.from) / 2, z: boss.bounds.maxZ, w: boss.door.from - boss.bounds.minX, d: 0.1 },
+    { x: (boss.door.to + boss.bounds.maxX) / 2, z: boss.bounds.maxZ, w: boss.bounds.maxX - boss.door.to, d: 0.1 },
+    boss.desk,
+    boss.shelf,
+    boss.sofa,
+    ...boss.guests.map(([x, z]) => ({ x, z, w: 0.6, d: 0.6 })),
+    { x: boss.plant[0], z: boss.plant[1], w: 0.6, d: 0.6 },
+    { x: boss.lamp[0], z: boss.lamp[1], w: 0.4, d: 0.4 },
     LOUNGE.tv,
     LOUNGE.sofa,
     LOUNGE.coffeeTable,
@@ -218,8 +310,8 @@ export function getLayout(cols: number): Layout {
   ]
 
   const slotsMinX = slotPos(desks.length - 1)[0] - 2
-  const lot = { minX: Math.min(minX, slotsMinX) - 1, maxX: MAX_X + 3, minZ: MAX_Z, maxZ: OUTSIDE.groundMaxZ }
-  const layout = { cols, floor, lot, desks, plants, bookshelf, waterCooler, obstacles }
+  const lot = { minX: Math.min(floor.minX, slotsMinX) - 1, maxX: MAX_X + 3, minZ: MAX_Z, maxZ: OUTSIDE.groundMaxZ }
+  const layout = { cols, openMinX: minX, boss, floor, lot, desks, plants, bookshelf, waterCooler, obstacles }
   cache.set(cols, layout)
   return layout
 }

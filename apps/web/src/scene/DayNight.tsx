@@ -53,6 +53,13 @@ const FIXED_LAMPS: Lamp[] = [
   { pos: [PANTRY.counter.x, 1.8, PANTRY.counter.z + 0.8], power: 4, distance: 4.5 },
 ]
 
+/** The manager's office (it moves with the open plan): the pendant over the desk, the floor lamp, the sofa corner. */
+const bossLamps = ({ boss }: Layout): Lamp[] => [
+  { pos: [boss.desk.x, 1.9, boss.desk.z + 0.3], power: 6, distance: 5.5, real: true },
+  { pos: [boss.lamp[0] + 0.3, 1.6, boss.lamp[1] + 0.3], power: 5, distance: 5, real: true },
+  { pos: [boss.sofa.x + 0.6, 1.7, boss.sofa.z], power: 3.5, distance: 4.5 },
+]
+
 /** Soft round glow for fake "light pools" painted on the floor (additive, so it brightens what's under it). */
 export const poolTexture = (() => {
   if (typeof document === 'undefined') return null
@@ -91,7 +98,7 @@ export function DayNight({ layout }: { layout: Layout }) {
   const target = useDaylight()
   const cfg = useRenderConfig()
   const lampsList = useMemo<Lamp[]>(
-    () => [...FIXED_LAMPS, ...streetLampLights(layout).map((pos): Lamp => ({ pos, power: 5, distance: 7 }))],
+    () => [...FIXED_LAMPS, ...bossLamps(layout), ...streetLampLights(layout).map((pos): Lamp => ({ pos, power: 5, distance: 7 }))],
     [layout],
   )
   const deskPool = useRef<(PointLight | null)[]>([])
@@ -137,11 +144,13 @@ export function DayNight({ layout }: { layout: Layout }) {
 
     // light the desks of agents who are at work right now
     const active = useOffice.getState().agents.filter((a) => a.status === 'working' || a.status === 'waiting')
+    // the manager works in its own office, not at an open-plan desk
+    const deskAt = (a: (typeof active)[number]): [number, number] => (a.kind === 'manager' ? [layout.boss.desk.x - DESK_LAMP[0] + 0.2, layout.boss.desk.z - 0.9] : deskPos(a.desk))
     deskPool.current.forEach((l, i) => {
       if (!l) return
       const a = active[i]
       if (!a) return void (l.intensity = 0)
-      const [x, z] = deskPos(a.desk)
+      const [x, z] = deskAt(a)
       l.position.set(x + DESK_LAMP[0] - 0.2, 1.35, z + 0.45)
       l.intensity = env.night * (a.status === 'waiting' ? 3 : 3.6)
       l.color.set(a.status === 'waiting' ? '#ffb070' : '#ffd79a')
@@ -152,7 +161,7 @@ export function DayNight({ layout }: { layout: Layout }) {
       const a = active[i]
       const mat = m.material as MeshBasicMaterial
       if (!a) return void (m.visible = false)
-      const [x, z] = deskPos(a.desk)
+      const [x, z] = deskAt(a)
       m.position.set(x + DESK_LAMP[0] - 0.2, 0.05, z + 0.55)
       mat.color.copy(a.status === 'waiting' ? WAIT_COLOR : DESK_COLOR)
       mat.opacity = env.night * (i < cfg.deskLights ? 0.25 : 0.75)

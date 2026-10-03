@@ -1,5 +1,5 @@
 import { useCallback, type ReactNode } from 'react'
-import { LuCat, LuCircleAlert, LuCircleDot, LuClipboardCheck, LuCrown, LuCoffee, LuHeart, LuKeyboard, LuMessageCircle, LuSandwich, LuTv } from 'react-icons/lu'
+import { LuBookOpen, LuCat, LuCircleAlert, LuCircleDot, LuClipboardCheck, LuCrown, LuCoffee, LuHeart, LuKeyboard, LuMessageCircle, LuSandwich, LuTv } from 'react-icons/lu'
 import { Vector3, type Camera } from 'three'
 import { useLive } from '../state/live'
 import { useOffice } from '../state/store'
@@ -50,6 +50,7 @@ const POSE_ICONS: [pose: string, icon: ReactNode][] = [
   ['eat', <LuSandwich />],
   ['pet', <LuCat />],
   ['billiards', <LuCircleDot />],
+  ['read', <LuBookOpen />],
 ]
 
 function AgentTag({ id }: { id: string }) {

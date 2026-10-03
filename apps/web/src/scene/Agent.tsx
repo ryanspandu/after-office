@@ -13,7 +13,7 @@ import { dampAngle } from './math'
 import { Box, Cyl } from './prims'
 import { STRIKE_AT, STROKE_PERIOD, strokeOffset } from './furniture/Lounge'
 
-type Pose = 'stand' | 'walk' | 'type' | 'wait' | 'meeting' | 'sofa' | 'relax' | 'eat' | 'pet' | 'billiards'
+type Pose = 'stand' | 'walk' | 'type' | 'wait' | 'meeting' | 'sofa' | 'relax' | 'eat' | 'pet' | 'billiards' | 'read'
 
 /** Joint angles a pose wants this frame. Characters face +z; negative X rotation swings limbs forward. */
 interface Joints {
@@ -73,6 +73,11 @@ function poseJoints(pose: Pose, t: number, seed: number, spotId: string): Joints
       const cue = phase < STRIKE_AT ? -(phase / STRIKE_AT) * 0.25 : Math.min(0.12, -0.25 + ((phase - STRIKE_AT) / 0.08) * 0.37)
       return { ...REST, torsoX: 0.75, headX: -0.55, legL: -0.25, legR: 0.25, armL: -1.35, armLz: 0.25, armR: -0.75 + cue * 2, armRz: -0.2, cue }
     }
+    case 'read': {
+      // standing at the bookcase, a book held up, turning a page now and then, head tilted to it
+      const page = Math.max(0, Math.sin(t * 0.7 + seed * 2)) ** 6
+      return { ...REST, torsoX: 0.08, headX: 0.32, headY: Math.sin(t * 0.25 + seed) * 0.12, armL: -1.25, armLz: 0.35, armR: -1.2 - page * 0.4, armRz: -0.35 }
+    }
     case 'stand':
     default:
       return { ...REST, headY: Math.sin(t * 0.6 + seed) * 0.2 }
@@ -85,6 +90,7 @@ function poseFor(kind: SpotKind, status: OfficeAgent['status']): Pose {
   if (kind === 'sofa') return 'sofa'
   if (kind === 'cat') return 'pet'
   if (kind === 'pantry') return 'eat'
+  if (kind === 'read') return 'read'
   return 'billiards'
 }
 
