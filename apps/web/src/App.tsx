@@ -19,6 +19,7 @@ import { AgentProfileDrawer } from './ui/AgentProfile'
 import { AgentsCard, AgentsPanel } from './ui/AgentsPanel'
 import { ReportsPanel } from './ui/Reports'
 import { DeskLayout } from './ui/DeskLayout'
+import { useSpeechWatcher } from './state/speech'
 import { FollowUps } from './ui/FollowUps'
 import { CronPanel, LeftSidebar, TaskPanel } from './ui/LeftSidebar'
 import { ManagerPanel, useManager, useManagerPanel } from './ui/ManagerPanel'
@@ -33,6 +34,8 @@ export function App() {
   useMetricsSim()
   useCronRunner()
   useReplyAlertWatcher()
+  // answers read out loud (state/speech.ts)
+  useSpeechWatcher()
   const replied = useReplyAlerts((s) => s.toast)
   const fullscreen = useDashboard((s) => s.fullscreen)
   const syncError = useDashboard((s) => s.syncError)

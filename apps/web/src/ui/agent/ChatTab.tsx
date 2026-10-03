@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, useMemo } from 'react'
-import { MicButton, ListeningBar } from '../Voice'
+import { MicButton, ListeningBar, SpeakingChip } from '../Voice'
 import { useDictation } from '../../state/dictation'
+import { primeSpeech, talkedByVoice } from '../../state/speech'
 import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX } from 'react-icons/lu'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import type { ChatItem, LiveMode } from '@after-office/shared'
@@ -56,8 +57,18 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   const [loaded, setLoaded] = useState(false)
   const [text, setText] = useState('')
   // talking instead of typing: what was said lands in the message box, to check (or fix) and send
-  const dict = useDictation((said) => {
-    setText((cur) => (cur.trim() ? `${cur.trimEnd()} ${said}` : said))
+  // talking instead of typing: what was said lands in the message box to check and send, or goes out right away
+  // (held to talk, or hands-free)
+  const textRef = useRef('')
+  textRef.current = text
+  // a message (partly) said rather than typed: its answer is read out (state/speech.ts)
+  const spoken = useRef(false)
+  const dict = useDictation(({ text: said, send: now }) => {
+    const cur = textRef.current
+    const body = cur.trim() ? `${cur.trimEnd()} ${said}` : said
+    spoken.current = true
+    if (now) return void sendRef.current?.(body)
+    setText(body)
     requestAnimationFrame(() => box.current?.focus())
   })
   const [sending, setSending] = useState(false)
@@ -227,6 +238,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   const canSend = !offline && !sending && !pending.uploading && (!!text.trim() || pending.ids.length > 0)
 
   // the message just sent, shown right away (below the chat, above the typing bubble) until the transcript has it
+  const sendRef = useRef<((said?: string) => Promise<void>) | null>(null)
   const [outgoing, setOutgoing] = useState<{ text: string; files: Pending[]; at: number } | null>(null)
   // …and swapped for the real one in the same render: no gap, no second fade-in
   const delivered = outgoing ? items.find((i) => i.kind === 'user' && i.at >= outgoing.at - 1000) : undefined
@@ -237,9 +249,9 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
     setOutgoing((o) => (o?.files.forEach((p) => p.thumb && URL.revokeObjectURL(p.thumb)), null))
   }, [delivered])
 
-  const send = async () => {
-    const body = text.trim()
-    if (!canSend) return
+  const send = async (said?: string) => {
+    const body = (said ?? text).trim()
+    if (offline || sending || pending.uploading || (!body && !pending.ids.length)) return
     setSending(true)
     setError('')
     const at = Date.now()
@@ -249,6 +261,9 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
     stick.current = true
     try {
       await liveApi.prompt(agent.id, body, pending.ids, context.value, sk)
+      // the main session's answer is read out when this was said (side sessions aren't watched)
+      if (spoken.current && !sk) talkedByVoice(agent.id)
+      spoken.current = false
       setSentAt(at)
       pending.take()
       stick.current = true
@@ -261,6 +276,8 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       setSending(false)
     }
   }
+  sendRef.current = send
+
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -598,6 +615,10 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
         </div>
       </div>
       {(dict.listening || dict.error) && <ListeningBar dict={dict} />}
+      {/* an answer being read out: stop it from here too (phones have no navbar chip) */}
+      <div className="chat__speaking">
+        <SpeakingChip />
+      </div>
       <div className="chat__composer">
         <input
           ref={fileInput}
@@ -651,7 +672,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
           disabled={offline}
         />
         {dict.supported && <MicButton dict={dict} disabled={offline} />}
-        <button className="icon-btn primary" onClick={send} disabled={!canSend} data-tip={pending.uploading ? 'Waiting for the upload…' : 'Send'} aria-label="Send">
+        <button className="icon-btn primary" onClick={() => (primeSpeech(), void send())} disabled={!canSend} data-tip={pending.uploading ? 'Waiting for the upload…' : 'Send'} aria-label="Send">
           {sending ? <LuLoader className="spin" /> : <LuSend />}
         </button>
       </div>

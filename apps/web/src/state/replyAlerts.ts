@@ -64,7 +64,7 @@ export function chime() {
 const TOAST_MS = 6000
 
 /** Is this agent's chat the one on screen? (its profile drawer, or the manager panel for the manager) */
-function chatOnScreen(agentId: string) {
+export function chatOnScreen(agentId: string) {
   if (document.visibilityState !== 'visible') return false
   const office = useOffice.getState()
   if (office.profileId === agentId) return true

@@ -28,9 +28,32 @@ export const DICTATION_LANGS = [
   { value: 'en-US', label: 'English' },
 ]
 const LANG_KEY = 'after-office:dictation-lang'
+const AUTO_KEY = 'after-office:dictation-auto-send'
 
-/** The language it listens for, remembered in this browser (Indonesian to start with). */
-export const useDictationLang = create<{ lang: string; set: (lang: string) => void }>((set) => ({
+/** How long a pause ends it (no need to press stop), and how long it waits for a first word. */
+export const SILENCE_MS = 1800
+const NO_SPEECH_MS = 8000
+
+/**
+ * The language it listens for, and whether what was said goes out by itself when you stop talking (hands-free) or
+ * waits in the box to be checked first. Remembered in this browser.
+ */
+export const useDictationLang = create<{ lang: string; set: (lang: string) => void; autoSend: boolean; setAutoSend: (on: boolean) => void }>((set) => ({
+  autoSend: (() => {
+    try {
+      return localStorage.getItem(AUTO_KEY) === '1'
+    } catch {
+      return false
+    }
+  })(),
+  setAutoSend: (autoSend) => {
+    try {
+      localStorage.setItem(AUTO_KEY, autoSend ? '1' : '0')
+    } catch {
+      // this visit only
+    }
+    set({ autoSend })
+  },
   lang: (() => {
     try {
       const saved = localStorage.getItem(LANG_KEY)
@@ -60,13 +83,22 @@ const ERRORS: Record<string, string> = {
   network: "This browser can't reach its speech service (Brave, Arc and some other Chromium browsers turn it off). Try Chrome, Edge or Safari",
 }
 
+/** How a run of listening ended: the words, and whether they should go out now (held to talk, or hands-free). */
+export interface Heard {
+  text: string
+  send: boolean
+}
+
 /**
- * Listen while `listening`: `text` is what was said so far (settled), `interim` the words still being heard. Stops by
- * itself after a pause on some browsers; `stop()` ends it, `onDone` gets the whole text once it has ended.
+ * Listen: `text` is what was said so far (settled), `interim` the words still being heard. It ends by itself after a
+ * pause (or when nothing is said at all); `stop()` ends it now, `cancel()` drops it. `onDone` gets the words once it has
+ * ended, with `send` when they should go out right away: held to talk (`start({ hold: true })`, ends on `stop()`
+ * only), or hands-free (the owner's auto-send).
  */
-export function useDictation(onDone?: (text: string) => void) {
+export function useDictation(onDone?: (heard: Heard) => void) {
   const lang = useDictationLang((s) => s.lang)
   const [listening, setListening] = useState(false)
+  const [holding, setHolding] = useState(false)
   const [text, setText] = useState('')
   const [interim, setInterim] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -74,13 +106,37 @@ export function useDictation(onDone?: (text: string) => void) {
   const finalText = useRef('')
   const done = useRef(onDone)
   done.current = onDone
+  const cancelled = useRef(false)
+  const hold = useRef(false)
+  const quiet = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const stop = () => rec.current?.stop()
+  const clearQuiet = () => {
+    if (quiet.current) clearTimeout(quiet.current)
+    quiet.current = null
+  }
+  /** a pause (or no word at all) ends it, unless it's held */
+  const armQuiet = (ms: number) => {
+    clearQuiet()
+    if (!hold.current) quiet.current = setTimeout(() => rec.current?.stop(), ms)
+  }
+
+  const stop = () => {
+    clearQuiet()
+    rec.current?.stop()
+  }
+  /** a press that turned out to be a tap: it keeps listening, and a pause ends it */
+  const unhold = () => {
+    if (!hold.current) return
+    hold.current = false
+    setHolding(false)
+    if (rec.current) armQuiet(SILENCE_MS)
+  }
   const cancel = () => {
-    done.current = undefined
+    cancelled.current = true
+    clearQuiet()
     rec.current?.abort()
   }
-  const start = () => {
+  const start = (opts: { hold?: boolean } = {}) => {
     const R = Ctor()
     if (!R || rec.current) return
     const r = new R()
@@ -88,10 +144,12 @@ export function useDictation(onDone?: (text: string) => void) {
     r.continuous = true
     r.interimResults = true
     finalText.current = ''
+    cancelled.current = false
+    hold.current = !!opts.hold
+    setHolding(!!opts.hold)
     setText('')
     setInterim('')
     setError(null)
-    done.current = onDone
     r.onresult = (e) => {
       let heard = ''
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -101,27 +159,48 @@ export function useDictation(onDone?: (text: string) => void) {
       }
       setText(finalText.current)
       setInterim(heard.trim())
+      // still talking: the pause that ends it starts over (words still being heard count as finished once it ends)
+      if (heard.trim()) finalPending.current = heard.trim()
+      else finalPending.current = ''
+      armQuiet(SILENCE_MS)
     }
     r.onerror = (e) => {
-      if (e.error !== 'no-speech' && e.error !== 'aborted') setError(ERRORS[e.error] ?? `Could not listen (${e.error})`)
+      if (e.error === 'no-speech' || e.error === 'aborted') return
+      // Brave has the API but turns off the service behind it: it says "not allowed" / "network" whatever the settings
+      if ((navigator as Navigator & { brave?: unknown }).brave && (e.error === 'not-allowed' || e.error === 'network'))
+        return setError("Brave turns off the browser's speech recognition (even with the microphone allowed). Use Chrome, Edge or Safari for voice")
+      setError(ERRORS[e.error] ?? `Could not listen (${e.error})`)
     }
     r.onend = () => {
+      clearQuiet()
       rec.current = null
       setListening(false)
+      setHolding(false)
       setInterim('')
-      const said = finalText.current.trim()
-      if (said) done.current?.(said)
+      // words heard but not settled when it stopped (Safari leaves the last phrase so) still count
+      const said = `${finalText.current} ${finalPending.current}`.replace(/\s+/g, ' ').trim()
+      finalPending.current = ''
+      if (said && !cancelled.current) done.current?.({ text: said, send: hold.current || useDictationLang.getState().autoSend })
     }
     rec.current = r
     try {
       r.start()
       setListening(true)
+      armQuiet(NO_SPEECH_MS)
     } catch (e) {
       rec.current = null
       setError(e instanceof Error ? e.message : 'Could not listen')
     }
   }
+  const finalPending = useRef('')
   // gone (window closed): stop listening
-  useEffect(() => () => rec.current?.abort(), [])
-  return { supported: dictationSupported(), listening, text, interim, error, start, stop, cancel, setError }
+  useEffect(
+    () => () => {
+      cancelled.current = true
+      clearQuiet()
+      rec.current?.abort()
+    },
+    [],
+  )
+  return { supported: dictationSupported(), listening, holding, text, interim, error, start, stop, cancel, unhold, setError }
 }
