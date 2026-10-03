@@ -1,0 +1,33 @@
+/* ── the app's motion, from the Tasks window (styles/tasks-modal.css: tag cards, a tag's tasks) ─────────────────
+   One feel everywhere something shows or hides:
+   .ui-switch   a view replaced by another (tabs, sections, drilling in): slides in from the right, fading in
+   .ui-drop     something opening in place (a row's details, a sub-folder, a form): unfolds downwards
+   .ui-pop      a menu or a popover: grows from where it was opened
+   .ui-stagger  a list just shown: its rows come in one after another                                            */
+@keyframes ui-switch-in { from { opacity: 0; transform: translateX(18px); } }
+@keyframes ui-drop-in { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes ui-pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.97); } }
+@keyframes ui-row-in { from { opacity: 0; transform: translateY(6px); } }
+.ui-switch { animation: ui-switch-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.ui-drop { animation: ui-drop-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.ui-pop { animation: ui-pop-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; transform-origin: top left; }
+.ui-stagger > * { animation: ui-row-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.ui-stagger > :nth-child(2) { animation-delay: 30ms; }
+.ui-stagger > :nth-child(3) { animation-delay: 60ms; }
+.ui-stagger > :nth-child(4) { animation-delay: 90ms; }
+.ui-stagger > :nth-child(5) { animation-delay: 120ms; }
+.ui-stagger > :nth-child(n + 6) { animation-delay: 150ms; }
+/* menus and popovers that are always this kind of thing */
+.stab-menu__pop, .agent-menu, .voice-pop, .nav-menu__pop, .fb__menu { animation: ui-pop-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; transform-origin: top right; }
+@media (prefers-reduced-motion: reduce) {
+  .ui-switch, .ui-drop, .ui-pop, .ui-stagger > *, .stab-menu__pop, .agent-menu, .voice-pop, .nav-menu__pop, .fb__menu { animation: none; }
+}
+/* the sidebar's Folders / Tags / Activity: a pane that fills the card like the list it replaces */
+.side-pane { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: inherit; }
+/* phones: the filters folded behind a button unfold the same way (they animate as they start to show) */
+@media (max-width: 768px) {
+  .tasks-modal .toolbar:not(.toolbar--folded) .toolbar__field,
+  .tasks-modal .toolbar:not(.toolbar--folded) .toolbar__filter,
+  .tasks-modal .toolbar:not(.toolbar--folded) .toolbar__actions,
+  .reports-modal__bar--filters:not(.is-folded) .reports-modal__filters { animation: ui-drop-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+}

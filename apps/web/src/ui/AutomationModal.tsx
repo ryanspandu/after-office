@@ -244,7 +244,7 @@ export function AutomationModal() {
             </span>
             <span>
               <span className="switch-row__label">Approve the manager's tasks first</span>
-              <span className="field__hint">New tasks from the manager wait in "Needs your attention" until you approve or reject them.</span>
+              <span className="field__hint">New tasks from the manager wait under "For you" until you approve or reject them.</span>
             </span>
           </label>
           <BossModeSwitch />

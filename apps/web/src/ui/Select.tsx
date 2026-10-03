@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import ReactSelect from 'react-select'
 
 // Thin wrapper over react-select: string values in/out, styled entirely by `.rs__*` classes in styles/select.css.
@@ -18,7 +19,7 @@ interface Props<T extends string> {
   /** Type to filter options. */
   searchable?: boolean
   /** Text shown in the closed control; defaults to the option label. */
-  display?: (o: Option<T>) => string
+  display?: (o: Option<T>) => ReactNode
 }
 
 export function Select<T extends string>({ value, options, onChange, ariaLabel, size = 'md', className, disabled, searchable, display }: Props<T>) {

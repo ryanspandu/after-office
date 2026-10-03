@@ -64,7 +64,7 @@ export function FolderTree({ root, rel = '', depth, projectAt, pick, onOpenDir }
   const entries = pick ? listing.entries.filter((e) => e.dir && !e.link) : listing.entries
   if (!entries.length) return <div className="tree__note muted" style={pad}>{pick ? 'No folders inside' : 'Empty folder'}</div>
   return (
-    <ul className="tree">
+    <ul className={`tree${depth > 0 ? ' ui-drop' : ''}`}>
       {entries.map((e) => {
         const path = join(rel, e.name)
         if (e.dir && !e.link) return <TreeDir key={e.name} root={root} rel={path} name={e.name} depth={depth} projectAt={projectAt} pick={pick} onOpenDir={onOpenDir} />

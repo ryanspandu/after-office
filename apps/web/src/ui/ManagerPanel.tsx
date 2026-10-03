@@ -12,7 +12,7 @@ import { openUrl, setUrl, useParam } from '../state/url'
 import { MaximizeButton, useMaximize } from './Maximize'
 import { useSheetDrag } from '../state/useSheetDrag'
 import { ago } from './FollowUps'
-import { STATUS_BY_ID } from './taskMeta'
+import { StatusPill } from './taskMeta'
 
 // The manager's own panel: talk to it (Chat) and see what it handed out (Team). Opened from the navbar on desktops
 // and from the dock on phones. The manager is a normal Claude Code agent with the after-office MCP tools.
@@ -90,7 +90,7 @@ function Panel({ manager, onClose: close }: { manager: OfficeAgent; onClose: () 
           </button>
         </nav>
 
-        <div className={`drawer__body${tab === 'chat' ? ' drawer__body--flush' : ''}`}>
+        <div key={tab} className={`drawer__body ui-switch${tab === 'chat' ? ' drawer__body--flush' : ''}`}>
           {tab === 'chat' ? <ChatTab agent={manager} /> : <Team tasks={delegated} />}
         </div>
       </aside>
@@ -118,13 +118,10 @@ function Team({ tasks }: { tasks: ReturnType<typeof useDashboard.getState>['task
         {sorted.map((t) => {
           const agent = agents.find((a) => a.id === t.agentId)
           const report = reports.find((r) => r.kind === 'task' && r.refId === t.id)
-          const st = STATUS_BY_ID[t.status]
           return (
             <li key={t.id}>
               <button className="team-row" onClick={() => openUrl({ task: t.id })}>
-                <span className="status-pill" style={{ ['--c' as string]: st.color }}>
-                  {st.label}
-                </span>
+                <StatusPill task={t} />
                 <span className="team-row__body">
                   <span className="team-row__title truncate">{t.title}</span>
                   <span className="team-row__meta truncate">

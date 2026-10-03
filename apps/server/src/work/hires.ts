@@ -9,7 +9,7 @@ import { AgentError, createAgent, resolveCwd } from '../agents/manager'
 import { addPending, getPending, resolvePending, updateRuntime } from '../agents/registry'
 import { deliver, notifyUser } from './work'
 
-// The manager may propose new agents; the owner decides. A hire waits in "Needs your attention" (kept in the
+// The manager may propose new agents; the owner decides. A hire waits under "For you" (kept in the
 // settings table so it survives a restart) and only an approval starts a session. The manager never picks the
 // folder: new agents live in OFFICE_AGENTS_DIR/<name>, a folder that must not exist yet.
 

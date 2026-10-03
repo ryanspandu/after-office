@@ -17,7 +17,7 @@ export function OwnerAvatar({ className = '' }: { className?: string }) {
   return avatar ? (
     <img className={`avatar avatar--img ${className}`} src={avatar} alt="" />
   ) : (
-    <span className={`avatar ${className}`}>{user?.[0]?.toUpperCase()}</span>
+    <span className={`avatar avatar--owner ${className}`}>{user?.[0]?.toUpperCase()}</span>
   )
 }
 

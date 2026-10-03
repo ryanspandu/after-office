@@ -4,7 +4,7 @@
 .cron-trigger__row { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .cron-trigger__row code { flex: 1; min-width: 0; font-size: 11.5px; }
 
-/* manager task approvals in "Needs your attention" */
+/* manager task approvals under "For you" */
 .fu--delegation, .fu--hire, .fu--check { --c: var(--hl); }
 .fu--delegation .fu__kind { color: var(--hl); }
 .automation__signout { display: flex; align-items: center; gap: 12px; justify-content: space-between; flex-wrap: wrap; }

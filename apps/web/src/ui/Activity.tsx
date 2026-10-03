@@ -190,7 +190,7 @@ function Detail({ e, onClose }: { e: ActivityEntry; onClose: () => void }) {
                 ? `You${e.decision.allowed ? '' : ' (denied)'}, ${when(e.decision.at)}${e.decision.device || e.decision.ip ? ` · ${[e.decision.device, e.decision.ip].filter(Boolean).join(' · ')}` : ''}`
                 : `Automatic (${e.access === 'write' ? 'Write' : 'Read'} is on for this agent)`
               : e.status === 'waiting'
-                ? 'Waiting for you in Needs your attention'
+                ? 'Waiting for you under For you'
                 : 'Not recorded',
           ],
         ] as [string, ReactNode][])

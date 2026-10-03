@@ -287,7 +287,7 @@ function ProfileMenu({ items }: { items: { icon: ReactNode; label: string; onCli
         <LuEllipsisVertical />
       </button>
       {open && (
-        <div className="pmenu__list" role="menu">
+        <div className="pmenu__list ui-pop" role="menu">
           {items.map((it) => (
             <button
               key={it.label}

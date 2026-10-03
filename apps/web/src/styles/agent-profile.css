@@ -3,7 +3,9 @@
 .avatar--btn:hover:not(:disabled) { color: #fff; outline: 2px solid var(--hl); outline-offset: 1px; }
 .avatar--lg { width: 40px; height: 40px; border-radius: 12px; font-size: 16px; }
 .row__title .role { font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.drawer-backdrop { position: fixed; inset: 0; z-index: 800; background: rgba(10, 10, 10, 0.3); backdrop-filter: blur(2px); animation: fade-in 0.15s ease-out; }
+/* the same layer as the modals (styles/modal.css): whichever opened last is on top (a chat opened from a report shows
+   over it; a file opened from the chat shows over the chat) */
+.drawer-backdrop { position: fixed; inset: 0; z-index: 900; background: rgba(10, 10, 10, 0.3); backdrop-filter: blur(2px); animation: fade-in 0.15s ease-out; }
 .drawer {
   position: absolute; top: 12px; right: 12px; bottom: 12px; width: min(720px, calc(100vw - 24px));
   display: flex; flex-direction: column;

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { LuEllipsis, LuFolder, LuFolders, LuNotebookPen, LuX } from 'react-icons/lu'
+import { LuEllipsis, LuFileText, LuFolder, LuFolders, LuListTodo, LuNotebookPen, LuX } from 'react-icons/lu'
 import { useLive } from '../state/live'
 import { useMinimized, type MinimizedFolder } from '../state/minimized'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
@@ -12,7 +12,22 @@ const tilde = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, '~')
 function useWindowLabels() {
   const notes = useLive((s) => s.notes)
   return (f: MinimizedFolder) =>
-    f.kind === 'note'
+    f.kind === 'report'
+      ? {
+          name: f.label || 'Report',
+          sub: 'Report',
+          icon: <LuFileText />,
+          open: () => (useMinimized.getState().remove(f.path), openUrl({ report: f.path.slice('report:'.length) })),
+        }
+      : f.kind === 'tasks' || f.kind === 'reports'
+      ? {
+          name: f.kind === 'tasks' ? 'Tasks' : 'Reports',
+          sub: f.kind === 'tasks' ? 'Tasks' : 'Reports',
+          icon: f.kind === 'tasks' ? <LuListTodo /> : <LuFileText />,
+          // back as it was left (search, sort, page…); the chip goes, the window is open again
+          open: () => (useMinimized.getState().remove(f.path), openUrl({ [f.kind as string]: f.kind === 'tasks' ? '1' : 'all', ...f.params })),
+        }
+      : f.kind === 'note'
       ? { name: notes.find((n) => n.id === f.path)?.title || f.label || 'Untitled note', sub: 'Note', icon: <LuNotebookPen />, open: () => openUrl({ note: f.path }) }
       : { name: f.path.split('/').pop() || f.path, sub: tilde(f.path), icon: <LuFolder />, open: () => openUrl({ folder: f.path }) }
 }
@@ -23,7 +38,9 @@ function useWindowLabels() {
  * reload button keep their places), with the list opening upwards from it.
  */
 export function MinimizedChips({ current, currentNote }: { current?: string; currentNote?: string }) {
-  const folders = useMinimized((s) => s.folders).filter((f) => (f.kind === 'note' ? f.path !== currentNote : f.path !== current))
+  const live = useMinimized((s) => s.folders).filter((f) => (f.kind === 'note' ? f.path !== currentNote : f.path !== current))
+  // a chip that goes (opened again, or closed) stays a moment to shrink away; a new one grows in (styles/projects.css)
+  const folders = useLeaving(live)
   const labels = useWindowLabels()
   const remove = useMinimized((s) => s.remove)
   const mobile = useMediaQuery(MOBILE)
@@ -37,7 +54,7 @@ export function MinimizedChips({ current, currentNote }: { current?: string; cur
       {shown.map((f) => {
         const w = labels(f)
         return (
-          <span key={f.path} className="fmin__chip">
+          <span key={f.path} className={`fmin__chip${f.leaving ? ' is-leaving' : ''}`}>
             <button className="fmin__open" onClick={w.open} data-tip={w.sub}>
               {w.icon}
               <span className="truncate">{w.name}</span>
@@ -51,6 +68,35 @@ export function MinimizedChips({ current, currentNote }: { current?: string; cur
       {rest.length > 0 && <MinimizedMenu folders={rest} remove={remove} more />}
     </div>
   )
+}
+
+/**
+ * The list, plus the ones just removed (marked `leaving`) for as long as their way out takes. Worked out while
+ * rendering (not after), so a chip never vanishes for a frame before it starts to shrink away.
+ */
+function useLeaving(list: MinimizedFolder[], ms = 200): (MinimizedFolder & { leaving?: boolean })[] {
+  const prev = useRef(list)
+  const gone = useRef(new Map<string, { f: MinimizedFolder; until: number; at: number }>())
+  const [, tick] = useState(0)
+  const now = Date.now()
+  const present = new Set(list.map((f) => f.path))
+  prev.current.forEach((f, at) => {
+    if (!present.has(f.path) && !gone.current.has(f.path)) gone.current.set(f.path, { f, until: now + ms, at })
+  })
+  for (const [path, g] of gone.current) if (present.has(path) || g.until <= now) gone.current.delete(path)
+  // once the last one is out of the way, draw again without it
+  const next = Math.min(...[...gone.current.values()].map((g) => g.until))
+  useEffect(() => {
+    if (!Number.isFinite(next)) return
+    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, next - Date.now()) + 10)
+    return () => clearTimeout(t)
+  }, [next])
+  // each one leaving keeps its place among the others (no jump to the end before it goes)
+  const out: (MinimizedFolder & { leaving?: boolean })[] = [...list]
+  for (const g of [...gone.current.values()].sort((a, b) => a.at - b.at)) out.splice(Math.min(g.at, out.length), 0, { ...g.f, leaving: true })
+  // the list as drawn is what a later removal is measured against
+  prev.current = out.filter((f) => !f.leaving)
+  return out
 }
 
 /** Chips shown at most (larger screens); past that, the last place is the "⋯" button. */

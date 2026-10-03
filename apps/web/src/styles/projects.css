@@ -358,3 +358,11 @@
   .kb-open .fnotes:focus-within .fnotes__done { display: inline-flex; }
   .kb-open .fnotes:focus-within .fnotes__editor { min-height: 0; }
 }
+/* a minimized window's chip grows in when it's put aside and shrinks away when it opens again or closes */
+@keyframes fmin-chip-in { from { opacity: 0; transform: translateY(8px) scale(0.92); } }
+/* on its way out it also gives up its room, so the others close up smoothly instead of jumping */
+@keyframes fmin-chip-out { from { max-width: 220px; } to { opacity: 0; transform: translateY(8px) scale(0.9); max-width: 0; padding-left: 0; padding-right: 0; margin-left: -6px; } }
+.fmin__chip { animation: fmin-chip-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.fmin__chip.is-leaving { animation: fmin-chip-out 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; pointer-events: none; overflow: hidden; white-space: nowrap; }
+.fmin-fab { animation: fmin-chip-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+@media (prefers-reduced-motion: reduce) { .fmin__chip, .fmin__chip.is-leaving, .fmin-fab { animation: none; } }

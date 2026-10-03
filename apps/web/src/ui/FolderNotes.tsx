@@ -378,7 +378,7 @@ function FittingToolbar({ groups }: { groups: React.ReactNode[] }) {
             <LuEllipsis />
           </button>
           {open && (
-            <span className="fnotes__menu" role="group" aria-label="More formatting">
+            <span className="fnotes__menu ui-pop" role="group" aria-label="More formatting">
               {groups.slice(fit).map((g, i) => (
                 <span key={i} className="fnotes__group">
                   {g}

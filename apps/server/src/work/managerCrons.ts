@@ -9,7 +9,7 @@ import { deliver, isReadingAgentOutput, notifyUser, publishWork } from './work'
 // The manager's daily jobs (MCP: list/create/update/delete_daily_job). The same rules as its tasks (delegate_task):
 // they apply right away, unless the owner asked to approve the manager's work first, or the manager asks right after
 // reading an agent's report (what that report says could be steering it); Boss mode lifts both. A change that waits
-// is a card in "Needs your attention" (kind 'daily'), kept in the settings table so it survives a restart.
+// is a card under "For you" (kind 'daily'), kept in the settings table so it survives a restart.
 
 export type CronChange =
   | { action: 'create'; cron: CronJob }

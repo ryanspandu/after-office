@@ -148,3 +148,22 @@
 /* the day a run of reports belongs to (Today, Yesterday, …): an inbox, not a log */
 .report-day { list-style: none; position: sticky; top: 0; z-index: 1; padding: 8px 4px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); background: var(--card); }
 .report-day + .report-row { border-top: none; }
+/* View all: pick reports, then one action on all of them. The pick box sits where the row's icon is (inside its
+   highlight): it shows on hover, while any is picked, and on the picked ones */
+.report-row--checkable { position: relative; }
+.report-row__check { position: absolute; left: 6px; top: 9px; z-index: 1; width: 14px; height: 14px; margin: 0; opacity: 0; cursor: pointer; transition: opacity 0.12s; }
+.report-row--checkable:hover .report-row__check, .reports-modal__list.is-picking .report-row__check, .report-row__check:checked, .report-row__check:focus-visible { opacity: 1; }
+.report-row--checkable:hover .report__icon, .reports-modal__list.is-picking .report__icon, .report-row.is-checked .report__icon { visibility: hidden; }
+.report-row.is-checked > .report-row__main { background: color-mix(in srgb, var(--hl) 10%, transparent); }
+.reports-bulk { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 0 2px 0 6px; flex-wrap: wrap; }
+.reports-bulk__all { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.reports-bulk.is-on .reports-bulk__all { color: var(--text); font-weight: 600; }
+.reports-bulk__actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.reports-bulk__actions .danger-text svg { color: var(--danger); }
+.reports-bulk__all input { width: 14px; height: 14px; margin: 0; }
+/* View all: rows are rounded tiles with a little air between them (no dividing lines for the highlight to run into) */
+.reports-modal__list { display: flex; flex-direction: column; gap: 2px; }
+.reports-modal__list > .report-row + .report-row { border-top: none; }
+.reports-modal__list .report-row__main { padding: 8px 8px; border-radius: 12px; }
+.reports-modal__list .report-row__check { left: 8px; top: 10px; }
+.reports-modal__list .report-day { margin-top: 6px; }

@@ -61,7 +61,7 @@ export function MobileDock() {
   return (
     <>
       <nav className={`dock${manager ? ' dock--six' : ''}`} aria-label="Panels">
-        <DockButton icon={<LuInbox />} label="Attention" count={attention} alert={attention > 0} onClick={() => setSheet('attention')} />
+        <DockButton icon={<LuInbox />} label="For you" count={attention} alert={attention > 0} onClick={() => setSheet('attention')} />
         <DockButton icon={<LuCalendarClock />} label="Daily" count={activeCrons} onClick={() => setSheet('cron')} />
         <DockButton icon={<LuBriefcase />} label="Work" count={urgent || openTasks.length} alert={urgent > 0} onClick={() => setSheet('tasks')} />
         <DockButton icon={<LuLibrary />} label="Docs" count={unreadReports} onClick={() => setSheet('reports')} />

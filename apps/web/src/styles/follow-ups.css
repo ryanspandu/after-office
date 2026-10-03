@@ -55,3 +55,11 @@ button.fu__msg:hover:not(:disabled) { text-decoration: underline; text-underline
 .fu-detail__body code { font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: var(--card); border: 1px solid var(--line); }
 .fu-detail textarea { padding: 9px 12px; border-radius: 12px; }
 .fu-detail__actions { flex-wrap: wrap; }
+/* "For you": work to review, your own tasks, the manager's notes that need you (ui/FollowUps.tsx ForYouCard) */
+.fu--to-review { --c: var(--working); }
+.fu--mine { --c: var(--hl); }
+.fu--note { --c: var(--hl); }
+.chip--me { color: var(--hl); background: var(--hl-soft); }
+.task-me { display: inline-flex; }
+/* a card's buttons sit at its bottom, whatever the length of its text (cards in a row line up) */
+.fu .fu__actions, .fu .fu__reply, .fu .fu__options { margin-top: auto; }

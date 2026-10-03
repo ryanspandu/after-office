@@ -68,12 +68,14 @@ export function NotifyChannels({ onChanged }: { onChanged: () => void }) {
     return (
       <div className="channels">
         {tabs}
+        <div key="app" className="ui-switch">
         <AppPush
           onDevices={(n) => {
             setAppDevices(n)
             onChanged()
           }}
         />
+        </div>
       </div>
     )
   if (!status)
@@ -88,7 +90,7 @@ export function NotifyChannels({ onChanged }: { onChanged: () => void }) {
   return (
     <div className="channels">
       {tabs}
-      <div className={`channel${s.source ? ' is-on' : ''}`}>
+      <div key={tab} className={`channel ui-switch${s.source ? ' is-on' : ''}`}>
         <div className="channel__row">
           <span className="channel__body">
             <b>{s.source === 'env' ? "Set in the server's .env" : s.source ? 'Sending here' : 'Not set up'}</b>
@@ -108,6 +110,7 @@ export function NotifyChannels({ onChanged }: { onChanged: () => void }) {
           )}
         </div>
         {editing && (
+          <div className="ui-drop">
           <ChannelForm
             key={tab}
             name={tab}
@@ -119,6 +122,7 @@ export function NotifyChannels({ onChanged }: { onChanged: () => void }) {
               onChanged()
             }}
           />
+          </div>
         )}
       </div>
     </div>

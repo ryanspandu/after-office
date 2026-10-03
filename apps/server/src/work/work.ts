@@ -14,6 +14,7 @@ import { transcriptPath, unwrapPaste } from '../agents/transcripts'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
 import { listTags } from './tags'
 import { moveFolderNotes, noteSummaries } from './notes'
+import { taskStatuses } from './statuses'
 import { trackTurnOrigin } from './origin'
 import { checkFor, runGate } from './gate'
 import { restoreApprovals } from './managerTasks'
@@ -56,6 +57,7 @@ export function workState(): WorkState {
     bossMode: ((b) => (b ? { since: b.since, until: b.until } : null))(bossMode()),
     publicAccess: publicAccess(),
     notes: noteSummaries(),
+    statuses: taskStatuses(),
   }
 }
 
@@ -516,6 +518,7 @@ export async function startTask(taskId: string, agentId?: string) {
   const task = tasksRepo.get(taskId)
   if (!task) throw new AgentError('No such task', 404)
   const target = agentId ?? task.agentId
+  if (task.forOwner && !agentId) throw new AgentError("It's your own task: it isn't sent to an agent")
   if (!target || !agentsRepo.get(target)) throw new AgentError('Assign the task to an agent first')
   const folder = task.folder && existsSync(task.folder) ? task.folder : null
   const deadline = new Intl.DateTimeFormat('en-GB', { timeZone: timezone(), dateStyle: 'medium', timeStyle: 'short' }).format(task.deadline)
@@ -632,6 +635,8 @@ export async function tickTasks(now = Date.now()) {
       const deps = !!t.blockedBy?.length
       if (!t.autoStart && !deps) continue
       if (deps && waitingOn(t).length) continue
+      // the owner's own task: nobody starts it but them
+      if (t.forOwner) continue
       if (!t.agentId) {
         if (t.autoStart && settings.autoAssign) await autoAssign(t, now)
         continue

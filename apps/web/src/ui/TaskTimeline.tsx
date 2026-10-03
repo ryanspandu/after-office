@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { LuBot, LuCheck, LuCrown, LuInfo, LuMessageSquareReply, LuSend, LuTrash2, LuTriangleAlert, LuUser } from 'react-icons/lu'
 import type { TaskComment } from '@after-office/shared'
 import { useNow } from '../state/clock'
@@ -15,6 +15,14 @@ export function TaskTimeline({ taskId }: { taskId: string }) {
   const agents = useOffice((s) => s.agents)
   const now = useNow(60_000).getTime()
   const [text, setText] = useState('')
+  // the box grows with what's typed (up to a point, then it scrolls)
+  const box = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + 2}px`
+  }, [text])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const list = useMemo(() => comments ?? [], [comments])
@@ -93,6 +101,7 @@ export function TaskTimeline({ taskId }: { taskId: string }) {
       )}
       <div className="timeline__composer">
         <textarea
+          ref={box}
           rows={2}
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -102,8 +111,8 @@ export function TaskTimeline({ taskId }: { taskId: string }) {
           }}
           aria-label="Add a note"
         />
-        <button className="small" onClick={send} disabled={!text.trim() || busy} data-tip="Add note (⌘/Ctrl + Enter)">
-          <LuSend /> Add
+        <button className="icon-btn small primary timeline__send" onClick={send} disabled={!text.trim() || busy} data-tip="Add note (⌘/Ctrl + Enter)" aria-label="Add note">
+          <LuSend />
         </button>
       </div>
       {error && <div className="row__error">{error}</div>}

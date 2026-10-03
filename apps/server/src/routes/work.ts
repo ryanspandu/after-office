@@ -11,12 +11,13 @@ import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDev
 import { channelStatus, removeChannel, saveChannel, sendTest, type ChannelName } from '../notify'
 import { publish } from '../agents/registry'
 import { updateSettings } from '../work/settings'
+import { cleanCustomStatus, saveStatuses } from '../work/statuses'
 import { cleanTagIds, deleteTag, putTag } from '../work/tags'
 import { listPreviews, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
 import { createNote, deleteNote, reorderNotes, updateNote } from '../work/notes'
 import { cleanFolder } from '../work/folders'
-import { taskFolder, addComment, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
+import { taskFolder, addComment, deliver, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
 import { requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
@@ -65,6 +66,10 @@ function cleanTask(id: string, b: Partial<OfficeTask>, prev: OfficeTask | null):
     tags: cleanTagIds(b.tags),
     check: typeof b.check === 'string' && b.check.trim() ? b.check.trim().slice(0, 1000) : undefined,
     parallel: b.parallel === true ? true : undefined,
+    // the owner's own status (a board column), while it counts as this status
+    customStatus: cleanCustomStatus(b.customStatus, b.status as TaskStatus),
+    // the owner's own task: no agent (picking an agent makes it theirs again)
+    forOwner: b.forOwner === true && !b.agentId ? true : undefined,
     // server-owned
     delegatedBy: prev?.delegatedBy,
     awaitingApproval: prev?.awaitingApproval,
@@ -133,8 +138,20 @@ workRoutes.put('/tasks/:id', async (c) => {
   if (next.blockedBy && prev?.autoStartedAt && next.status === 'todo' && JSON.stringify(prev.blockedBy) !== JSON.stringify(next.blockedBy)) next.autoStartedAt = undefined
   tasksRepo.put(next)
   if (prev?.status === 'review' && next.status === 'done') addComment({ taskId: id, author: 'user', text: 'Accepted.' })
+  // the owner did their own task: the manager who asked for it hears (tasks waiting for it start on the tick below)
+  if (next.forOwner && prev && prev.status !== 'done' && next.status === 'done') {
+    addComment({ taskId: id, author: 'user', text: 'Done.' })
+    const manager = next.delegatedBy ? agentsRepo.get(next.delegatedBy) : null
+    if (manager) void deliver(manager.id, `[After Office] The owner finished their task "${next.title}" (task id ${id}).`).catch(() => {})
+  }
   publishWork('tasks')
   void tickTasks() // "start as soon as the agent is free" shouldn't wait for the next tick
+  return c.json({ ok: true })
+})
+// the owner's task statuses (board columns): the whole list, in order
+workRoutes.put('/task-statuses', async (c) => {
+  saveStatuses(await c.req.json())
+  publishWork('statuses', 'tasks')
   return c.json({ ok: true })
 })
 workRoutes.delete('/tasks/:id', (c) => {

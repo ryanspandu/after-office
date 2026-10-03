@@ -289,6 +289,19 @@ export interface WorkState {
   publicAccess: PublicAccess
   /** the owner's notes, newest first (without their text: GET /api/notes/:id) */
   notes: OwnerNoteSummary[]
+  /** the task statuses, in the board's order: the four built-in ones (renamed, recoloured) and the owner's own */
+  statuses: TaskStatusDef[]
+}
+
+/**
+ * A task status as the owner sees it (a board column). The four built-in ones have their base as id and can't be
+ * removed; the owner's own each count as one of them (`base`): that's what the office goes by (start, review, done).
+ */
+export interface TaskStatusDef {
+  id: string
+  label: string
+  color: string
+  base: TaskStatus
 }
 
 /** An archived task, with when it was last touched (≈ when it was finished). */
@@ -450,6 +463,11 @@ export interface OfficeTask {
   /** The bigger piece of work it is a step of (the owner's one request: write → review → revise…). Its reports are
    *  shown together, as one item. Set by the manager (delegate_task `job`); steps chained with `after` share it. */
   job?: WorkJob
+  /** A status of the owner's own (TaskStatusDef id) shown instead of `status`, while its base still is `status`. */
+  customStatus?: string
+  /** The owner's own task (done by them, never sent to an agent; agentId stays null). Tracked like the rest: the
+   *  manager sees it, tasks can wait for it, and it shows under "For you". */
+  forOwner?: boolean
   /** Server-owned: the side session it's running in (s2, s3…), while it runs there; closed when it finishes. */
   sessionKey?: string
 }

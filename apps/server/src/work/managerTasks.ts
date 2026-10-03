@@ -9,6 +9,7 @@ import { addComment, deliver, isReadingAgentOutput, isReportedNow, makesCycle, m
 import { managerOrigin } from './origin'
 import { requestCheckApproval } from './gate'
 import { notifyUser } from './reports'
+import { notify } from '../notify'
 
 // What the manager does with tasks (through the after-office MCP tools, src/mcp.ts): delegating, the owner's approval
 // of its tasks, assigning, editing, deleting and sending work back for another round.
@@ -92,11 +93,44 @@ export async function delegateTask(managerId: string, input: DelegateInput) {
   return { task: tasksRepo.get(task.id)!, result }
 }
 
+/**
+ * The manager hands the owner a task of their own: something only they can do (an approval, a login, a file to
+ * upload, a decision). It's tracked like the rest; tasks can wait for it (`after`), and it shows under "For you".
+ */
+export function ownerTask(managerId: string, input: { title: string; description?: string; deadline?: number; priority?: OfficeTask['priority']; folder?: string | null; tags?: string[]; job?: string; after?: string[] }) {
+  const after = [...new Set(input.after ?? [])]
+  for (const id of after) if (!tasksRepo.get(id)) throw new AgentError(`No task ${id} to wait for; see list_tasks`, 404)
+  const task: OfficeTask = {
+    id: `task-${crypto.randomUUID().slice(0, 12)}`,
+    title: input.title.trim().slice(0, 200),
+    ...(input.description?.trim() ? { description: input.description.trim().slice(0, 20_000) } : {}),
+    agentId: null,
+    forOwner: true,
+    ...(cleanFolder(input.folder) ? { folder: cleanFolder(input.folder) } : {}),
+    deadline: input.deadline ?? Date.now() + 24 * 3_600_000,
+    priority: input.priority ?? 'medium',
+    status: 'todo',
+    delegatedBy: managerId,
+    origin: managerOrigin(managerId),
+    createdAt: Date.now(),
+    ...(input.tags?.length ? { tags: input.tags } : {}),
+    ...(after.length ? { blockedBy: after } : {}),
+  }
+  const job = jobForTask(input.job, after)
+  if (job) task.job = job
+  tasksRepo.put(task)
+  publishWork('tasks')
+  const manager = agentsRepo.get(managerId)?.name ?? 'The manager'
+  addComment({ taskId: task.id, author: 'manager', agentId: managerId, text: `${manager} asked you to do this.` })
+  void notify('managerNote', `${manager}: a task for you`, task.title)
+  return task
+}
+
 // ── approval of the manager's tasks ──
 
 export const approvalId = (taskId: string) => `delegation-${taskId}`
 
-/** Put a manager's new task in "Needs your attention". */
+/** Put a manager's new task under "For you". */
 export function requestApproval(task: OfficeTask, reason?: string) {
   if (getPending(approvalId(task.id))) return
   const target = task.agentId ? agentsRepo.get(task.agentId) : null

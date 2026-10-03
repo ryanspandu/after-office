@@ -122,7 +122,7 @@ function ArchivedRow({ task: t, onGone, onError }: { task: ArchivedTask; onGone:
             </button>
           </span>
       </div>
-      {open && <p className="archive__desc">{t.description?.trim() || <span className="muted">No description.</span>}</p>}
+      {open && <p className="archive__desc ui-drop">{t.description?.trim() || <span className="muted">No description.</span>}</p>}
     </li>
   )
 }

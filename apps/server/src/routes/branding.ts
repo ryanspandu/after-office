@@ -125,7 +125,7 @@ brandingRoutes.get('/branding/manifest', (c) => {
     shortcuts: [
       { name: 'Manager chat', short_name: 'Manager', url: '/?open=manager', icons: [{ src: i192, sizes: '192x192' }] },
       { name: 'Tasks', url: '/?open=tasks', icons: [{ src: i192, sizes: '192x192' }] },
-      { name: 'Needs your attention', short_name: 'Attention', url: '/?open=attention', icons: [{ src: i192, sizes: '192x192' }] },
+      { name: 'For you', short_name: 'Attention', url: '/?open=attention', icons: [{ src: i192, sizes: '192x192' }] },
     ],
   }
   return c.body(JSON.stringify(manifest), 200, { 'content-type': 'application/manifest+json', 'cache-control': 'no-cache' })

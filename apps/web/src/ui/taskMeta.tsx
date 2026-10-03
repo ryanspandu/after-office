@@ -2,7 +2,9 @@ import { useState } from 'react'
 import ReactSelect from 'react-select'
 import { ProjectFolderPicker } from './ProjectFolderPicker'
 import { LuCircleCheck, LuCircleX, LuFolder, LuHourglass, LuLoader, LuLock, LuX } from 'react-icons/lu'
-import type { OfficeTask, TaskPriority, TaskStatus } from '@after-office/shared'
+import type { OfficeTask, TaskPriority, TaskStatus, TaskStatusDef } from '@after-office/shared'
+import { useLive } from '../state/live'
+import { openUrl } from '../state/url'
 import { useDashboard } from '../state/dashboard'
 import { useOffice } from '../state/store'
 import { Select, type Option } from './Select'
@@ -35,7 +37,50 @@ export const STATUSES: { value: TaskStatus; label: string; color: string }[] = [
 ]
 export const STATUS_BY_ID = Object.fromEntries(STATUSES.map((s) => [s.value, s])) as Record<TaskStatus, (typeof STATUSES)[number]>
 
-export function AgentSelect({ value, onChange, size }: { value: string; onChange: (v: string) => void; size?: 'sm' | 'md' }) {
+/** The four built-in statuses as definitions (the demo, or before the server has sent the owner's). */
+const DEFAULT_DEFS: TaskStatusDef[] = STATUSES.map((s) => ({ id: s.value, label: s.label, color: s.color, base: s.value }))
+
+/** The task statuses (board columns) in order: the owner's (live), else the built-in four. */
+export function useStatuses(): TaskStatusDef[] {
+  const live = useLive((s) => s.statuses)
+  const isLive = useOffice((s) => s.source === 'live')
+  return isLive && live.length ? live : DEFAULT_DEFS
+}
+
+/** Which status a task shows as: its own one while that still counts as its built-in status, else the built-in. */
+export function statusDefOf(t: Pick<OfficeTask, 'status' | 'customStatus'>, defs: TaskStatusDef[]): TaskStatusDef {
+  return (t.customStatus && defs.find((d) => d.id === t.customStatus && d.base === t.status)) || defs.find((d) => d.id === t.status) || DEFAULT_DEFS.find((d) => d.id === t.status)!
+}
+
+/**
+ * The owner's own statuses act like the built-in one left of them on the board (before "To do": like to do): a
+ * "Blocked" between In progress and Review is in progress to the office. Their place says it, no setting needed.
+ */
+export function withBases(list: TaskStatusDef[]): TaskStatusDef[] {
+  let base: TaskStatus = 'todo'
+  return list.map((d) => {
+    if (d.id === d.base) {
+      base = d.base
+      return d
+    }
+    return { ...d, base }
+  })
+}
+
+/** What moving a task to a status changes on it. */
+export const statusPatch = (d: TaskStatusDef): Pick<OfficeTask, 'status' | 'customStatus'> => ({ status: d.base, customStatus: d.id === d.base ? undefined : d.id })
+
+/** The definition a task shows as (hook). */
+export const useStatusDef = (t: Pick<OfficeTask, 'status' | 'customStatus'>) => statusDefOf(t, useStatuses())
+
+/** In the agent picker of a task: "Me", the owner's own task (never sent to an agent). */
+export const OWNER = '@me'
+/** The picker's value for a task: an agent, the owner ("Me"), or none. */
+export const assigneeOf = (t: Pick<OfficeTask, 'agentId' | 'forOwner'>) => (t.forOwner ? OWNER : (t.agentId ?? ''))
+/** What picking `v` changes on a task. */
+export const assigneePatch = (v: string): Pick<OfficeTask, 'agentId' | 'forOwner'> => (v === OWNER ? { agentId: null, forOwner: true } : { agentId: v || null, forOwner: undefined })
+
+export function AgentSelect({ value, onChange, size, withOwner }: { value: string; onChange: (v: string) => void; size?: 'sm' | 'md'; withOwner?: boolean }) {
   const agents = useOffice((s) => s.agents)
   return (
     <Select
@@ -44,18 +89,46 @@ export function AgentSelect({ value, onChange, size }: { value: string; onChange
       size={size}
       value={value}
       options={[
+        // tasks only: the owner does it themselves (tracked, never sent to an agent)
+        ...(withOwner ? [{ value: OWNER, label: 'Me (my own task)' }] : []),
         { value: '', label: 'Unassigned' },
         ...agents.map((a) => ({ value: a.id, label: a.name })),
         // a task still pointing at an agent that was removed
-        ...(value && !agents.some((a) => a.id === value) ? [{ value, label: 'Removed agent' }] : []),
+        ...(value && value !== OWNER && !agents.some((a) => a.id === value) ? [{ value, label: 'Removed agent' }] : []),
       ]}
       onChange={onChange}
     />
   )
 }
 
-export function StatusSelect({ value, onChange, size }: { value: TaskStatus; onChange: (v: TaskStatus) => void; size?: 'sm' | 'md' }) {
-  return <Select ariaLabel="Status" size={size} value={value} options={STATUSES} onChange={onChange} />
+const EDIT_STATUSES = '__edit'
+
+/**
+ * A task's status: any of the owner's statuses (its value: a status id, see statusDefOf); the last entry opens the
+ * statuses editor (Tasks → Statuses) instead.
+ */
+export function StatusSelect({ value, onChange, size }: { value: string; onChange: (patch: Pick<OfficeTask, 'status' | 'customStatus'>) => void; size?: 'sm' | 'md' }) {
+  const defs = useStatuses()
+  const isLive = useOffice((s) => s.source === 'live')
+  return (
+    <Select
+      ariaLabel="Status"
+      size={size}
+      value={value}
+      options={[...defs.map((d) => ({ value: d.id, label: d.label })), ...(isLive ? [{ value: EDIT_STATUSES, label: 'Edit statuses…' }] : [])]}
+      display={(o) => (
+        <span className="status-opt">
+          <span className="chip__dot" style={{ background: defs.find((d) => d.id === o.value)?.color }} />
+          {o.label}
+        </span>
+      )}
+      onChange={(v) => {
+        if (v === EDIT_STATUSES) return openUrl({ statuses: '1' })
+        const d = defs.find((x) => x.id === v)
+        if (d) onChange(statusPatch(d))
+      }}
+    />
+  )
 }
 
 const base = (p: string) => p.split('/').filter(Boolean).pop() ?? p
@@ -163,6 +236,16 @@ export function CheckBadge({ task }: { task: OfficeTask }) {
   return (
     <span className={`check-badge check-badge--${task.checkState}`} data-tip={meta.tip} aria-label={meta.tip}>
       {meta.icon}
+    </span>
+  )
+}
+
+/** A task's status as a coloured pill (its own status when it has one). */
+export function StatusPill({ task }: { task: Pick<OfficeTask, 'status' | 'customStatus'> }) {
+  const d = useStatusDef(task)
+  return (
+    <span className="status-pill" style={{ ['--c' as string]: d.color }}>
+      {d.label}
     </span>
   )
 }

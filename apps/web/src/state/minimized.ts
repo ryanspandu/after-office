@@ -5,12 +5,18 @@ import { create } from 'zustand'
 // (and the section each was on) is remembered in this browser, so after a reload the chips are still there.
 
 const STORAGE_KEY = 'after-office:minimized-folders'
+/** the Tasks window's place in the list (one at most) */
+export const TASKS = '@tasks'
+/** …and the Reports window's */
+export const REPORTS = '@reports'
 
 export interface MinimizedFolder {
   /** a folder's path, or a note's id (kind 'note') */
   path: string
-  /** unset: a folder window; 'note': one of the owner's notes (Reports → Notes) */
-  kind?: 'note'
+  /** unset: a folder window; 'note': one of the owner's notes (Reports → Notes); 'tasks' / 'reports': those windows */
+  kind?: 'note' | 'tasks' | 'reports' | 'report'
+  /** the Tasks / Reports window: its view as it was left (the address bar's parameters: search, sort, page…) */
+  params?: Record<string, string>
   /** a note's title when it was put aside (the list's own title wins when there is one) */
   label?: string
   /** the sidebar section it was on (Files, Notes, Terminal…) */
@@ -31,6 +37,10 @@ interface MinimizedStore {
   add: (path: string, section?: string) => void
   /** a note's window put aside */
   addNote: (id: string, label: string) => void
+  /** one report's window put aside (its id, its title) */
+  addReport: (id: string, label: string) => void
+  /** the Tasks or Reports window put aside, with its view */
+  addView: (kind: 'tasks' | 'reports', params: Record<string, string>) => void
   remove: (path: string) => void
   /** what a folder's window is showing, kept for when it opens again */
   setSection: (path: string, section: string) => void
@@ -54,6 +64,17 @@ export const useMinimized = create<MinimizedStore>((set, get) => {
     addNote: (id, label) => {
       const known = get().folders.some((f) => f.path === id)
       set({ folders: known ? get().folders.map((f) => (f.path === id ? { ...f, label } : f)) : [...get().folders, { path: id, kind: 'note', label }] })
+      save()
+    },
+    addReport: (id, label) => {
+      const rest = get().folders.filter((f) => f.path !== `report:${id}`)
+      set({ folders: [...rest, { path: `report:${id}`, kind: 'report', label }] })
+      save()
+    },
+    addView: (kind, params) => {
+      const path = kind === 'tasks' ? TASKS : REPORTS
+      const rest = get().folders.filter((f) => f.path !== path)
+      set({ folders: [...rest, { path, kind, label: kind === 'tasks' ? 'Tasks' : 'Reports', params }] })
       save()
     },
     remove: (path) => {

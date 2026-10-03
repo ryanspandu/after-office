@@ -340,12 +340,29 @@ const ARCHIVED = `json_extract(data, '$.status') = 'done' AND updated_at < ?1`
 const taskDocs = docRepo<OfficeTask>('tasks')
 // tasks from before createdAt existed: their last save stands in for it (the best there is)
 db.exec(`UPDATE tasks SET data = json_set(data, '$.createdAt', updated_at) WHERE json_extract(data, '$.createdAt') IS NULL`)
+/** Which built-in status the owner's own status `id` works like (null: no such status). */
+function customStatusBase(id: string): string | null {
+  try {
+    const row = db.query<{ value: string }, [string]>('SELECT value FROM settings WHERE key = ?').get('taskStatuses')
+    const list = row ? (JSON.parse(row.value) as { id: string; base: string }[]) : []
+    return list.find((s) => s.id === id)?.base ?? null
+  } catch {
+    return null
+  }
+}
+
 export const tasksRepo = {
   ...taskDocs,
   /** Saved with when it was made (kept from the first save, whatever the caller sends). */
   put: (task: OfficeTask) => {
     const prev = task.createdAt ? null : db.query<{ data: string; updated_at: number }, [string]>('SELECT data, updated_at FROM tasks WHERE id = ?').get(task.id)
     const createdAt = task.createdAt ?? (prev ? ((JSON.parse(prev.data) as OfficeTask).createdAt ?? prev.updated_at) : Date.now())
+    // moved to another status (an agent finished it, the manager reopened it…): out of the owner's own status, which
+    // only holds while it works like the task's status (work/statuses.ts)
+    if (task.customStatus && customStatusBase(task.customStatus) !== task.status) {
+      const { customStatus: _, ...rest } = task
+      return taskDocs.put({ ...rest, createdAt })
+    }
     return taskDocs.put({ ...task, createdAt })
   },
   /** Everything the dashboards work with: all tasks except the archived ones. */

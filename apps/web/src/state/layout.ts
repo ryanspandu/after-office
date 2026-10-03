@@ -10,7 +10,7 @@ export const PANEL_LABEL: Record<PanelId, string> = {
   daily: 'Daily',
   work: 'Tasks · Folders · Tags',
   office: 'Office',
-  attention: 'Needs your attention',
+  attention: 'For you',
   reports: 'Reports',
   agents: 'Agents',
 }

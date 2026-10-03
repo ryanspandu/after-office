@@ -219,7 +219,7 @@ export function ConnectorsTab({ agent }: { agent: OfficeAgent }) {
       )}
       <p className="field__hint">
         New agents start with none. A connector turned on may read (Read) but not write (Write): its tools that send, create, edit or
-        delete wait for your approval in Needs your attention, even in Auto. Click its permissions to see its tools and change them (applies at once). Changes apply when {agent.name}'s session restarts: that happens on its own once it's idle, and the conversation
+        delete wait for your approval under For you, even in Auto. Click its permissions to see its tools and change them (applies at once). Changes apply when {agent.name}'s session restarts: that happens on its own once it's idle, and the conversation
         continues. Logging in to a connector is done at claude.ai.
         {checkedAt ? ` Checked ${new Date(checkedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}.` : ''}
       </p>
@@ -301,7 +301,7 @@ function PermissionsButton({ connector, agentName, read, write, onRead, onWrite 
               ? kind === 'write'
                 ? 'Runs without asking, also in Auto.'
                 : 'Runs without asking.'
-              : 'Each one waits for your approval in Needs your attention.'}
+              : 'Each one waits for your approval under For you.'}
           </b>
         </p>
         {list === null ? (

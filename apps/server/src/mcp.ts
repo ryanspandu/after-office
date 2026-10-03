@@ -12,7 +12,8 @@ import { bossMode, countBoss } from './work/settings'
 import { noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
 import { jobNamed } from './work/jobs'
-import { isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker } from './work/work'
+import { statusLabel } from './work/statuses'
+import { isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker, ownerTask } from './work/work'
 import { listTags, tagIdsByName, tagNames } from './work/tags'
 import { cleanFolder } from './work/folders'
 import { agentDeleteNote, agentEditNote, agentNotes, agentReadNote, agentWriteNote, noteForAgent } from './work/notes'
@@ -62,9 +63,10 @@ function describeTask(t: OfficeTask, withTimeline = false) {
   return {
     id: t.id,
     title: t.title,
-    agent: t.agentId ? (agentsRepo.get(t.agentId)?.name ?? t.agentId) : null,
+    agent: t.forOwner ? 'the owner (their own task)' : t.agentId ? (agentsRepo.get(t.agentId)?.name ?? t.agentId) : null,
     agentId: t.agentId,
     status: t.status,
+    ...(t.customStatus ? { shownAs: statusLabel(t.status, t.customStatus) } : {}),
     priority: t.priority,
     deadline: iso(t.deadline),
     delegatedByYou: !!t.delegatedBy,
@@ -614,6 +616,32 @@ function buildServer(managerId: string) {
       try {
         const result = await managerReviseTask(managerId, task, feedback)
         return text(result === 'sent' ? 'Sent back for another round.' : 'Queued: the agent is busy; it gets the feedback next.')
+      } catch (e) {
+        return fail(e)
+      }
+    },
+  )
+
+  server.registerTool(
+    'give_owner_task',
+    {
+      description:
+        "Give the owner a task of their own: something only they can do (approve or publish something, log in somewhere, upload a file, make a decision). It shows on their list under \"For you\" and is tracked like any task; agents' tasks can wait for it with delegate_task's `after`. Don't use it for work an agent can do.",
+      inputSchema: {
+        title: z.string().min(1).max(200).describe('what they need to do, short'),
+        description: z.string().max(20_000).optional().describe('why, and what done looks like'),
+        priority: z.enum(['low', 'medium', 'high']).optional(),
+        deadlineHours: z.number().positive().max(24 * 60).optional().describe('hours from now; default 24'),
+        folder: z.string().max(1000).optional().describe('absolute path of the folder it is about'),
+        after: z.array(z.string()).max(20).optional().describe('task ids that should be finished first'),
+        tags: z.array(z.string().max(40)).max(10).optional().describe('tag names the owner made (see list_tags)'),
+        job: z.string().max(120).optional().describe("the owner's request this is a step of (the same name as its other tasks)"),
+      },
+    },
+    async ({ title, description, priority, deadlineHours, folder, after, tags, job }) => {
+      try {
+        const t = ownerTask(managerId, { title, description, priority, folder, after, job, tags: tagIdsByName(tags), deadline: deadlineHours ? Date.now() + deadlineHours * 3_600_000 : undefined })
+        return json({ taskId: t.id, for: 'the owner', status: t.status, ...(t.job ? { job: t.job.title } : {}) })
       } catch (e) {
         return fail(e)
       }

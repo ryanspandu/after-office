@@ -139,7 +139,7 @@ export function NotesList({ limit = 20 }: { limit?: number }) {
   const notes = useLive((s) => s.notes)
   const now = useNow(60_000).getTime()
   return (
-    <ul className="list">
+    <ul className="list ui-switch">
       <NoteItems notes={pinnedFirst(notes).slice(0, limit)} now={now} sortable />
       {!notes.length && (
         <li className="empty">
@@ -168,7 +168,7 @@ export function FolderNoteList({ folder }: { folder: string }) {
   const add = () => show('new')
   if (open) return <InlineNote key={opened} id={open} folder={folder} onBack={() => setOpen(null)} />
   return (
-    <div className="fd__panel folder-notes">
+    <div className="fd__panel folder-notes ui-switch">
       <div className="folder-notes__head">
         <span className="muted">{mine.length ? `${mine.length} note${mine.length === 1 ? '' : 's'} on this folder` : 'Notes on this folder'}</span>
         <span className="grow" />
@@ -615,7 +615,7 @@ function InlineNote({ id, folder, onBack }: { id: string; folder: string; onBack
     onBack()
   }
   return (
-    <div className="fd__panel note-inline note-modal">
+    <div className="fd__panel note-inline note-modal ui-switch">
       <div className="note-inline__bar">
         <button className="small ghost" onClick={back}>
           <LuArrowLeft /> Notes

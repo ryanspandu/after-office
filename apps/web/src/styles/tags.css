@@ -106,3 +106,8 @@
 /* "+N": the tags that didn't fit (named on hover) */
 .tag-chip--more { --c: var(--muted); flex-shrink: 0; }
 .tag-chips .tag-chip:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* the task table: the tags follow the title (not pushed to the far end), and only the title underlines on hover */
+.task-table__title > .truncate { flex: 0 1 auto; }
+.task-table__title:hover:not(:disabled) { text-decoration: none; }
+.task-table__title:hover:not(:disabled) > .truncate { text-decoration: underline; text-underline-offset: 3px; }
+.task-table__title .tag-chips { max-width: 50%; }

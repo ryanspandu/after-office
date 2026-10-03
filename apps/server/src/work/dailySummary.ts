@@ -22,8 +22,9 @@ export function dayFacts(today: string, tz: string, reports: WorkReport[], tasks
   const ofToday = reports.filter((r) => r.kind !== 'chat' && zoned(new Date(r.finishedAt), tz).date === today)
   const notes = ofToday.filter((r) => r.kind === 'note')
   const work = ofToday.filter((r) => r.kind !== 'note')
-  const running = tasks.filter((t) => t.status === 'in_progress')
-  const toReview = tasks.filter((t) => t.status === 'review')
+  const running = tasks.filter((t) => t.status === 'in_progress' && !t.forOwner)
+  const ownerOpen = tasks.filter((t) => t.forOwner && t.status !== 'done')
+  const toReview = tasks.filter((t) => t.status === 'review' && !t.forOwner)
   const approval = tasks.filter((t) => t.awaitingApproval)
   const failedChecks = tasks.filter((t) => t.checkState === 'failed' && t.status !== 'in_progress')
   if (!work.length && !notes.length && !running.length && !approval.length) return null
@@ -44,6 +45,7 @@ export function dayFacts(today: string, tz: string, reports: WorkReport[], tasks
   if (running.length) out.push(`Still running: ${running.map((t) => `"${line(t.title)}" (${name(t.agentId)})`).join(', ')}`)
   if (toReview.length) out.push(`Waiting for the owner's review: ${toReview.slice(0, 15).map((t) => `"${line(t.title)}"`).join(', ')}`)
   if (approval.length) out.push(`Waiting for the owner's approval: ${approval.map((t) => `"${line(t.title)}"`).join(', ')}`)
+  if (ownerOpen.length) out.push(`The owner's own tasks still open: ${ownerOpen.map((t) => `"${line(t.title)}"`).join(', ')}`)
   if (failedChecks.length) out.push(`Quality check still failing: ${failedChecks.map((t) => `"${line(t.title)}"`).join(', ')}`)
   return out.join('\n')
 }

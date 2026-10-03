@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useActivityLive } from './activity'
 import { create } from 'zustand'
-import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OwnerNoteSummary, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, WorkState, Workspace, GitCommit } from '@after-office/shared'
+import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OwnerNoteSummary, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, TaskStatusDef, WorkState, Workspace, GitCommit } from '@after-office/shared'
 import { api, useAuth } from './auth'
 import { mergeServer, useDashboard, ymd } from './dashboard'
 import { useOffice } from './store'
@@ -31,9 +31,11 @@ interface LiveStore {
   publicAccess: PublicAccess
   /** the owner's notes (Reports → Notes), newest first, without their text */
   notes: OwnerNoteSummary[]
+  /** the task statuses (board columns), in order; empty until the server sends them */
+  statuses: TaskStatusDef[]
 }
 
-export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null, publicAccess: { supported: false, public: false }, notes: [] }))
+export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null, publicAccess: { supported: false, public: false }, notes: [], statuses: [] }))
 
 /** Task timelines, loaded per task when one is opened (useTaskComments) and kept current by the SSE stream. */
 export const useComments = create<{ byTask: Record<string, TaskComment[]> }>(() => ({ byTask: {} }))
@@ -56,6 +58,7 @@ function applyWork(work: Partial<WorkState>) {
   if (work.bossMode !== undefined) useLive.setState({ bossMode: work.bossMode })
   if (work.publicAccess) useLive.setState({ publicAccess: work.publicAccess })
   if (work.notes) useLive.setState({ notes: work.notes })
+  if (work.statuses) useLive.setState({ statuses: work.statuses })
 }
 
 const BRIEFING_MS = 8000
@@ -340,6 +343,7 @@ export const liveApi = {
   },
   addComment: (taskId: string, text: string) => call(`/api/tasks/${taskId}/comments`, { text }) as Promise<TaskComment>,
   deleteComment: (id: string) => call(`/api/comments/${id}`, undefined, 'DELETE'),
+  saveStatuses: (list: TaskStatusDef[]) => call('/api/task-statuses', list, 'PUT'),
   saveAutomation: (patch: {
     notify?: Partial<Record<NotifyEvent, boolean>>
     quota?: Partial<OfficeSettings['quota']>

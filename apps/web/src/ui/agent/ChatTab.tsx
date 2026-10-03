@@ -747,7 +747,7 @@ function ToolRow({ item, result }: { item: Extract<ChatItem, { kind: 'tool' }>; 
         {!result && <LuLoader className="spin muted" />}
       </button>
       {open && (
-        <div className="tool__body">
+        <div className="tool__body ui-drop">
           <pre className="md-code">{JSON.stringify(item.input, null, 2)}</pre>
           {result && <pre className={`md-code${result.ok ? '' : ' md-code--err'}`}>{result.text || '(no output)'}</pre>}
         </div>

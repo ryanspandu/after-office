@@ -1,3 +1,4 @@
+import { OwnerAvatar } from './EditProfile'
 import { useState, type FormEvent, useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { LuTag, LuFolderGit2, LuCalendarClock, LuCrown, LuListChecks, LuListTodo, LuPlay, LuPlus, LuTrash2, LuX, LuActivity } from 'react-icons/lu'
@@ -15,7 +16,7 @@ import { Field, Modal } from './Modal'
 import { confirm } from './Confirm'
 import { DateTimeField, TimeField } from './pickers'
 import { Select } from './Select'
-import { AgentSelect, dueInfo, HOUR, PRIORITY_OPTIONS, PRIORITY_RANK, FolderSelect, StatusSelect, WaitsForSelect, BlockedBadge, CheckBadge } from './taskMeta'
+import { AgentSelect, assigneePatch, OWNER, useStatuses, dueInfo, HOUR, PRIORITY_OPTIONS, PRIORITY_RANK, FolderSelect, StatusSelect, WaitsForSelect, BlockedBadge, CheckBadge } from './taskMeta'
 import { useLaunch } from '../pwa/launch'
 import { MOBILE } from '../state/useMediaQuery'
 import { useWorkReady } from '../state/live'
@@ -34,7 +35,8 @@ export function LeftSidebar() {
   )
 }
 
-function AgentChip({ agent }: { agent?: OfficeAgent }) {
+function AgentChip({ agent, mine }: { agent?: OfficeAgent; mine?: boolean }) {
+  if (mine) return <span className="chip chip--me">You</span>
   if (!agent) return <span className="chip chip--muted">unassigned</span>
   return (
     <span className="chip">
@@ -417,7 +419,11 @@ export function TaskPanel() {
                 </span>
               )}
               <span className="grow" />
-              {agent ? (
+              {t.forOwner ? (
+                <span className="task-me" data-tip="Your own task">
+                  <OwnerAvatar className="avatar--xs" />
+                </span>
+              ) : agent ? (
                 <span className="avatar avatar--xs" style={avatarStyle(agent.look.shirt)} data-tip={agent.name}>
                   {agent.name[0]}
                 </span>
@@ -485,14 +491,20 @@ export function TaskPanel() {
         </div>
       )}
       {tab === 'folders' ? (
-        <FoldersTab q={q} />
+        <div key="folders" className="side-pane ui-switch">
+          <FoldersTab q={q} />
+        </div>
       ) : tab === 'tags' ? (
-        <TagsTab q={q} />
+        <div key="tags" className="side-pane ui-switch">
+          <TagsTab q={q} />
+        </div>
       ) : tab === 'activity' ? (
-        <ActivitySidebar q={q} />
+        <div key="activity" className="side-pane ui-switch">
+          <ActivitySidebar q={q} />
+        </div>
       ) : (
         <>
-          <ul className="list task-rows">
+          <ul key={showDone ? 'done' : 'open'} className="list task-rows ui-switch">
             {showDone ? done.map(row) : open.map(row)}
             {!showDone && !open.length && ready && <li className="empty">{q.trim() ? 'No tasks match.' : 'All clear'}</li>}
             {showDone && !done.length && <li className="empty">No done tasks.</li>}
@@ -504,12 +516,15 @@ export function TaskPanel() {
 }
 
 
-export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults?: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'description'>> }) {
+export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults?: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus' | 'description'>> }) {
+  // started from one of the owner's own statuses (a board column): it counts as that status's built-in one
+  const startDef = useStatuses().find((d) => d.id === defaults?.customStatus)
   const addTask = useDashboard((s) => s.addTask)
   const [title, setTitle] = useState('')
   const [deadline, setDeadline] = useState(() => Date.now() + 24 * HOUR)
   const [priority, setPriority] = useState<TaskPriority>('medium')
-  const [status, setStatus] = useState<TaskStatus>(defaults?.status ?? 'todo')
+  const [status, setStatus] = useState<TaskStatus>(startDef?.base ?? defaults?.status ?? 'todo')
+  const [customStatus, setCustomStatus] = useState<string | undefined>(startDef?.id)
   const [agentId, setAgentId] = useState(defaults?.agentId ?? '')
   const [folder, setFolder] = useState<string | undefined>(defaults?.folder)
   const [description, setDescription] = useState(defaults?.description ?? '')
@@ -518,50 +533,67 @@ export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults
   const [tags, setTags] = useState<string[]>([])
   const live = useOffice((s) => s.source === 'live')
 
+  // your own task: none of an agent's run (folder, start, waits for); the form keeps only what you need
+  const mine = agentId === OWNER
+
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    addTask({ title: title.trim(), deadline, priority, status, agentId: agentId || null, ...(folder ? { folder } : {}), description: description.trim() || undefined, ...run, ...(blockedBy.length ? { blockedBy } : {}), ...(tags.length ? { tags } : {}) })
+    addTask({
+      title: title.trim(),
+      deadline,
+      priority,
+      status,
+      ...(customStatus ? { customStatus } : {}),
+      ...assigneePatch(agentId),
+      description: description.trim() || undefined,
+      ...(tags.length ? { tags } : {}),
+      ...(mine ? {} : { ...(folder ? { folder } : {}), ...run, ...(blockedBy.length ? { blockedBy } : {}) }),
+    })
     onClose()
   }
 
   return (
-    <Modal open onClose={onClose} title="New task">
+    <Modal open onClose={onClose} title={mine ? 'New task for me' : 'New task'}>
       <form className="modal__body" onSubmit={submit}>
         <Field label="Title">
           <input placeholder="What needs doing?" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus autoComplete="off" data-1p-ignore />
         </Field>
         <div className="field-row">
-          <Field label="Folder" hint="Where the agent works. Empty: its own folder.">
-            <FolderSelect value={folder} onChange={setFolder} />
+          <Field label="Who does it">
+            <AgentSelect withOwner value={agentId} onChange={setAgentId} />
           </Field>
           <Field label="Status">
-            <StatusSelect value={status} onChange={setStatus} />
+            <StatusSelect value={customStatus ?? status} onChange={(p) => (setStatus(p.status), setCustomStatus(p.customStatus))} />
           </Field>
         </div>
-        <Field label="Deadline">
-          <DateTimeField value={deadline} onChange={setDeadline} ariaLabel="Deadline" />
-        </Field>
         <div className="field-row">
+          <Field label="Deadline">
+            <DateTimeField value={deadline} onChange={setDeadline} ariaLabel="Deadline" />
+          </Field>
           <Field label="Priority">
             <Select ariaLabel="Priority" value={priority} options={PRIORITY_OPTIONS} onChange={setPriority} />
           </Field>
-          <Field label="Agent">
-            <AgentSelect value={agentId} onChange={setAgentId} />
-          </Field>
         </div>
-        <TaskRunFields value={run} onChange={(p) => setRun({ ...run, ...p })} />
-        {live && (
-          <Field label="Waits for" hint="Starts on its own once these are finished (needs an agent).">
-            <WaitsForSelect value={blockedBy} onChange={setBlockedBy} />
-          </Field>
+        {!mine && (
+          <>
+            <Field label="Folder" hint="Where the agent works. Empty: its own folder.">
+              <FolderSelect value={folder} onChange={setFolder} />
+            </Field>
+            <TaskRunFields value={run} onChange={(p) => setRun({ ...run, ...p })} />
+            {live && (
+              <Field label="Waits for" hint="Starts on its own once these are finished (needs an agent).">
+                <WaitsForSelect value={blockedBy} onChange={setBlockedBy} />
+              </Field>
+            )}
+            {run.autoStart && !agentId && <p className="field__hint danger-text">Pick an agent so it can start automatically.</p>}
+          </>
         )}
-        {run.autoStart && !agentId && <p className="field__hint danger-text">Pick an agent so it can start automatically.</p>}
         <Field label="Tags" hint="Type a new name to make a tag.">
           <TagPicker value={tags} onChange={setTags} />
         </Field>
-        <Field label="Description" hint="Context, acceptance criteria, links. Sent to the agent along with the task.">
-          <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does done look like?" />
+        <Field label={mine ? 'Notes' : 'Description'} hint={mine ? undefined : 'Context, acceptance criteria, links. Sent to the agent along with the task.'}>
+          <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={mine ? 'Anything to remember (optional)' : 'What does done look like?'} />
         </Field>
         <footer className="modal__foot">
           <button type="button" onClick={onClose}>

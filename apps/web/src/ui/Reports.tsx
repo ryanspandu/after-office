@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuSlidersHorizontal, LuCheckCheck, LuChevronLeft, LuChevronRight, LuCircleAlert, LuCircleCheck, LuCircleX, LuClock, LuHourglass, LuLoader, LuRefreshCw, LuHand, LuCrown, LuFileText, LuFolder, LuLayers, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
+import { LuSlidersHorizontal, LuCheckCheck, LuMail, LuMinus, LuChevronLeft, LuChevronRight, LuCircleAlert, LuCircleCheck, LuCircleX, LuClock, LuHourglass, LuLoader, LuRefreshCw, LuHand, LuCrown, LuFileText, LuFolder, LuLayers, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
 import type { OfficeTask, ReportOutcome, WorkJob, WorkReport } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
@@ -19,6 +19,7 @@ import { RangePicker, type PickedRange } from './DateRangePicker'
 import { Select } from './Select'
 import { TagChips, TagFilter, TagPicker } from './tags'
 import { NotesList } from './OwnerNotes'
+import { REPORTS, useMinimized } from '../state/minimized'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 
 // Reports: what an agent said when it finished a task or a cron run (its final message), kept apart from the chat
@@ -44,11 +45,29 @@ const KindIcon = ({ r }: { r: WorkReport }) =>
     <LuListTodo className="report__icon" />
   )
 
-export function ReportRow({ r, now, onOpen, showJob = true, picked }: { r: WorkReport; now: number; onOpen: () => void; showJob?: boolean; picked?: boolean }) {
+export function ReportRow({
+  r,
+  now,
+  onOpen,
+  showJob = true,
+  picked,
+  checked,
+  onCheck,
+}: {
+  r: WorkReport
+  now: number
+  onOpen: () => void
+  showJob?: boolean
+  picked?: boolean
+  /** View all: the row can be picked for an action on several (onCheck) */
+  checked?: boolean
+  onCheck?: (on: boolean) => void
+}) {
   const agent = useOffice((s) => s.agents.find((a) => a.id === r.agentId))
   const firstLine = r.text.replace(/[#*`>_-]/g, '').split('\n').find((l) => l.trim()) ?? ''
   return (
-    <li className={`report-row${r.read ? '' : ' report-row--unread'}${picked ? ' is-picked' : ''}`} aria-current={picked || undefined}>
+    <li className={`report-row${r.read ? '' : ' report-row--unread'}${picked ? ' is-picked' : ''}${onCheck ? ' report-row--checkable' : ''}${checked ? ' is-checked' : ''}`} aria-current={picked || undefined}>
+      {onCheck && <input type="checkbox" className="report-row__check" checked={!!checked} onChange={(e) => onCheck(e.target.checked)} aria-label={`Pick “${r.title}”`} />}
       <button className="report-row__main" onClick={onOpen}>
         <KindIcon r={r} />
         <span className="report-row__body">
@@ -214,7 +233,7 @@ function JobRow({ g, now }: { g: ReportGroup; now: number }) {
         <LuChevronRight className={`job-row__chev${open ? ' open' : ''}`} />
       </button>
       {open && (
-        <ul className="job-row__steps">
+        <ul className="job-row__steps ui-drop ui-stagger">
           {reports.map((r) => (
             <ReportRow key={r.id} r={r} now={now} showJob={false} onOpen={() => openUrl({ report: r.id })} />
           ))}
@@ -284,7 +303,7 @@ export function ReportsPanel() {
       {view === 'notes' ? (
         <NotesList />
       ) : (
-        <ul className="list">
+        <ul className="list ui-switch">
           {withDays(
             items.slice(0, 20),
             (g) => g.reports[0].finishedAt,
@@ -350,8 +369,15 @@ interface ReportPage {
  * "View all": every stored report (the server keeps the last 1000), by filter, date range and search, a page at a
  * time. Everything is in the URL (?reports=manager&range=7d&q=…&page=2&per=50), so a view can be opened from a link.
  */
-export function ReportsModal({ onClose }: { onClose: () => void }) {
+export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onMinimize?: () => void }) {
   const markAllReportsRead = useDashboard((s) => s.markAllReportsRead)
+  const { markReport, removeReport } = useDashboard(useShallow((s) => ({ markReport: s.markReport, removeReport: s.removeReport })))
+  // full size (remembered); its chip goes once it's open again
+  const max = useModalMaximize(1180, 'after-office:reports-full')
+  useEffect(() => useMinimized.getState().remove(REPORTS), [])
+  // reports picked for one action on all of them (read, unread, delete)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [reload, setReload] = useState(0)
   const anyUnread = useDashboard((s) => s.reports.some((r) => !r.read))
   // the newest report the dashboard knows: a new one arriving (or one changing) refreshes the page
   // refetch when a report arrives, is read, or is (un)tagged
@@ -414,7 +440,9 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
       .catch((e: Error) => !gone && setError(e.message))
     return () => void (gone = true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, latestKey])
+  }, [query, latestKey, reload])
+  // another page or filter: nothing picked any more
+  useEffect(() => setSelected(new Set()), [query])
 
   // a computer: an inbox, the list on the left and the report picked (?ri=<id>) on the right; phones open it on top
   const wide = !useMediaQuery(MOBILE)
@@ -424,8 +452,27 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
   const first = data && data.total ? (data.page - 1) * data.per + 1 : 0
   const last = data ? Math.min(data.total, data.page * data.per) : 0
   return (
-    <Modal open onClose={onClose} title="Reports" description="The manager's summaries, and what each agent reported when it finished a task or a daily run." width={wide ? 1180 : 720}>
-      <div className={`modal__body reports-modal${wide ? ' reports-modal--inbox' : ''}`}>
+    <Modal
+      open
+      onClose={onClose}
+      title="Reports"
+      description="The manager's summaries, and what each agent reported when it finished a task or a daily run."
+      {...max.modalProps}
+      width={max.full ? max.modalProps.width : wide ? 1180 : 720}
+      // a click beside it puts it aside (a chip brings it back as it was)
+      onBackdrop={onMinimize}
+      actions={
+        <>
+          {onMinimize && (
+            <button className="icon-btn small ghost" data-tip="Minimize" aria-label="Minimize" onClick={onMinimize}>
+              <LuMinus />
+            </button>
+          )}
+          {max.modalProps.actions}
+        </>
+      }
+    >
+      <div className={`modal__body reports-modal${wide ? ' reports-modal--inbox' : ''}`} ref={max.bodyRef}>
         <div className="reports-modal__side">
         <div className="reports-modal__bar reports-modal__bar--tabs">
           <div className="seg reports-modal__filter-tabs" role="tablist" aria-label="Filter">
@@ -519,12 +566,49 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         {error && <div className="row__error">{error}</div>}
-        <ul className="list reports-modal__list">
+        {data && data.items.length > 0 && (
+          <BulkBar
+            items={data.items}
+            selected={selected}
+            onSelect={setSelected}
+            onRead={(read) => {
+              for (const id of selected) markReport(id, read)
+              setSelected(new Set())
+              setTimeout(() => setReload((n) => n + 1), 400)
+            }}
+            onDelete={async () => {
+              const n = selected.size
+              if (!(await confirm({ title: `Delete ${n} report${n === 1 ? '' : 's'}?`, message: "They're removed from Reports. This can't be undone.", confirmLabel: 'Delete' }))) return
+              for (const id of selected) removeReport(id)
+              if (selected.has(picked)) setUrl({ ri: null })
+              setSelected(new Set())
+              setTimeout(() => setReload((n) => n + 1), 400)
+            }}
+          />
+        )}
+        <ul key={query} className={`list reports-modal__list ui-stagger${selected.size ? ' is-picking' : ''}`}>
           {withDays(
             data?.items ?? [],
             (r) => r.finishedAt,
             now,
-            (r) => <ReportRow key={r.id} r={r} now={now} picked={wide && r.id === picked} onOpen={() => pick(r.id)} />,
+            (r) => (
+              <ReportRow
+                key={r.id}
+                r={r}
+                now={now}
+                picked={wide && r.id === picked}
+                onOpen={() => pick(r.id)}
+                checked={selected.has(r.id)}
+                onCheck={(on) =>
+                  setSelected((cur) => {
+                    const next = new Set(cur)
+                    if (on) next.add(r.id)
+                    else next.delete(r.id)
+                    return next
+                  })
+                }
+              />
+            ),
             (r) => r.id,
           )}
           {data && !data.items.length && <li className="empty">{q || days || folder || filter !== 'all' ? 'No reports match.' : 'Nothing here.'}</li>}
@@ -553,7 +637,7 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
         </footer>
         </div>
         {wide && (
-          <section className="reports-modal__reader report" aria-label="Report">
+          <section key={pickedReport?.id ?? 'none'} className="reports-modal__reader report ui-switch" aria-label="Report">
             {pickedReport ? (
               <ReportView key={pickedReport.id} r={pickedReport} title onClose={() => setUrl({ ri: null })} />
             ) : (
@@ -568,14 +652,71 @@ export function ReportsModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** View all: pick reports on this page, then one action on all of them. */
+function BulkBar({ items, selected, onSelect, onRead, onDelete }: { items: WorkReport[]; selected: Set<string>; onSelect: (s: Set<string>) => void; onRead: (read: boolean) => void; onDelete: () => void }) {
+  const all = items.length > 0 && items.every((r) => selected.has(r.id))
+  const some = selected.size > 0
+  return (
+    <div className={`reports-bulk${some ? ' is-on' : ''}`}>
+      <label className="reports-bulk__all">
+        <input
+          type="checkbox"
+          checked={all}
+          ref={(el) => {
+            if (el) el.indeterminate = some && !all
+          }}
+          onChange={() => onSelect(all ? new Set() : new Set(items.map((r) => r.id)))}
+          aria-label="Pick every report on this page"
+        />
+        {some ? `${selected.size} picked` : 'Pick all'}
+      </label>
+      {some && (
+        <span className="reports-bulk__actions ui-pop">
+          <button className="small" onClick={() => onRead(true)}>
+            <LuCheckCheck /> Read
+          </button>
+          <button className="small" onClick={() => onRead(false)}>
+            <LuMail /> Unread
+          </button>
+          <button className="small danger-text" onClick={onDelete}>
+            <LuTrash2 /> Delete
+          </button>
+          <button className="icon-btn small ghost" aria-label="Clear the selection" data-tip="Clear" onClick={() => onSelect(new Set())}>
+            <LuX />
+          </button>
+        </span>
+      )}
+    </div>
+  )
+}
+
 /** One report. Opening it marks it read. */
-export function ReportModal({ id, onClose }: { id: string; onClose: () => void }) {
+export function ReportModal({ id, onClose, onMinimize }: { id: string; onClose: () => void; onMinimize?: (title: string) => void }) {
   const r = useDashboard((s) => s.reports.find((x) => x.id === id))
   // full size for long reports and wide tables
   const max = useModalMaximize(640)
+  // its chip goes once it's open again
+  useEffect(() => useMinimized.getState().remove(`report:${id}`), [id])
   if (!r) return null
   return (
-    <Modal open onClose={onClose} title={r.title} {...max.modalProps}>
+    <Modal
+      open
+      onClose={onClose}
+      title={r.title}
+      {...max.modalProps}
+      // a click beside it puts it aside (a chip brings it back)
+      onBackdrop={onMinimize ? () => onMinimize(r.title) : undefined}
+      actions={
+        <>
+          {onMinimize && (
+            <button className="icon-btn small ghost" data-tip="Minimize" aria-label="Minimize" onClick={() => onMinimize(r.title)}>
+              <LuMinus />
+            </button>
+          )}
+          {max.modalProps.actions}
+        </>
+      }
+    >
       <div className="modal__body report" ref={max.bodyRef}>
         <ReportView r={r} onClose={onClose} />
       </div>
@@ -592,7 +733,6 @@ function ReportView({ r, onClose, title }: { r: WorkReport; onClose: () => void;
   const agent = useOffice((s) => s.agents.find((a) => a.id === r.agentId))
   // attachments through the report itself: still there after its agent was removed, "gone" once deleted
   const files = useReportFiles(r.id, r.files)
-  const openProfile = useOffice((s) => s.openProfile)
 
   useEffect(() => {
     if (!r.read) markReport(r.id, true)
@@ -651,10 +791,8 @@ function ReportView({ r, onClose, title }: { r: WorkReport; onClose: () => void;
         )}
         {agent && (
           <button
-            onClick={() => {
-              onClose()
-              openProfile(agent.id)
-            }}
+            // the chat opens over this window (both stay: closing the chat comes back here)
+            onClick={() => openUrl({ agent: agent.id })}
           >
             <LuMessageSquareText /> Open chat
           </button>
@@ -693,7 +831,7 @@ export function TaskReports({ taskId }: { taskId: string }) {
           </button>
           {older &&
             reports.slice(1).map((r) => (
-              <div key={r.id} className="report__text report__text--inline report__text--old">
+              <div key={r.id} className="report__text report__text--inline report__text--old ui-drop">
                 <span className="muted">{new Date(r.finishedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</span>
                 <ReportBody r={r} />
               </div>

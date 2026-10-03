@@ -625,7 +625,7 @@ Secrets from `apps/server/.env` never reach agent sessions, because they get an 
 
 After Office can be installed like an app. It needs HTTPS (your VPS domain) or `localhost`; a plain-http LAN address such as `http://192.168.x.x:5173` can't be installed.
 
-- **Android (Chrome, Brave):** menu → *Install app*, or ☰ → *Install app* in the dashboard. It opens full screen with its own icon. Long-press the icon for the shortcuts: Manager chat, Tasks, Needs your attention.
+- **Android (Chrome, Brave):** menu → *Install app*, or ☰ → *Install app* in the dashboard. It opens full screen with its own icon. Long-press the icon for the shortcuts: Manager chat, Tasks, For you.
 - **iPhone / iPad (Safari):** Share → *Add to Home Screen* (☰ → *Add to Home Screen* shows how). The installed app keeps its own login, separate from Safari: sign in once inside it.
 - **Desktop (Chrome, Edge, Brave):** the install icon in the address bar, or the monitor icon in the navbar.
 
@@ -655,10 +655,10 @@ After changing `apps/web/public/logo.png`, run `bun run icons` in `apps/web` (ne
 - **Quality check** is a task setting, for example `pnpm lint && pnpm test`.
   - It runs in the task's folder **as the agents' user**, never as the dashboard, when the agent finishes a task. It has a 10-minute limit.
   - If it fails, the output goes back to the agent to fix, up to 2 times. After that the task goes to review marked "check failed".
-  - You set it in the dashboard. The manager can propose one (`update_task`), but it only applies once you approve the command in "Needs your attention".
+  - You set it in the dashboard. The manager can propose one (`update_task`), but it only applies once you approve the command under "For you".
   - The Changes view's git commands also run as the agents' user, with repo-configured helpers (hooks, fsmonitor, textconv) switched off.
 - **Changes view** in a task shows what the agent changed since the task started. It needs the agent's folder to be a git repo. Read-only: it takes a `git stash create` snapshot and never touches the index or your stash list.
-- **Approval** (bell icon → Automation) holds the manager's new tasks in "Needs your attention". Rejecting one removes it and tells the manager.
+- **Approval** (bell icon → Automation) holds the manager's new tasks under "For you". Rejecting one removes it and tells the manager.
 - **Auto-assign** (same place) hands out auto-start tasks that have no agent: the manager picks someone with `assign_task`; without a manager, a free agent takes it.
 - **The manager's powers** (MCP tools, manager only; other agents only get the shared notes tools):
   - propose hires with `create_agent`. **Every hire waits for your approval**, and the card shows its name, role, model, permission mode, folder and brief.

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuCheck, LuCrown, LuMessageSquareReply, LuPlay, LuRotateCcw, LuSend, LuSplit, LuTrash2 } from 'react-icons/lu'
+import { LuCheck, LuCrown, LuMessageSquareReply, LuPlay, LuRotateCcw, LuSend, LuSplit, LuTrash2, LuUser } from 'react-icons/lu'
 import type { OfficeTask } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { hasUnsaved, useDashboard } from '../state/dashboard'
@@ -12,7 +12,7 @@ import { DateTimeField } from './pickers'
 import { TaskReports } from './Reports'
 import { TaskRunFields } from './TaskRun'
 import { Select } from './Select'
-import { AgentSelect, dueInfo, PRIORITY_OPTIONS, FolderSelect, STATUS_BY_ID, StatusSelect, WaitsForSelect, waitingOn } from './taskMeta'
+import { AgentSelect, assigneeOf, assigneePatch, dueInfo, PRIORITY_OPTIONS, FolderSelect, StatusSelect, statusDefOf, useStatuses, WaitsForSelect, waitingOn } from './taskMeta'
 import { TaskTimeline } from './TaskTimeline'
 import { TaskDiff } from './TaskDiff'
 import { TagPicker } from './tags'
@@ -61,6 +61,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
   const [sending, setSending] = useState(false)
   const tasks = useDashboard((s) => s.tasks)
   const parallelAllowed = useLive((s) => (s.settings?.parallelSessions ?? 0) > 0)
+  const statusDefs = useStatuses()
   if (!task) return null
   const waiting = waitingOn(task, tasks)
   const blocks = tasks.filter((t) => t.blockedBy?.includes(task.id))
@@ -101,7 +102,10 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
   const set = (patch: Partial<OfficeTask>) => updateTask(task.id, patch)
   const done = task.status === 'done'
   const due = dueInfo(task.deadline, now)
-  const status = STATUS_BY_ID[task.status]
+  const statusDef = statusDefOf(task, statusDefs)
+  const status = statusDef
+  // the owner's own task (done by them, never sent to an agent)
+  const mine = !!task.forOwner
 
   return (
     <Modal open onClose={onClose} title="Task" width={640}>
@@ -112,6 +116,11 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             {status.label}
           </span>
           {!done && <span className={`due due--${due.level}`}>{due.text}</span>}
+          {mine && (
+            <span className="check-pill check-pill--approval">
+              <LuUser /> Your task
+            </span>
+          )}
           {task.sessionKey && (
             <span className="check-pill check-pill--approval" data-tip="Running in a separate session of the agent, next to its other work; it closes when this is done">
               <LuSplit /> Parallel session
@@ -137,16 +146,18 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
 
         <div className="task-detail__grid">
           <Field label="Status">
-            <StatusSelect value={task.status} onChange={(v) => set({ status: v })} />
+            <StatusSelect value={statusDef.id} onChange={(p) => set(p)} />
           </Field>
           <Field label="Priority">
             <Select ariaLabel="Priority" value={task.priority} options={PRIORITY_OPTIONS} onChange={(v) => set({ priority: v })} />
           </Field>
-          <Field label="Folder">
+          {!mine && (
+            <Field label="Folder">
             <FolderSelect value={task.folder} onChange={(folder) => set({ folder })} />
           </Field>
-          <Field label="Agent">
-            <AgentSelect value={task.agentId ?? ''} onChange={(v) => set({ agentId: v || null })} />
+          )}
+          <Field label="Who does it">
+            <AgentSelect withOwner value={assigneeOf(task)} onChange={(v) => set(assigneePatch(v))} />
           </Field>
           <Field label="Deadline">
             <DateTimeField value={task.deadline} onChange={(deadline) => set({ deadline })} ariaLabel="Deadline" />
@@ -154,7 +165,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
           <Field label="Tags">
             <TagPicker value={task.tags ?? []} onChange={(tags) => set({ tags })} />
           </Field>
-          {(parallelAllowed || task.parallel) && (
+          {!mine && (parallelAllowed || task.parallel) && (
             <Field label="If the agent is busy">
               <Select
                 ariaLabel="If the agent is busy"
@@ -166,8 +177,9 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
           )}
         </div>
 
-        <TaskRunFields value={task} onChange={set} />
-        {live && (
+        {/* your own task: no agent to start it, no mode or check of an agent's run */}
+        {!mine && <TaskRunFields value={task} onChange={set} />}
+        {live && !mine && (
           <Field
             label="Waits for"
             hint={
@@ -181,7 +193,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             <WaitsForSelect taskId={task.id} value={task.blockedBy ?? []} onChange={(ids) => set({ blockedBy: ids.length ? ids : undefined })} />
           </Field>
         )}
-        {live && (
+        {live && !mine && (
           <Field
             label="Quality check"
             hint="Optional. Runs in the task's folder when the agent finishes; a failure goes back to the agent to fix (twice) before review."
@@ -194,7 +206,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             Next after this: {blocks.map((t) => `"${t.title}"`).join(', ')}.
           </p>
         )}
-        {live && task.autoStart && task.status === 'todo' && !task.autoStartedAt && !waiting.length && (
+        {live && !mine && task.autoStart && task.status === 'todo' && !task.autoStartedAt && !waiting.length && (
           <p className="field__hint">
             {!task.agentId
               ? 'Pick an agent so it can start automatically.'
@@ -208,7 +220,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
         {live && task.status !== 'todo' && <TaskDiff taskId={task.id} status={task.status} />}
         {live && <TaskTimeline taskId={task.id} />}
 
-        <Field label="Description" hint="Context, acceptance criteria, links. Sent to the agent along with the task.">
+        <Field label={mine ? 'Notes' : 'Description'} hint={mine ? undefined : 'Context, acceptance criteria, links. Sent to the agent along with the task.'}>
           <textarea
             rows={6}
             value={task.description ?? ''}
@@ -218,7 +230,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
         </Field>
 
         {inReview && revising && (
-          <div className="revise">
+          <div className="revise ui-drop">
             <Field label="What should change?" hint="Sent to the agent as a revision of this task; its answer becomes a new report.">
               <textarea
                 rows={3}
@@ -255,7 +267,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
           </button>
           <span className="grow" />
           {startMsg && <span className={`task-detail__msg${startMsg.ok ? '' : ' danger-text'}`}>{startMsg.text}</span>}
-          {live && !done && !inReview && (
+          {live && !mine && !done && !inReview && (
             <button
               onClick={start}
               disabled={starting || !agentOnline}

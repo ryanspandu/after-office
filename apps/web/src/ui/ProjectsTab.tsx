@@ -19,7 +19,7 @@ import { FolderNoteList } from './OwnerNotes'
 import { useModalMaximize } from './Maximize'
 import { FolderTerminal } from './FolderTerminal'
 import { formatSize } from './Attachments'
-import { STATUS_BY_ID } from './taskMeta'
+import { StatusPill } from './taskMeta'
 import { Previews } from './Previews'
 import { Chevron, FolderTree, TreeContext, type ProjectAt } from './FolderTree'
 import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -191,7 +191,7 @@ export function FoldersTab({ q = '' }: { q?: string }) {
         <ProjectsRefresh ws={ws} />
       </div>
       {view === 'projects' ? (
-        <div className="ws-list">
+        <div key="projects" className="ws-list ui-switch">
           {!homeProjects.length ? (
             <div className="empty">{q.trim() ? 'No folders match.' : 'No folders yet. New folder makes one here.'}</div>
           ) : (
@@ -219,7 +219,7 @@ export function FoldersTab({ q = '' }: { q?: string }) {
           )}
         </div>
       ) : (
-      <div className="ws-list">
+      <div key="agents" className="ws-list ui-switch">
         {!shown.length && <div className="empty">{q.trim() ? 'No folders match.' : 'No agent folders.'}</div>}
         {shown.map((w) => {
           const people = w.agentIds.map((id) => agents.find((a) => a.id === id)).filter(Boolean) as OfficeAgent[]
@@ -454,7 +454,7 @@ export function ProjectFolderModal({
           </div>
         </aside>
 
-        <section className="fd__main">
+        <section key={section} className="fd__main ui-switch">
           {section === 'files' && <FileBrowser root={f.path} fill onTrashed={trash.reload} />}
           {section === 'terminal' && <FolderTerminal root={f.path} />}
           {section === 'notes' && (
@@ -476,9 +476,7 @@ export function ProjectFolderModal({
                   {related.map((t) => (
                     <li key={t.id}>
                       <button className="team-row" onClick={() => openUrl({ task: t.id })}>
-                        <span className="status-pill" style={{ ['--c' as string]: STATUS_BY_ID[t.status].color }}>
-                          {STATUS_BY_ID[t.status].label}
-                        </span>
+                        <StatusPill task={t} />
                         <span className="team-row__body">
                           <span className="team-row__title truncate">{t.title}</span>
                         </span>

@@ -1,3 +1,4 @@
+import { StatusesModal } from './StatusesModal'
 import { useEffect, useRef, useState } from 'react'
 import type { OfficeTask, TaskStatus } from '@after-office/shared'
 import { useDashboard } from '../state/dashboard'
@@ -26,6 +27,8 @@ import { TasksModal } from './TasksModal'
 // Every modal, shown from the address bar (state/url.ts). Stacking follows the order below: lists first, then what
 // is opened from them (a task, a report), then forms and settings on top.
 
+/** the Tasks window's view in the address bar */
+const TASKS_VIEW = ['tasks', 'tq', 'tsort', 'tdir', 'tpage', 'tper']
 const REPORTS_VIEW = ['reports', 'q', 'range', 'from', 'to', 'page', 'per', 'folder', 'tag', 'by', 'ri']
 const clear = (keys: string[]) => () => setUrl(Object.fromEntries(keys.map((k) => [k, null])))
 
@@ -34,16 +37,42 @@ export function UrlModals() {
   useStoreSync()
   return (
     <>
-      {p.tasks && <TasksModal onClose={clear(['tasks', 'tq'])} />}
+      {p.tasks && (
+        <TasksModal
+          onClose={clear(TASKS_VIEW)}
+          onMinimize={() => {
+            // put aside with its view (search, sort, page…): its chip opens it again as it was
+            useMinimized.getState().addView('tasks', Object.fromEntries(TASKS_VIEW.filter((k) => k !== 'tasks' && p[k]).map((k) => [k, p[k]])))
+            clear(TASKS_VIEW)()
+          }}
+        />
+      )}
       {p.archive && <ArchiveModal onClose={clear(['archive'])} />}
-      {p.reports && <ReportsModal onClose={clear(REPORTS_VIEW)} />}
+      {p.statuses && <StatusesModal onClose={clear(['statuses'])} />}
+      {p.reports && (
+        <ReportsModal
+          onClose={clear(REPORTS_VIEW)}
+          onMinimize={() => {
+            // put aside with its view (filter, search, page, the report being read…)
+            useMinimized.getState().addView('reports', Object.fromEntries(REPORTS_VIEW.filter((k) => p[k]).map((k) => [k, p[k]])))
+            clear(REPORTS_VIEW)()
+          }}
+        />
+      )}
       <FolderWindows current={p.folder} />
       <MinimizedChips current={p.folder} currentNote={p.note} />
       {p.newfolder && (
         <NewFolderModal onClose={clear(['newfolder'])} onCreated={(folder) => setUrl({ newfolder: null, folder: folder.path }, 'push')} />
       )}
       {p.task && <TaskDetailModal key={p.task} taskId={p.task} onClose={clear(['task'])} />}
-      {p.report && <ReportModal key={p.report} id={p.report} onClose={clear(['report'])} />}
+      {p.report && (
+        <ReportModal
+          key={p.report}
+          id={p.report}
+          onClose={clear(['report'])}
+          onMinimize={(title) => (useMinimized.getState().addReport(p.report!, title), clear(['report'])())}
+        />
+      )}
       {p.notes && <NotesModal onClose={clear(['notes'])} />}
       {/* a note opened from the list: above it */}
       <NoteWindows current={p.note} />
@@ -156,10 +185,12 @@ const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
 
 function NewTaskFromUrl() {
   const p = useUrl((s) => s.params)
-  const defaults: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status'>> = {
+  const defaults: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus'>> = {
     ...(p.nt_agent ? { agentId: p.nt_agent } : {}),
     ...(p.nt_folder ? { folder: p.nt_folder } : {}),
     ...(STATUSES.includes(p.nt_status as TaskStatus) ? { status: p.nt_status as TaskStatus } : {}),
+    // one of the owner's own statuses (a board column's "Add card")
+    ...(p.nt_status && !STATUSES.includes(p.nt_status as TaskStatus) ? { customStatus: p.nt_status } : {}),
   }
   return <TaskModal defaults={defaults} onClose={clear(['newtask', 'nt_agent', 'nt_folder', 'nt_status'])} />
 }

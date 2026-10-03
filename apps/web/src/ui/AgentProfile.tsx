@@ -203,7 +203,7 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
             ))}
         </nav>
 
-        <div className={`drawer__body${tab === 'chat' || tab === 'terminal' ? ' drawer__body--flush' : ''}`}>
+        <div key={tab} className={`drawer__body ui-switch${tab === 'chat' || tab === 'terminal' ? ' drawer__body--flush' : ''}`}>
           {tab === 'chat' && <ChatTab agent={agent} />}
           {tab === 'terminal' && (
             // the session picked in the Chat tab (?session=s2), else the main one

@@ -483,7 +483,7 @@ function EntryMenu({ at, actions, onClose }: { at: Menu; actions: { icon: React.
     }
   }, [onClose])
   return createPortal(
-    <div ref={ref} className="fb-menu" role="menu" style={pos ? { left: pos.left, top: pos.top } : { left: at.x, top: at.y, visibility: 'hidden' }}>
+    <div ref={ref} className="fb-menu ui-pop" role="menu" style={pos ? { left: pos.left, top: pos.top } : { left: at.x, top: at.y, visibility: 'hidden' }}>
       <div className="fb-menu__name truncate">{at.entry.name}</div>
       {actions.map((a) => (
         <button

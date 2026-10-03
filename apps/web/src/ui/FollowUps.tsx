@@ -5,7 +5,7 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import { create } from 'zustand'
 import remarkGfm from 'remark-gfm'
 import { FILE_HREF, FileLinkButton, remarkFileLinks, useFileLinks } from './fileLinks'
-import { LuUserPlus, LuCrown, LuCheck, LuCircleHelp, LuClipboardList, LuEye, LuMaximize2, LuSend, LuShieldAlert, LuX, LuCalendarClock } from 'react-icons/lu'
+import { LuUserPlus, LuCrown, LuCheck, LuCircleHelp, LuClipboardList, LuEye, LuMaximize2, LuSend, LuShieldAlert, LuX, LuCalendarClock, LuUser } from 'react-icons/lu'
 import { DEFAULT_MODEL, defaultRulePacks, isEffort, isModelChoice, MODELS, type AgentEffort, type AgentFigure, type FollowUp, type FollowUpDecision, type HireEdits, type LiveFollowUp } from '@after-office/shared'
 import { EFFORT_OPTIONS } from './effort'
 import { liveApi, useLive, useWorkReady } from '../state/live'
@@ -21,6 +21,7 @@ import { useLaunch } from '../pwa/launch'
 import { MOBILE } from '../state/useMediaQuery'
 import { useBranding } from '../state/branding'
 import { RulesPicker } from './RulesPicker'
+import { openUrl } from '../state/url'
 
 // Human-in-the-loop queue: live permission prompts from waiting agents, plan approvals, questions and reviews.
 
@@ -183,7 +184,7 @@ export function ago(ms: number) {
 export const useAttentionCount = create<number>(() => 0)
 
 /**
- * The "Needs your attention" queue. Desktop: the bottom panel. Phones: pass `sheet` and it renders inside a modal
+ * The "For you" queue (what waits on the owner). Desktop: the bottom panel. Phones: pass `sheet` and it renders inside a modal
  * opened from the dock; the component stays mounted either way (it keeps the tab title count up to date).
  */
 export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => void } } = {}) {
@@ -193,7 +194,7 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
   const now = useNow(30_000).getTime()
   const [viewAll, setViewAll] = useState(false)
   const ready = useWorkReady()
-  // app shortcut "Needs your attention" on a desktop (phones: the dock opens its sheet)
+  // app shortcut "For you" on a desktop (phones: the dock opens its sheet)
   const launch = useLaunch((s) => s.open)
   useEffect(() => {
     if (sheet || launch !== 'attention' || window.matchMedia(MOBILE).matches) return
@@ -222,14 +223,17 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
     }))
   const items: Item[] = (source === 'live' ? liveFollowUps.map(fromLive) : [...demoWaiting, ...reviews]).sort((a, b) => a.createdAt - b.createdAt)
   const detail = items.find((i) => i.id === detailId) ?? null
+  // the rest of what waits on the owner (live): work to review, their own tasks, the manager's notes that need them
+  const todos = useForYou(source === 'live')
+  const total = items.length + todos.length
 
   // "(2) After Office": the count shows on the browser tab, so waiting agents are noticed from other tabs (the
   // office's own name from Project settings)
   const brandName = useBranding((s) => s.name)
   useEffect(() => {
-    document.title = items.length ? `(${items.length}) ${brandName}` : brandName
-    useAttentionCount.setState(items.length, true)
-  }, [items.length, brandName])
+    document.title = total ? `(${total}) ${brandName}` : brandName
+    useAttentionCount.setState(total, true)
+  }, [total, brandName])
   useEffect(() => () => void (document.title = useBranding.getState().name), [])
 
   const resolve = async (item: Item, decision: Decision) => {
@@ -271,14 +275,14 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
   const panel = (
     <section className="card bottom">
       <header className="card__head">
-        <h2>Needs your attention</h2>
-        {items.length > 0 && <span className="badge badge--accent">{items.length}</span>}
+        <h2>For you</h2>
+        {total > 0 && <span className="badge badge--accent">{total}</span>}
         {error ? (
           <span className="grow danger-text truncate">{error}</span>
         ) : (
-          <span className="muted grow">Plans, permission prompts, questions and reviews from your agents</span>
+          <span className="muted grow">What waits on you: agents' questions and approvals, work to review, your own tasks</span>
         )}
-        {items.length > 0 && (
+        {total > 0 && (
           <button className="small" onClick={() => setViewAll(true)}>
             View all
           </button>
@@ -286,10 +290,13 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
       </header>
       <div className="followups">
         {items.map(card)}
-        {!items.length && ready && <div className="empty">Nothing waiting on you.</div>}
+        {todos.map((t) => (
+          <ForYouCard key={t.id} item={t} now={now} />
+        ))}
+        {!total && ready && <div className="empty">Nothing waiting on you.</div>}
       </div>
 
-      <Modal open={viewAll} onClose={() => setViewAll(false)} title="Needs your attention" description={`${items.length} open items`} width={880}>
+      <Modal open={viewAll} onClose={() => setViewAll(false)} title="For you" description={`${total} open items`} width={880}>
         <div className="modal__body">
           <div className="seg" style={{ alignSelf: 'flex-start' }}>
             {(['all', 'plan', 'permission', 'question', 'delegation', 'hire', 'check', 'daily', 'review'] as const).map((k) => (
@@ -301,7 +308,11 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
           </div>
           <div className="followups-grid">
             {filtered.map(card)}
-            {!filtered.length && <div className="empty">Nothing here.</div>}
+            {filter === 'all' &&
+              todos.map((t) => (
+                <ForYouCard key={t.id} item={t} now={now} />
+              ))}
+            {!filtered.length && !(filter === 'all' && todos.length) && <div className="empty">Nothing here.</div>}
           </div>
         </div>
       </Modal>
@@ -322,9 +333,85 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
 
   if (!sheet) return panel
   return (
-    <DockSheet open={sheet.open} onClose={sheet.onClose} title="Needs your attention">
+    <DockSheet open={sheet.open} onClose={sheet.onClose} title="For you">
       {panel}
     </DockSheet>
+  )
+}
+
+/** One more thing that waits on the owner, besides the agents' prompts. */
+interface ForYou {
+  id: string
+  kind: 'to-review' | 'mine' | 'note'
+  title: string
+  /** who it's from: an agent, or the manager */
+  agentId?: string
+  at: number
+  open: () => void
+  /** the quick answer: accept the work, tick your task off, or "got it" */
+  done: () => void
+}
+
+const FOR_YOU: Record<ForYou['kind'], { label: string; icon: ReactNode; done: string }> = {
+  'to-review': { label: 'To review', icon: <LuEye />, done: 'Accept' },
+  mine: { label: 'Your task', icon: <LuUser />, done: 'Done' },
+  note: { label: 'Manager', icon: <LuCrown />, done: 'Got it' },
+}
+
+/** Work finished and waiting for the owner's review, their own open tasks, and the manager's notes that need them. */
+function useForYou(on: boolean): ForYou[] {
+  const tasks = useDashboard((s) => s.tasks)
+  const reports = useDashboard((s) => s.reports)
+  const { updateTask, markReport } = useDashboard(useShallow((s) => ({ updateTask: s.updateTask, markReport: s.markReport })))
+  if (!on) return []
+  const review: ForYou[] = tasks
+    // the manager's tasks are its to review (it sums them up for you); yours and the agents' you started are yours
+    .filter((t) => t.status === 'review' && !t.forOwner && !t.delegatedBy && t.checkState !== 'running')
+    .map((t) => ({ id: `review-${t.id}`, kind: 'to-review', title: t.title, agentId: t.agentId ?? undefined, at: t.startedAt ?? 0, open: () => openUrl({ task: t.id }), done: () => updateTask(t.id, { status: 'done' }) }))
+  const mine: ForYou[] = tasks
+    .filter((t) => t.forOwner && t.status !== 'done')
+    .sort((a, b) => a.deadline - b.deadline)
+    .map((t) => ({ id: `mine-${t.id}`, kind: 'mine', title: t.title, agentId: t.delegatedBy, at: t.createdAt ?? 0, open: () => openUrl({ task: t.id }), done: () => updateTask(t.id, { status: 'done' }) }))
+  const notes: ForYou[] = reports
+    .filter((r) => r.kind === 'note' && r.outcome === 'needs_you' && !r.read)
+    .map((r) => ({ id: `note-${r.id}`, kind: 'note', title: r.title, agentId: r.agentId, at: r.finishedAt, open: () => openUrl({ report: r.id }), done: () => markReport(r.id, true) }))
+  return [...review, ...mine, ...notes]
+}
+
+function ForYouCard({ item, now }: { item: ForYou; now: number }) {
+  const agent = useOffice((s) => s.agents.find((a) => a.id === item.agentId))
+  const kind = FOR_YOU[item.kind]
+  return (
+    <article className={`fu fu--${item.kind}`}>
+      <div className="fu__head">
+        <span className="fu__kind">
+          {kind.icon} {kind.label}
+        </span>
+        {item.at > 0 && <span className="muted">{ago(now - item.at)}</span>}
+      </div>
+      <button className="fu__msg" onClick={item.open} data-tip="Open">
+        {item.title}
+      </button>
+      <div className="fu__agent">
+        {item.kind === 'mine' ? (
+          <>
+            <span className="chip__dot" style={{ background: 'var(--hl)' }} />
+            {agent ? `Asked by ${agent.name}` : 'You'}
+          </>
+        ) : (
+          <>
+            <span className="chip__dot" style={{ background: agent?.look.shirt ?? '#aaa' }} />
+            {agent?.name ?? 'An agent'}
+          </>
+        )}
+      </div>
+      <div className="fu__actions">
+        <button className="primary" onClick={item.done}>
+          <LuCheck /> {kind.done}
+        </button>
+        <button onClick={item.open}>Open</button>
+      </div>
+    </article>
   )
 }
 

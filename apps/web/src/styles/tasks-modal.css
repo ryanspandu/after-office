@@ -141,3 +141,116 @@ button.task-group__head:focus-visible { outline: 2px solid var(--hl); outline-of
 /* the list's pages */
 .task-pager { display: flex; align-items: center; gap: 6px; padding: 8px 4px 0; font-size: 12.5px; }
 .task-pager__page { font-variant-numeric: tabular-nums; min-width: 44px; text-align: center; }
+/* phones: a task is a line to read and a line to glance at (status · due · tag) and who; tap to open and change it */
+.task-m { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.task-m:last-child { border-bottom: none; }
+.task-m > input[type='checkbox'] { flex-shrink: 0; }
+.task-m__main { all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
+.task-m__title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 14.5px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+.task-m__meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; color: var(--muted); }
+.task-m__meta .tag-chips { min-width: 0; flex-wrap: nowrap; overflow: hidden; }
+.task-m__status { flex-shrink: 0; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.task-m.task--done .task-m__title { color: var(--muted); text-decoration: line-through; }
+.task-m > .avatar { flex-shrink: 0; }
+.task-m__none { width: 20px; flex-shrink: 0; text-align: center; color: var(--muted); }
+@media (max-width: 768px) { .task-table__head { display: none; } }
+/* the task statuses' editor (ui/StatusesModal.tsx) */
+.statuses__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.statuses__row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 12px; background: var(--card-2); border: 1px solid var(--line); }
+.statuses__row.is-dragging { position: relative; z-index: 2; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); }
+.statuses__grip { cursor: grab; touch-action: none; color: var(--muted); }
+.statuses__color { position: relative; flex-shrink: 0; }
+.statuses__dot { all: unset; display: block; width: 16px; height: 16px; border-radius: 50%; cursor: pointer; box-shadow: 0 0 0 2px var(--card); }
+.statuses__palette { position: absolute; top: 24px; left: -6px; z-index: 5; display: grid; grid-template-columns: repeat(5, 20px); gap: 6px; padding: 8px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); }
+.statuses__palette button { all: unset; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; }
+.statuses__palette button.is-on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
+.statuses__name { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 9px; font-size: 13.5px; }
+.statuses__base { flex: 0 0 170px; }
+span.statuses__base { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding-left: 6px; }
+.statuses__count { flex: 0 0 22px; text-align: right; font-size: 12px; }
+.statuses__del { flex: 0 0 28px; }
+.statuses__add { align-self: flex-start; }
+.statuses__error { margin: 0; font-size: 12.5px; }
+.status-opt { display: inline-flex; align-items: center; gap: 7px; }
+@media (max-width: 560px) {
+  .statuses__row { flex-wrap: wrap; }
+  .statuses__base { flex: 1 1 100%; order: 5; }
+}
+/* board columns move by their header (status columns: the order of the statuses) */
+.board__head--movable { cursor: grab; touch-action: none; }
+.board__head--movable:active { cursor: grabbing; }
+.board__col--moving { opacity: 0.4; }
+.board__col-ghost { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 14px; font-size: 14px; font-weight: 600; background: var(--card); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2); cursor: grabbing; }
+/* Tasks → List: the tags as cards (ui/TagCards.tsx) */
+.tag-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.tag-card { all: unset; box-sizing: border-box; position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 14px 14px 12px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; }
+.tag-card:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--line)); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07); }
+.tag-card:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+.tag-card.is-on { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 6px 18px rgba(0, 0, 0, 0.06); }
+.tag-card__top { display: flex; align-items: center; justify-content: space-between; }
+.tag-card__icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: 15px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.tag-card__badge { font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; color: var(--muted); background: var(--card-2); }
+.tag-card__badge--active { color: #2f8f57; background: rgba(47, 191, 113, 0.14); }
+.tag-card__badge--late { color: var(--danger); background: color-mix(in srgb, var(--danger) 13%, transparent); }
+.tag-card__badge--done { color: #3b82f6; background: rgba(59, 130, 246, 0.12); }
+.tag-card__title { margin-top: 4px; font-size: 15px; font-weight: 650; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-card__next { font-size: 12px; line-height: 1.4; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; }
+.tag-card__foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.tag-card__count { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag-card__count b { font-size: 18px; font-weight: 700; color: var(--text); margin-right: 3px; }
+.tag-card__who { display: inline-flex; }
+.tag-card__who > * + * { margin-left: -5px; box-shadow: 0 0 0 1.5px var(--card); }
+.tag-card__go { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--muted); background: var(--card-2); flex-shrink: 0; }
+.tag-card.is-on .tag-card__go { color: #fff; background: var(--c); }
+.tag-card--new { align-items: center; justify-content: center; gap: 8px; min-height: 150px; font-size: 13px; color: var(--muted); border-style: dashed; background: transparent; box-shadow: none; }
+.tag-card__plus { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; font-size: 17px; background: var(--card-2); }
+.tag-card--naming { cursor: default; align-items: stretch; padding: 14px; }
+.tag-card--naming input { padding: 8px 12px; border-radius: 10px; font-size: 13px; }
+.tag-card__actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.tag-card__hint { font-size: 11.5px; }
+.tag-card--more { align-items: center; justify-content: center; min-height: 150px; font-size: 13px; font-weight: 600; color: var(--muted); border-style: dashed; background: transparent; box-shadow: none; }
+@media (max-width: 768px) {
+  .tag-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tag-card { padding: 12px; border-radius: 14px; }
+  .tag-card__next { display: none; }
+  .tag-card--new, .tag-card--more { min-height: 110px; }
+}
+/* naming a new tag: the card it will be, its name typed where the title goes */
+.tag-card--naming { cursor: default; padding: 14px 14px 12px; border-color: var(--c); }
+.tag-card__name-input { all: unset; box-sizing: border-box; margin-top: 4px; width: 100%; font-size: 15px; font-weight: 650; line-height: 1.25; border-bottom: 1px dashed color-mix(in srgb, var(--c) 60%, var(--line)); padding-bottom: 2px; }
+.tag-card__name-input::placeholder { color: var(--muted); font-weight: 500; }
+.tag-card--naming .tag-card__foot { gap: 6px; }
+/* inside a tag: back to the cards, its name, how it stands */
+.tag-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; min-width: 0; }
+.tag-head .tag-card__icon { width: 30px; height: 30px; font-size: 14px; flex-shrink: 0; }
+.tag-head__back { flex-shrink: 0; }
+.tag-head__title { font-size: 16px; font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-head__stats { font-size: 12.5px; white-space: nowrap; }
+/* opening a tag and coming back: the cards come in one after another, a tag's tasks slide in from where you went */
+@keyframes tag-card-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } }
+@keyframes tag-detail-in { from { opacity: 0; transform: translateX(28px); } }
+@keyframes tag-row-in { from { opacity: 0; transform: translateY(6px); } }
+.tag-cards > .tag-card { animation: tag-card-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--i, 0) * 35ms); }
+.tag-cards > .tag-card--new, .tag-cards > .tag-card--more { animation-delay: 0.25s; }
+.tag-detail { animation: tag-detail-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.tag-detail .task-table__row, .tag-detail .task-m { animation: tag-row-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.tag-detail .task-table__row:nth-child(2), .tag-detail .task-m:nth-child(2) { animation-delay: 40ms; }
+.tag-detail .task-table__row:nth-child(3), .tag-detail .task-m:nth-child(3) { animation-delay: 80ms; }
+.tag-detail .task-table__row:nth-child(4), .tag-detail .task-m:nth-child(4) { animation-delay: 120ms; }
+.tag-detail .task-table__row:nth-child(n + 5), .tag-detail .task-m:nth-child(n + 5) { animation-delay: 160ms; }
+.tag-card:active { transform: scale(0.98); }
+@media (prefers-reduced-motion: reduce) {
+  .tag-cards > .tag-card, .tag-detail, .tag-detail .task-table__row, .tag-detail .task-m { animation: none; }
+}
+.tag-detail { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.tag-detail > .tag-head { margin-bottom: 2px; }
+/* the list's column headers sort it */
+.task-sort { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px; min-width: 0; cursor: pointer; color: inherit; font: inherit; border-radius: 6px; }
+.task-sort:hover { color: var(--text); }
+.task-sort:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+.task-sort svg { font-size: 12px; flex-shrink: 0; }
+.task-sort.is-on { color: var(--text); font-weight: 600; }
+.task-sort__idle { opacity: 0; transition: opacity 0.15s; }
+.task-sort:hover .task-sort__idle { opacity: 0.6; }
+.task-sort:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.task-pager .rs { width: 76px; }

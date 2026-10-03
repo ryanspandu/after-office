@@ -70,7 +70,7 @@ Needs `tmux` and `claude` on the server's PATH (`TMUX_BIN` / `CLAUDE_BIN` to ove
   - Writes `CLAUDE.md` if the folder has none.
   - Starts `claude --model … --permission-mode … --session-id …` in the tmux session `ao-<name>`. The "trust this folder" dialog is answered automatically.
 - **Hooks → `POST /hook`, statusline → `POST /statusline`.** Both authenticate with `HOOK_TOKEN`, which is passed to the session as `AO_HOOK_TOKEN`.
-  - **Permission prompts and AskUserQuestion** are held open until you answer them in "Needs your attention". If you don't answer within about 10 minutes, the normal prompt stays in the terminal.
+  - **Permission prompts and AskUserQuestion** are held open until you answer them under "For you". If you don't answer within about 10 minutes, the normal prompt stays in the terminal.
   - **Plan approvals** are answered by pressing the plan dialog's keys.
 - **Changing the model** restarts the session with `--resume`, so the conversation continues. The dashboard refuses `/model`, because in the TUI it rewrites your global default.
 - **Sessions that die** are restarted automatically. Set `OFFICE_AUTO_RESTART=false` to turn this off.
