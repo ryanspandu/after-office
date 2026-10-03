@@ -27,6 +27,7 @@ import { ReportsPanel } from './Reports'
 import { confirmWith } from './Confirm'
 import { openUrl } from '../state/url'
 import { tip } from './Tooltip'
+import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 
 export const STATUS_META: Record<AgentStatus, { label: string; icon: ReactNode }> = {
   working: { label: 'Working', icon: <LuKeyboard /> },
@@ -196,6 +197,7 @@ function AgentRow({
   onPin: () => void
 }) {
   const queued = useLive((s) => (live ? (s.queued[a.id] ?? 0) : 0))
+  const phone = useMediaQuery(MOBILE)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
 
@@ -254,9 +256,10 @@ function AgentRow({
     if (ok) act('remove', () => (live ? liveApi.deleteAgent(a.id, { folder: option }) : onRemove()))
   }
 
-  // one click on the card opens its chat (its profile in the demo); the rest is in the ⋯ menu under the avatar
+  // one click on the card opens its chat (its profile in the demo); the rest is in the ⋯ menu under the avatar.
+  // Phones: a tap on the card does nothing (it's easy to hit while scrolling); the chat button under the status opens it.
   return (
-    <li className={`row agent${selected ? ' row--selected' : ''}${a.status === 'offline' ? ' row--off' : ''}`} onClick={onProfile}>
+    <li className={`row agent${selected ? ' row--selected' : ''}${a.status === 'offline' ? ' row--off' : ''}`} onClick={phone ? undefined : onProfile}>
       <div className="agent__side">
         <span className="avatar" style={avatarStyle(a.look.shirt)} aria-hidden>
           {a.name[0]}
@@ -302,6 +305,12 @@ function AgentRow({
           )}
           <span className={`status status--${a.status}`}>{a.status === 'waiting' && a.waitingFor ? waitingLabel(a.waitingFor) : STATUS_META[a.status].label}</span>
         </div>
+        {phone && (
+          <button type="button" className="icon-btn small agent__chat" onClick={onProfile} aria-label={live ? `Chat with ${a.name}` : `${a.name}'s profile`}>
+            {live ? <LuMessageSquareText /> : <LuSlidersHorizontal />}
+            {live && !!a.unread && <span className="agent__chat-count">{a.unread > 9 ? '9+' : a.unread}</span>}
+          </button>
+        )}
         <div className="row__meta truncate">
           {a.tool && a.status !== 'idle' && <code>{a.tool}</code>}
           {a.status === 'idle' ? (live ? a.lastMessage ?? idleText(a.spotId) : idleText(a.spotId)) : (a.task ?? '—')}

@@ -84,7 +84,8 @@ export function MobileDock() {
         <ReportsPanel />
       </DockSheet>
       <DockSheet open={sheet === 'agents'} onClose={close} title="Agents" bodyClass="dock-sheet agents-modal">
-        <AgentsCard onNavigate={close} />
+        {/* opening a chat keeps this sheet: closing the chat (or Back) comes back to it */}
+        <AgentsCard />
       </DockSheet>
     </>
   )

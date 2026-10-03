@@ -41,3 +41,7 @@
 @keyframes sheet-in { from { transform: translateY(100%); } }
 @keyframes sheet-out { to { transform: translateY(100%); } }
 @media (prefers-reduced-motion: reduce) { .modal, .modal-backdrop--closing .modal { animation: none; } }
+/* phones: a sheet dragged to its own height stays that tall (state/useSheetDrag.ts) until it goes full size or closes */
+@media (max-width: 768px) {
+  [data-sheet-h]:not(.modal--full) { height: var(--sheet-h) !important; max-height: none !important; }
+}
