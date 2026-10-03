@@ -8,7 +8,8 @@
 .code-editor__cm .cm-editor.cm-focused { outline: none; }
 .code-editor__preview { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px; }
 .code-editor__error { margin: 0; font-size: 12.5px; }
-.code-editor__state { font-size: 12px; white-space: nowrap; }
+.code-editor__state { font-size: 12px; white-space: nowrap; margin-right: 6px; }
+.code-editor__ro { margin-right: 6px; }
 .code-editor__ro { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; color: var(--muted); background: var(--card-2); white-space: nowrap; }
 @media (max-width: 768px) {
   .code-editor__body { height: auto; flex: 1; min-height: 60vh; }
