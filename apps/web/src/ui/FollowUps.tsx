@@ -5,7 +5,7 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import { create } from 'zustand'
 import remarkGfm from 'remark-gfm'
 import { FILE_HREF, FileLinkButton, remarkFileLinks, useFileLinks } from './fileLinks'
-import { LuUserPlus, LuCrown, LuCheck, LuCircleHelp, LuClipboardList, LuEye, LuMaximize2, LuSend, LuShieldAlert, LuX, LuCalendarClock, LuUser } from 'react-icons/lu'
+import { LuUserPlus, LuCrown, LuCheck, LuCircleHelp, LuClipboardList, LuEye, LuMaximize2, LuSend, LuShieldAlert, LuX, LuCalendarClock, LuUser, LuMessageSquareReply } from 'react-icons/lu'
 import { DEFAULT_MODEL, defaultRulePacks, isEffort, isModelChoice, MODELS, type AgentEffort, type AgentFigure, type FollowUp, type FollowUpDecision, type HireEdits, type LiveFollowUp } from '@after-office/shared'
 import { EFFORT_OPTIONS } from './effort'
 import { liveApi, useLive, useWorkReady } from '../state/live'
@@ -348,8 +348,8 @@ interface ForYou {
   agentId?: string
   at: number
   open: () => void
-  /** the quick answer: accept the work, tick your task off, or "got it" */
-  done: () => void
+  /** the quick answer: accept the work, tick your task off, or "got it"; unset: answered inside (the manager asked) */
+  done?: () => void
 }
 
 const FOR_YOU: Record<ForYou['kind'], { label: string; icon: ReactNode; done: string }> = {
@@ -358,11 +358,10 @@ const FOR_YOU: Record<ForYou['kind'], { label: string; icon: ReactNode; done: st
   note: { label: 'Manager', icon: <LuCrown />, done: 'Got it' },
 }
 
-/** Work finished and waiting for the owner's review, their own open tasks, and the manager's notes that need them. */
+/** Work finished and waiting for the owner's review, and their own open tasks (the manager's asked to be answered). */
 function useForYou(on: boolean): ForYou[] {
   const tasks = useDashboard((s) => s.tasks)
-  const reports = useDashboard((s) => s.reports)
-  const { updateTask, markReport } = useDashboard(useShallow((s) => ({ updateTask: s.updateTask, markReport: s.markReport })))
+  const updateTask = useDashboard((s) => s.updateTask)
   if (!on) return []
   const review: ForYou[] = tasks
     // the manager's tasks are its to review (it sums them up for you); yours and the agents' you started are yours
@@ -371,11 +370,18 @@ function useForYou(on: boolean): ForYou[] {
   const mine: ForYou[] = tasks
     .filter((t) => t.forOwner && t.status !== 'done')
     .sort((a, b) => a.deadline - b.deadline)
-    .map((t) => ({ id: `mine-${t.id}`, kind: 'mine', title: t.title, agentId: t.delegatedBy, at: t.createdAt ?? 0, open: () => openUrl({ task: t.id }), done: () => updateTask(t.id, { status: 'done' }) }))
-  const notes: ForYou[] = reports
-    .filter((r) => r.kind === 'note' && r.outcome === 'needs_you' && !r.read)
-    .map((r) => ({ id: `note-${r.id}`, kind: 'note', title: r.title, agentId: r.agentId, at: r.finishedAt, open: () => openUrl({ report: r.id }), done: () => markReport(r.id, true) }))
-  return [...review, ...mine, ...notes]
+    .map((t) => ({
+      id: `mine-${t.id}`,
+      kind: 'mine',
+      title: t.title,
+      agentId: t.delegatedBy,
+      at: t.createdAt ?? 0,
+      // the manager asked: answered in the task (its note box), then done there; your own ones tick off here
+      open: () => openUrl({ task: t.id, ...(t.delegatedBy ? { tnote: '1' } : {}) }),
+      ...(t.delegatedBy ? {} : { done: () => updateTask(t.id, { status: 'done' }) }),
+    }))
+  // (the manager's "needs you" notes stay in Reports, marked there: not here a second time)
+  return [...review, ...mine]
 }
 
 function ForYouCard({ item, now }: { item: ForYou; now: number }) {
@@ -406,10 +412,18 @@ function ForYouCard({ item, now }: { item: ForYou; now: number }) {
         )}
       </div>
       <div className="fu__actions">
-        <button className="primary" onClick={item.done}>
-          <LuCheck /> {kind.done}
-        </button>
-        <button onClick={item.open}>Open</button>
+        {item.done ? (
+          <>
+            <button className="primary" onClick={item.done}>
+              <LuCheck /> {kind.done}
+            </button>
+            <button onClick={item.open}>Open</button>
+          </>
+        ) : (
+          <button className="primary fu__answer" onClick={item.open} data-tip="Open it and answer in its note box; mark it done there">
+            <LuMessageSquareReply /> Answer
+          </button>
+        )}
       </div>
     </article>
   )

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { setUrl, useParam } from '../state/url'
 import { LuBot, LuCheck, LuCrown, LuInfo, LuMessageSquareReply, LuSend, LuTrash2, LuTriangleAlert, LuUser } from 'react-icons/lu'
 import type { TaskComment } from '@after-office/shared'
 import { useNow } from '../state/clock'
@@ -30,6 +31,17 @@ export function TaskTimeline({ taskId }: { taskId: string }) {
   }, [text])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // opened to answer (For you → Answer, ?tnote=1): the note box takes the focus, in view
+  const answering = useParam('tnote') === '1'
+  useEffect(() => {
+    if (!answering) return
+    const t = setTimeout(() => {
+      box.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      box.current?.focus({ preventScroll: true })
+      setUrl({ tnote: null })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [answering])
   const list = useMemo(() => comments ?? [], [comments])
 
   const send = async () => {

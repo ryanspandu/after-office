@@ -248,8 +248,6 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
 
         <TaskReports taskId={task.id} />
         {live && task.status !== 'todo' && <TaskDiff taskId={task.id} status={task.status} />}
-        {live && <TaskTimeline taskId={task.id} />}
-
         <Field label={mine ? 'Notes' : 'Description'} hint={mine ? undefined : 'Context, acceptance criteria, links. Sent to the agent along with the task.'}>
           <textarea
             rows={6}
@@ -258,6 +256,8 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
             placeholder="What does done look like?"
           />
         </Field>
+        {/* the timeline and the note box under the task's own text: read it, then answer */}
+        {live && <TaskTimeline taskId={task.id} />}
 
         {inReview && revising && (
           <div className="revise ui-drop">
@@ -329,7 +329,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
               </button>
             </>
           ) : (
-            <button onClick={() => (done ? set({ status: 'todo' }) : void finish())}>
+            <button className={done ? '' : 'primary'} onClick={() => (done ? set({ status: 'todo' }) : void finish())} data-tip={done ? undefined : 'A note still in the box is sent with it'}>
               {done ? (
                 <>
                   <LuRotateCcw /> Reopen
@@ -341,9 +341,8 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
               )}
             </button>
           )}
-          <button className="primary" onClick={onClose}>
-            Done editing
-          </button>
+          {/* changes are saved as they're made: this only closes it */}
+          <button onClick={onClose}>Close</button>
         </footer>
       </div>
     </Modal>
