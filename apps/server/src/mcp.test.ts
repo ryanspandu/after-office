@@ -251,7 +251,8 @@ describe('after-office MCP', () => {
     expect(on.started).toBe(1)
     expect(tasksRepo.get('bm-wait')!.awaitingApproval).toBeUndefined()
     expect(getPending('delegation-bm-wait')).toBeFalsy()
-    expect(reportsRepo.latest()[0].title).toContain('Boss mode on')
+    // no report about it: the navbar badge shows it while it's on
+    expect(reportsRepo.latest().some((r) => r.title.startsWith('Boss mode'))).toBe(false)
 
     // right after a report: delegates without approval, messages agents, sends back beyond the usual rounds
     queueRepo.removeAgent('w1') // earlier tests filled Nova's queue
@@ -274,13 +275,12 @@ describe('after-office MCP', () => {
     expect(JSON.parse(settingsRepo.get('pendingHires') ?? '[]').length).toBe(hiresBefore + 1)
     expect(bossModeState()).toMatchObject({ tasks: 1, messages: 1, sendBacks: MAX_MANAGER_REVISIONS + 1 })
 
-    // its time runs out: off, with a report of what happened; the guard is back
+    // its time runs out: off (no report either); the guard is back
     const s = bossModeState()!
     settingsRepo.set('bossMode', JSON.stringify({ ...s, until: Date.now() - 1 }))
     await tickTasks()
     expect(bossModeState()).toBeNull()
-    expect(reportsRepo.latest()[0].title).toBe('Boss mode ended')
-    expect(reportsRepo.latest()[0].text).toContain('started 1 task')
+    expect(reportsRepo.latest().some((r) => r.title.startsWith('Boss mode'))).toBe(false)
     expect((await call('message_agent', { agent: 'Rio', text: 'hi' })).isError).toBe(true)
     expect(endBossMode('owner')).toBe(false)
     onPromptSubmitted('mgr', 'hai')

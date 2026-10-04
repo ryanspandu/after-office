@@ -33,7 +33,7 @@ import { mainBusy, noteParallelFile, onParallelStopped, PARALLEL_NOTE, parallelB
 // dependencies, the quota brake and the periodic ticks. The rest, re-exported at the end:
 //   managerTasks.ts  the manager's tasks (delegate, approvals, edit, delete, send back)
 //   gate.ts          quality checks          crons.ts     daily jobs and webhook runs
-//   reports.ts       the manager's notes      bossMode.ts  Boss mode on/off
+//   reports.ts       the manager's notes      bossMode.ts  Boss mode on/off (no reports)
 //   origin.ts        why each turn happened (the Activity log)
 
 export const timezone = () => settingsRepo.get('timezone') ?? process.env.OFFICE_TZ ?? 'Asia/Jakarta'

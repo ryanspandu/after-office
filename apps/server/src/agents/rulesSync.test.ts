@@ -16,7 +16,7 @@ test('old office rules get the new ones; the rest of the file stays', () => {
   const own = '# Nara\nMy own notes, kept.\n'
   writeFileSync(join(dir, 'CLAUDE.md'), `${own}\n<!-- after-office:rules:office -->\n## Working in After Office\n- an old rule\n<!-- /after-office:rules:office -->\n`)
   writeFileSync(join(plain, 'CLAUDE.md'), '# No office rules here\n')
-  const row = (id: string, cwd: string) => ({ id, name: id, tmux_session: `ao-${id}`, cwd, desk: Math.floor(Math.random() * 1e6), role: '', model: 'haiku', permission_mode: 'default', session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'worker' as const })
+  const row = (id: string, cwd: string) => ({ id, name: id, tmux_session: `ao-${id}`, cwd, desk: Math.floor(Math.random() * 1e6), role: '', model: 'haiku', permission_mode: 'default' as const, session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'worker' as const })
   agentsRepo.insert(row('rs-a', dir))
   agentsRepo.insert(row('rs-b', plain))
 

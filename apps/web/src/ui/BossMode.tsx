@@ -178,14 +178,19 @@ export function BossModeModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-/** Navbar badge while it's on: when it ends; click to turn it off. */
+/** Navbar badge while it's on: just when it ends (the rest in its tooltip); click to turn it off. */
 export function BossModeBadge({ compact = false }: { compact?: boolean }) {
   const boss = useBossMode()
   if (!boss) return null
   return (
-    <button className="boss-badge" onClick={() => void turnOff()} {...tip(`Boss mode: the manager works without your approval until ${when(boss.until)}. Click to turn it off.`)}>
+    <button
+      className="boss-badge"
+      onClick={() => void turnOff()}
+      {...tip(`Boss mode until ${when(boss.until)}: the manager delegates, messages agents and sends work back without your approval. Hires, connector writes and quality checks still ask you. Click to turn it off.`)}
+    >
       <LuCrown />
-      {compact ? time(boss.until) : `Boss mode · until ${when(boss.until)}`}
+      {/* when it ends: the time today, the day too after that (it can run up to a week) */}
+      {new Date(boss.until).toDateString() === new Date().toDateString() ? time(boss.until) : `${new Date(boss.until).toLocaleDateString('en-GB', { weekday: 'short' })} ${time(boss.until)}`}
       {!compact && <LuX className="boss-badge__x" />}
     </button>
   )
