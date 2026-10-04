@@ -175,6 +175,65 @@ export async function gitCommit(root: string, rel: string, messageIn: unknown, a
   return { ok: true, hash, subject, as: who?.name ?? null }
 }
 
+/** A branch name git would take, and one that can't be read as an option (-x) or a path trick. */
+const BRANCH = /^(?!-)[A-Za-z0-9._\/+@#-]{1,200}$/
+const cleanBranch = (v: unknown) => {
+  const b = typeof v === 'string' ? v.trim() : ''
+  if (!BRANCH.test(b) || b.includes('..') || b.endsWith('/') || b.endsWith('.lock')) throw new AgentError('That is not a branch name', 400)
+  return b
+}
+
+/** The repo's branches: the one checked out, the local ones, and the remote ones that have no local copy yet. */
+export async function gitBranches(root: string, rel = '') {
+  const top = await repoOf(root, rel)
+  const r = await git(top, ['for-each-ref', '--sort=-committerdate', '--format=%(refname)%00%(refname:short)%00%(HEAD)', 'refs/heads', 'refs/remotes'])
+  const local: string[] = []
+  const remote: string[] = []
+  let current: string | null = null
+  for (const line of r.out.split('\n').filter(Boolean)) {
+    const [full, short, head] = line.split('\0')
+    if (full.startsWith('refs/heads/')) {
+      local.push(short)
+      if (head === '*') current = short
+    } else if (full.startsWith('refs/remotes/') && !full.endsWith('/HEAD')) {
+      // origin/feature → feature (the one remote's); a local copy of it hides it
+      remote.push(short.slice(short.indexOf('/') + 1))
+    }
+  }
+  return { current, local, remote: [...new Set(remote)].filter((b) => !local.includes(b)) }
+}
+
+/** Switch to a branch (a remote one gets a local copy that follows it). Changes git can carry over come along; ones
+ *  that would be overwritten stop it, and git says so. */
+export async function gitSwitch(root: string, rel: string, branchIn: unknown) {
+  const branch = cleanBranch(branchIn)
+  const top = await repoOf(root, rel)
+  const r = await gitWrite(top, gitOwner(top), ['switch', branch])
+  if (!r.ok) {
+    if (/would be overwritten|local changes|commit your changes or stash/i.test(r.out)) throw new AgentError('You have changes that would be lost by switching: commit or discard them first', 409)
+    if (/invalid reference|did not match|unknown/i.test(r.out)) throw new AgentError(`There is no branch called "${branch}"`, 404)
+    throw new AgentError(`Could not switch: ${said(r.out)}`, 400)
+  }
+  return { ok: true, branch }
+}
+
+/** Fetch and bring the branch up to date, only when that is a straight catch-up (no merge commits, no conflicts). */
+export async function gitPull(root: string, rel = '', agentId?: string) {
+  const top = await repoOf(root, rel)
+  const who = agentId ? agentsRepo.get(agentId) : gitOwner(top)
+  const r = await gitWrite(top, who, ['pull', '--ff-only'], 90_000)
+  if (!r.ok) {
+    if (r.timedOut) throw new AgentError('Pull took too long (the remote did not answer)', 500)
+    if (/permission denied|could not read from remote|authentication failed|publickey/i.test(r.out))
+      throw new AgentError(`The remote refused ${who?.name ?? 'the agent'}'s key: add its SSH key (Overview → Git) to the repo host. ${said(r.out)}`, 400)
+    if (/no tracking information|no upstream/i.test(r.out)) throw new AgentError('This branch is not on the remote yet: push it first', 400)
+    if (/not possible to fast-forward|diverge|refusing to merge/i.test(r.out)) throw new AgentError('Your branch and the remote both have new commits: this needs a merge, which an agent should do', 409)
+    if (/would be overwritten|local changes|commit your changes or stash/i.test(r.out)) throw new AgentError('You have changes that the pull would overwrite: commit or discard them first', 409)
+    throw new AgentError(`Could not pull: ${said(r.out)}`, 400)
+  }
+  return { ok: true, upToDate: /already up to date/i.test(r.out) }
+}
+
 /** Push the branch, as the folder's agent (its SSH key). No upstream yet: to origin, under the same name. */
 export async function gitPush(root: string, rel = '', agentId?: string) {
   const top = await repoOf(root, rel)

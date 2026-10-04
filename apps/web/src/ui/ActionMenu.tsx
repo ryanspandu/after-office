@@ -13,7 +13,7 @@ export interface MenuAction {
 
 /** `x`/`y`: the point it opens from (the button's bottom right: the menu's top right corner goes there); `above`: the button's top, where it opens
  *  upward from when there's no room below (so it never covers its button). */
-export function ActionMenu({ x, y, above, title, actions, onClose }: { x: number; y: number; above?: number; title?: string; actions: MenuAction[]; onClose: () => void }) {
+export function ActionMenu({ x, y, above, title, actions, onClose, className = '' }: { x: number; y: number; above?: number; title?: string; actions: MenuAction[]; onClose: () => void; className?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   // kept inside the screen: opens above when there's no room below
@@ -38,7 +38,7 @@ export function ActionMenu({ x, y, above, title, actions, onClose }: { x: number
     }
   }, [onClose])
   return createPortal(
-    <div ref={ref} className="fb-menu ui-pop" role="menu" style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: 'hidden' }}>
+    <div ref={ref} className={`fb-menu ui-pop ${className}`} role="menu" style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: 'hidden' }}>
       {title && <div className="fb-menu__name truncate">{title}</div>}
       {actions.map((a) => (
         <button

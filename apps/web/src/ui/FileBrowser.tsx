@@ -21,6 +21,9 @@ import {
   LuGitBranch,
   LuGitCommitHorizontal,
   LuArrowUpFromLine,
+  LuArrowDownToLine,
+  LuChevronDown,
+  LuCloud,
   LuLoader,
   LuUndo2,
   LuLink,
@@ -569,10 +572,35 @@ const GIT_MARK: Record<FolderGit['entries'][string], string> = {
 
 /** The folder's git repo in one line: branch, ahead / behind, what's not committed, the last commit. */
 function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: number; root: string; dir: string; onChanged: () => void }) {
-  const [busy, setBusy] = useState<'discard' | 'push' | null>(null)
+  const [busy, setBusy] = useState<'discard' | 'push' | 'pull' | 'switch' | null>(null)
   const [committing, setCommitting] = useState(false)
+  // the branches menu (the branch name opens it)
+  const [branches, setBranches] = useState<{ x: number; y: number; above: number; current: string | null; local: string[]; remote: string[] } | null>(null)
   // Push: a remote, a branch, and something to push (or no upstream yet: the first push sets it)
   const canPush = !!git.hasRemote && !!git.branch && (git.ahead === undefined || git.ahead > 0)
+  const call = async (action: 'discard' | 'push' | 'pull' | 'switch', body: Record<string, unknown> = {}) => {
+    setBusy(action)
+    try {
+      const r = await api(`/api/workspaces/git/${action}`, { method: 'POST', body: JSON.stringify({ root, path: dir, ...body }) })
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Could not ${action} (${r.status})`)
+      onChanged()
+    } catch (e) {
+      useDashboard.setState({ syncError: e instanceof Error ? e.message : `Could not ${action}` })
+    } finally {
+      setBusy(null)
+    }
+  }
+  const openBranches = async (el: HTMLElement) => {
+    if (busy) return
+    const box = el.getBoundingClientRect()
+    try {
+      const r = await api(`/api/workspaces/git/branches?${new URLSearchParams({ root, path: dir })}`)
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Could not list the branches (${r.status})`)
+      setBranches({ x: box.left, y: box.bottom + 4, above: box.top - 4, ...(await r.json()) })
+    } catch (e) {
+      useDashboard.setState({ syncError: e instanceof Error ? e.message : 'Could not list the branches' })
+    }
+  }
   const run = async (action: 'discard' | 'push') => {
     if (busy) return
     if (action === 'discard') {
@@ -588,22 +616,13 @@ function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: numb
       })
       if (!ok) return
     }
-    setBusy(action)
-    try {
-      const r = await api(`/api/workspaces/git/${action}`, { method: 'POST', body: JSON.stringify({ root, path: dir }) })
-      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Could not ${action} (${r.status})`)
-      onChanged()
-    } catch (e) {
-      useDashboard.setState({ syncError: e instanceof Error ? e.message : `Could not ${action}` })
-    } finally {
-      setBusy(null)
-    }
+    await call(action)
   }
   return (
     <div className="fb__git">
-      <span className="fb__git-branch" data-tip={`Git repo: ${git.repo}`}>
-        <LuGitBranch /> {git.branch ?? 'detached HEAD'}
-      </span>
+      <button className="fb__git-branch" onClick={(e) => void openBranches(e.currentTarget)} disabled={!!busy} aria-haspopup="menu" data-tip={`Git repo: ${git.repo}. Switch branch`}>
+        {busy === 'switch' ? <LuLoader className="spin" /> : <LuGitBranch />} {git.branch ?? 'detached HEAD'} <LuChevronDown className="fb__git-caret" />
+      </button>
       {git.ahead !== undefined && (git.ahead > 0 || (git.behind ?? 0) > 0) && (
         <span className="fb__git-sync" data-tip={`${git.ahead} to push, ${git.behind ?? 0} to pull`}>
           {git.ahead > 0 && <>↑{git.ahead}</>} {(git.behind ?? 0) > 0 && <>↓{git.behind}</>}
@@ -624,6 +643,11 @@ function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: numb
         </span>
       )}
       <span className="fb__git-actions">
+        {git.hasRemote && git.branch && (
+          <button className="small" onClick={() => void call('pull')} disabled={!!busy} data-tip={`Fetch and catch up with the remote${git.committer ? `, with ${git.committer.name}'s key` : ''}`}>
+            {busy === 'pull' ? <LuLoader className="spin" /> : <LuArrowDownToLine />} Pull{git.behind ? ` ↓${git.behind}` : ''}
+          </button>
+        )}
         {git.dirty > 0 && (
           <>
             <button className="small ghost danger-text" onClick={() => void run('discard')} disabled={!!busy} data-tip="Throw away every change not committed">
@@ -646,6 +670,20 @@ function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: numb
         )}
       </span>
       {committing && <CommitModal git={git} root={root} dir={dir} onClose={() => setCommitting(false)} onDone={onChanged} />}
+      {branches && (
+        <ActionMenu
+          className="fb-menu--branches"
+          x={branches.x}
+          y={branches.y}
+          above={branches.above}
+          title={`Switch branch · ${git.repo}`}
+          onClose={() => setBranches(null)}
+          actions={[
+            ...branches.local.map((b) => ({ icon: b === branches.current ? <LuCheck /> : <LuGitBranch />, label: b, run: () => (b === branches.current ? undefined : void call('switch', { branch: b })) })),
+            ...branches.remote.map((b) => ({ icon: <LuCloud />, label: b, run: () => void call('switch', { branch: b }) })),
+          ]}
+        />
+      )}
     </div>
   )
 }
