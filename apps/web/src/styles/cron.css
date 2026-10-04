@@ -15,11 +15,35 @@
 .cron-next > svg { color: var(--hl-ink); flex-shrink: 0; margin-top: 2px; }
 .cron-next--off { background: var(--card-2); color: var(--muted); }
 .cron-next--off > svg { color: var(--muted); }
-/* Daily: a job's controls fold away until it's tapped (ui/LeftSidebar.tsx CronRow) */
-.cron { cursor: pointer; }
-.cron__fold { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.18s ease; cursor: default; }
-.cron__fold > div { min-height: 0; overflow: hidden; }
-.cron__fold.is-open { grid-template-rows: 1fr; opacity: 1; }
-.cron__fold .row__actions { padding-top: 2px; }
+/* Daily: a job's controls fold away until it's tapped (ui/LeftSidebar.tsx CronRow): time | name on top; the switch
+   under the time, the agent and the buttons under the name */
+.cron { display: grid; grid-template-columns: 66px minmax(0, 1fr); column-gap: 9px; row-gap: 0; cursor: pointer; }
+.cron__side { grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: flex-start; }
+/* a height fold (a grid 0fr→1fr fold collapses to nothing inside this grid row) */
+.cron__fold { max-height: 0; overflow: hidden; opacity: 0; min-width: 0; cursor: default; transition: max-height 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.18s ease; }
+.cron__fold.is-open { max-height: 48px; opacity: 1; }
+/* the switch: right under the time, at its left, a little smaller than the usual one */
+.cron__fold--side { flex-shrink: 0; }
+.cron__fold--side > div { padding: 8px 0 2px 2px; }
+.cron__fold--side .toggle { width: 24px; height: 14px; }
+.cron__fold--side .toggle span::after { width: 10px; height: 10px; }
+.cron__fold--side .toggle input:checked + span::after { transform: translateX(10px); }
+/* always one line: when it's narrow, the agent's name is what gets cut short (…) */
+.cron__fold .row__actions { flex-wrap: nowrap; padding: 2px 0 1px; }
+.cron__fold .row__actions > button { flex-shrink: 0; }
+.cron__fold .row__actions .rs { flex: 1 1 auto; min-width: 0; }
+.cron__fold .rs__control { min-width: 0; flex-wrap: nowrap; }
+.cron__fold .rs__value-container { flex-wrap: nowrap; overflow: hidden; }
+.cron__fold .rs__single-value { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* a smaller arrow on this picker only */
+.cron__fold .rs__dropdown-indicator { padding: 2px 4px 2px 0; }
+.cron__fold .rs__dropdown-indicator svg { width: 14px; height: 14px; }
+/* the picker keeps room for a couple of letters and its arrow */
+.cron__fold .row__actions .rs { min-width: 52px; }
+/* a very narrow panel: the controls' line goes under the switch, across the whole row (still one line) */
+.cron { container-type: inline-size; }
+@container (max-width: 220px) {
+  .cron__fold:not(.cron__fold--side) { grid-column: 1 / -1; }
+}
 .cron__name:hover:not(:disabled) { text-decoration: none; }
 @media (prefers-reduced-motion: reduce) { .cron__fold { transition: none; } }

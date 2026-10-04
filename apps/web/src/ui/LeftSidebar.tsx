@@ -190,9 +190,20 @@ function CronRow({
       className={`row cron${cron.enabled ? '' : ' row--off'}${open ? ' is-open' : ''}`}
       onClick={(e) => e.currentTarget.contains(e.target as Node) && !(e.target as Element).closest('.cron__fold') && onOpen()}
     >
-      <div className="cron__time" data-tip={nextLabel ? `Runs on its own · next: ${nextLabel}` : cron.enabled ? 'Assign an agent to run it' : 'Off: turn it on to run on schedule'}>
-        {next}
-        {cron.times.length > 1 && <span className="cron__more">+{cron.times.length - 1}</span>}
+      {/* the time, and right under it the on/off switch (folded until the job is tapped) */}
+      <div className="cron__side">
+        <div className="cron__time" data-tip={nextLabel ? `Runs on its own · next: ${nextLabel}` : cron.enabled ? 'Assign an agent to run it' : 'Off: turn it on to run on schedule'}>
+          {next}
+          {cron.times.length > 1 && <span className="cron__more">+{cron.times.length - 1}</span>}
+        </div>
+        <div className={`cron__fold cron__fold--side${open ? ' is-open' : ''}`} inert={!open || undefined}>
+          <div>
+            <label className="toggle" data-tip={cron.enabled ? 'Disable' : 'Enable'}>
+              <input type="checkbox" checked={cron.enabled} onChange={onToggle} />
+              <span />
+            </label>
+          </div>
+        </div>
       </div>
       <div className="row__body">
         <button className="cron__name" aria-expanded={open} {...tip(cron.name)}>
@@ -208,35 +219,31 @@ function CronRow({
           </span>
           {flash && <span className="flash">{flash}</span>}
         </div>
-        {/* the controls, folded until the job is tapped (styles: cron.css .cron__fold) */}
-        <div className={`cron__fold${open ? ' is-open' : ''}`} inert={!open || undefined}>
+      </div>
+      {/* the rest of the controls, folded until the job is tapped (styles: cron.css .cron__fold) */}
+      <div className={`cron__fold${open ? ' is-open' : ''}`} inert={!open || undefined}>
         <div>
-        <div className="row__actions">
-          <label className="toggle" data-tip={cron.enabled ? 'Disable' : 'Enable'}>
-            <input type="checkbox" checked={cron.enabled} onChange={onToggle} />
-            <span />
-          </label>
-          <AgentSelect size="sm" value={cron.agentId ?? ''} onChange={onAssign} />
-          <button
-            className="icon-btn small"
-            data-tip="Run now"
-            aria-label="Run now"
-            disabled={!agent}
-            onClick={async () => {
-              setFlash(await runCronNow(cron))
-              setTimeout(() => setFlash(''), 2500)
-            }}
-          >
-            <LuPlay />
-          </button>
-          <button className="icon-btn small" data-tip="Edit daily job" aria-label="Edit daily job" onClick={onEdit}>
-            <LuPencil />
-          </button>
-          <button className="icon-btn small ghost" data-tip="Delete daily job" aria-label="Delete daily job" onClick={onRemove}>
-            <LuX />
-          </button>
-        </div>
-        </div>
+          <div className="row__actions">
+            <AgentSelect size="sm" value={cron.agentId ?? ''} onChange={onAssign} />
+            <button
+              className="icon-btn small"
+              data-tip="Run now"
+              aria-label="Run now"
+              disabled={!agent}
+              onClick={async () => {
+                setFlash(await runCronNow(cron))
+                setTimeout(() => setFlash(''), 2500)
+              }}
+            >
+              <LuPlay />
+            </button>
+            <button className="icon-btn small" data-tip="Edit daily job" aria-label="Edit daily job" onClick={onEdit}>
+              <LuPencil />
+            </button>
+            <button className="icon-btn small ghost" data-tip="Delete daily job" aria-label="Delete daily job" onClick={onRemove}>
+              <LuX />
+            </button>
+          </div>
         </div>
       </div>
     </li>
