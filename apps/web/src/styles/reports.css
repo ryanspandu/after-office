@@ -188,3 +188,39 @@
 /* View all: a job's steps like the rest of the list (its guide line on the left, no rules between them: rounded tiles with a gap) */
 .reports-modal__list .job-row__steps { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 4px 22px; padding: 0 0 0 8px; border-left: 2px solid var(--line); }
 .reports-modal__list .job-row__steps > .report-row + .report-row { border-top: none; }
+/* ── an action on picked reports, running (ui/Reports.tsx runBulk) ── */
+.reports-bulk.is-running { position: relative; gap: 8px; padding: 6px 10px 9px; border-radius: 10px; background: var(--card-2); overflow: hidden; font-size: 12.5px; font-weight: 600; }
+.reports-bulk.is-running > svg { flex-shrink: 0; color: var(--hl-ink); }
+.reports-bulk--delete.is-running > svg { color: var(--danger); }
+.reports-bulk__progress-text { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
+.reports-bulk__progress-text .muted { font-weight: 500; font-variant-numeric: tabular-nums; }
+.reports-bulk__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: color-mix(in srgb, var(--line) 80%, transparent); }
+.reports-bulk__bar > span { display: block; height: 100%; background: var(--hl); transition: width 0.3s ease; }
+.reports-bulk--delete .reports-bulk__bar > span { background: var(--danger); }
+
+/* the rows it's working on: can't be picked or opened meanwhile; a moving sheen while they wait */
+.report-row.is-deleting, .report-row.is-updating { position: relative; pointer-events: none; }
+.report-row.is-deleting > :not(.row-busy), .report-row.is-updating > :not(.row-busy) { opacity: 0.45; transition: opacity 0.2s; }
+.report-row.is-deleting::after, .report-row.is-updating::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--hl) 10%, transparent) 50%, transparent 80%) 0 0 / 220% 100%;
+  animation: row-sheen 1.2s linear infinite;
+}
+.report-row.is-deleting::after { background-image: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--danger) 10%, transparent) 50%, transparent 80%); }
+.report-row.is-deleting .report-row__title { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--danger) 60%, transparent); }
+/* deleted: folds away (height and fade) before the page reloads without it */
+.report-row.is-removing { animation: row-remove 0.26s cubic-bezier(0.4, 0, 0.2, 1) forwards; overflow: hidden; pointer-events: none; }
+.row-busy { position: absolute; top: 8px; right: 10px; display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--card); box-shadow: var(--shadow); }
+.row-busy--deleting { color: var(--danger); }
+.row-busy--updating { color: var(--hl-ink); }
+.row-busy__spin { animation: busy-spin 0.8s linear infinite; }
+@keyframes row-sheen { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@keyframes row-remove {
+  0% { opacity: 1; max-height: 160px; transform: none; }
+  60% { opacity: 0; transform: translateX(-12px); }
+  100% { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; margin: 0; transform: translateX(-12px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .report-row.is-deleting::after, .report-row.is-updating::after, .row-busy__spin { animation: none; }
+  .report-row.is-removing { animation-duration: 0.01s; }
+}

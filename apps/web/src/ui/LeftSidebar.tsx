@@ -8,7 +8,7 @@ import type { CronJob, OfficeTask, TaskPriority, TaskStatus } from '@after-offic
 import { describeDays, runCronNow } from '../state/cronRunner'
 import { TaskRunFields, type TaskRun } from './TaskRun'
 import { useClock, useNow, zonedParts } from '../state/clock'
-import { useDashboard } from '../state/dashboard'
+import { useDashboard, useLeaving } from '../state/dashboard'
 import { useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { CronTrigger } from './CronTrigger'
 import { FoldersTab } from './ProjectsTab'
@@ -183,11 +183,12 @@ function CronRow({
   const next = cron.times.find((t) => toMin(t) >= nowMin) ?? cron.times[0]
   const timezone = useClock((s) => s.timezone)
   const nextLabel = nextRunLabel(cron, useNow(30_000), timezone)
+  const leaving = useLeaving(cron.id)
   return (
     // a tap anywhere on the job (but its controls) unfolds or folds its controls; a pick in the agent menu (drawn
     // outside the row, but its clicks bubble here through React) doesn't count
     <li
-      className={`row cron${cron.enabled ? '' : ' row--off'}${open ? ' is-open' : ''}`}
+      className={`row cron${cron.enabled ? '' : ' row--off'}${open ? ' is-open' : ''}${leaving ? ' is-leaving' : ''}`}
       onClick={(e) => e.currentTarget.contains(e.target as Node) && !(e.target as Element).closest('.cron__fold') && onOpen()}
     >
       {/* the time, and right under it the on/off switch (folded until the job is tapped) */}
@@ -413,6 +414,8 @@ const TAB_KEY = 'after-office:task-panel-tab'
 export function TaskPanel() {
   const ready = useWorkReady()
   const { tasks, toggleTask } = useDashboard(useShallow((s) => ({ tasks: s.tasks, toggleTask: s.toggleTask })))
+  // deleted ones fold away first (styles: .is-leaving)
+  const leaving = useDashboard((s) => s.leaving)
   const agents = useOffice((s) => s.agents)
   const now = useNow(60_000).getTime()
   const [showDone, setShowDone] = useState(false)
@@ -455,7 +458,7 @@ export function TaskPanel() {
     const due = dueInfo(t.deadline, now)
     const agent = agents.find((a) => a.id === t.agentId)
     return (
-      <li key={t.id} className={`task-row${isDone ? ' task--done' : ''}`}>
+      <li key={t.id} className={`task-row${isDone ? ' task--done' : ''}${leaving[t.id] ? ' is-leaving' : ''}`}>
         <input type="checkbox" checked={isDone} onChange={() => toggleTask(t.id)} aria-label={isDone ? 'Mark not done' : 'Mark done'} />
         <button className="task-row__main" onClick={() => openUrl({ task: t.id })} data-tip={t.title}>
           <span className="task-row__title">

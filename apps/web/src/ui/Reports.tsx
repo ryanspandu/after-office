@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { LuSlidersHorizontal, LuCheckCheck, LuMail, LuMinus, LuChevronLeft, LuChevronRight, LuCircleAlert, LuCircleCheck, LuCircleX, LuClock, LuHourglass, LuLoader, LuRefreshCw, LuHand, LuCrown, LuFileText, LuFolder, LuLayers, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
 import type { OfficeTask, ReportOutcome, WorkJob, WorkReport } from '@after-office/shared'
@@ -14,6 +14,7 @@ import { confirm } from './Confirm'
 import { tip } from './Tooltip'
 import { useWorkReady } from '../state/live'
 import { api } from '../state/auth'
+import { beginBusy } from '../state/busy'
 import { openUrl, setUrl, useUrl } from '../state/url'
 import { RangePicker, type PickedRange } from './DateRangePicker'
 import { Select } from './Select'
@@ -53,6 +54,7 @@ export function ReportRow({
   picked,
   checked,
   onCheck,
+  busy,
 }: {
   r: WorkReport
   now: number
@@ -62,12 +64,18 @@ export function ReportRow({
   /** View all: the row can be picked for an action on several (onCheck) */
   checked?: boolean
   onCheck?: (on: boolean) => void
+  /** an action on it is running (it can't be picked meanwhile); "removing": deleted, folding away */
+  busy?: RowBusy
 }) {
   const agent = useOffice((s) => s.agents.find((a) => a.id === r.agentId))
   const firstLine = r.text.replace(/[#*`>_-]/g, '').split('\n').find((l) => l.trim()) ?? ''
   return (
-    <li className={`report-row${r.read ? '' : ' report-row--unread'}${picked ? ' is-picked' : ''}${onCheck ? ' report-row--checkable' : ''}${checked ? ' is-checked' : ''}`} aria-current={picked || undefined}>
-      {onCheck && <input type="checkbox" className="report-row__check" checked={!!checked} onChange={(e) => onCheck(e.target.checked)} aria-label={`Pick “${r.title}”`} />}
+    <li
+      className={`report-row${r.read ? '' : ' report-row--unread'}${picked ? ' is-picked' : ''}${onCheck ? ' report-row--checkable' : ''}${checked ? ' is-checked' : ''}${busy ? ` is-${busy}` : ''}`}
+      aria-current={picked || undefined}
+      aria-busy={busy ? true : undefined}
+    >
+      {onCheck && <input type="checkbox" className="report-row__check" checked={!!checked} disabled={!!busy} onChange={(e) => onCheck(e.target.checked)} aria-label={`Pick “${r.title}”`} />}
       <button className="report-row__main" onClick={onOpen}>
         <KindIcon r={r} />
         <span className="report-row__body">
@@ -94,7 +102,19 @@ export function ReportRow({
         </span>
         {!r.read && <span className="report-row__dot" aria-label="Unread" />}
       </button>
+      {busy && busy !== 'removing' && <BusyTag busy={busy} />}
     </li>
+  )
+}
+
+/** What a row being acted on is going through (Reports → pick → Delete / Read / Unread). */
+export type RowBusy = 'deleting' | 'updating' | 'removing'
+function BusyTag({ busy }: { busy: RowBusy }) {
+  return (
+    <span className={`row-busy row-busy--${busy}`} aria-hidden>
+      <LuLoader className="row-busy__spin" />
+      {busy === 'deleting' ? 'Deleting…' : 'Updating…'}
+    </span>
   )
 }
 
@@ -200,6 +220,7 @@ function JobRow({
   holds,
   checked,
   onCheck,
+  busy,
 }: {
   g: ReportGroup
   now: number
@@ -208,6 +229,8 @@ function JobRow({
   holds?: boolean
   checked?: 'all' | 'some' | 'none'
   onCheck?: (on: boolean) => void
+  /** every report of it is being acted on */
+  busy?: RowBusy
 }) {
   const [open, setOpen] = useState(!!holds)
   useEffect(() => {
@@ -228,11 +251,15 @@ function JobRow({
   const firstLine = latest.text.replace(/[#*`>_-]/g, '').split('\n').find((l) => l.trim()) ?? ''
   const steps = g.reports.length
   return (
-    <li className={`report-row job-row${unread ? ' report-row--unread' : ''}${open ? ' is-open' : ''}${onCheck ? ' report-row--checkable' : ''}${checked === 'all' ? ' is-checked' : ''}`}>
+    <li
+      className={`report-row job-row${unread ? ' report-row--unread' : ''}${open ? ' is-open' : ''}${onCheck ? ' report-row--checkable' : ''}${checked === 'all' ? ' is-checked' : ''}${busy ? ` is-${busy}` : ''}`}
+      aria-busy={busy ? true : undefined}
+    >
       {onCheck && (
         <input
           type="checkbox"
           className="report-row__check"
+          disabled={!!busy}
           checked={checked === 'all'}
           ref={(el) => void (el && (el.indeterminate = checked === 'some'))}
           onChange={(e) => onCheck(e.target.checked)}
@@ -263,6 +290,7 @@ function JobRow({
         {unread && <span className="report-row__dot" aria-label="Unread" />}
         <LuChevronRight className={`job-row__chev${open ? ' open' : ''}`} />
       </button>
+      {busy && busy !== 'removing' && <BusyTag busy={busy} />}
       {open && (
         <ul className="job-row__steps ui-drop ui-stagger">
           {reports.map((r) => (step ? <Fragment key={r.id}>{step(r)}</Fragment> : <ReportRow key={r.id} r={r} now={now} showJob={false} onOpen={() => openUrl({ report: r.id })} />))}
@@ -400,13 +428,19 @@ interface ReportPage {
  */
 export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onMinimize?: () => void }) {
   const markAllReportsRead = useDashboard((s) => s.markAllReportsRead)
-  const { markReport, removeReport } = useDashboard(useShallow((s) => ({ markReport: s.markReport, removeReport: s.removeReport })))
   // full size (remembered); its chip goes once it's open again
   const max = useModalMaximize(1180, 'after-office:reports-full')
   useEffect(() => useMinimized.getState().remove(REPORTS), [])
   // reports picked for one action on all of them (read, unread, delete)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [reload, setReload] = useState(0)
+  // an action on the picked ones, running: which, on what, how far (the rows show it; nothing else can be picked
+  // for it meanwhile). "removing": deleted, the rows fold away before the list reloads without them.
+  const [bulk, setBulk] = useState<BulkRun | null>(null)
+  const bulkRef = useRef<BulkRun | null>(null)
+  bulkRef.current = bulk
+  // deleted here: never drawn again, even if a refresh races the reload
+  const [gone, setGone] = useState<Set<string>>(new Set())
   const anyUnread = useDashboard((s) => s.reports.some((r) => !r.read))
   // the newest report the dashboard knows: a new one arriving (or one changing) refreshes the page
   // refetch when a report arrives, is read, or is (un)tagged
@@ -455,6 +489,8 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
     ...(days ? { from: String(dayStart(days[0])), to: String(dayStart(days[1]) + DAY - 1) } : {}),
   }).toString()
   useEffect(() => {
+    // the page holds still while an action on it runs (its rows show the progress); it reloads once that's done
+    if (bulkRef.current) return
     let gone = false
     api(`/api/reports?${query}`)
       .then(async (r) => {
@@ -480,6 +516,54 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
   const picked = params.ri ?? ''
   const pickedReport = useDashboard((s) => s.reports.find((r) => r.id === picked)) ?? data?.items.find((r) => r.id === picked)
   const pick = (id: string) => (wide ? setUrl({ ri: id }) : openUrl({ report: id }))
+  const rowBusy = (id: string): RowBusy | undefined =>
+    bulk?.ids.has(id) ? (bulk.removing ? 'removing' : bulk.kind === 'delete' ? 'deleting' : 'updating') : undefined
+  /** Read / Unread / Delete on the picked ones: in about ten steps, so the bar moves; the rows show it meanwhile. */
+  const runBulk = async (kind: BulkRun['kind']) => {
+    const ids = [...selected]
+    if (!ids.length || bulkRef.current) return
+    const n = ids.length
+    const idSet = new Set(ids)
+    const what = `${n} report${n === 1 ? '' : 's'}`
+    const busy = beginBusy(kind === 'delete' ? 'delete' : 'save', what, n)
+    const start: BulkRun = { kind, ids: idSet, done: 0, total: n, removing: false }
+    bulkRef.current = start
+    setBulk(start)
+    setSelected(new Set())
+    const size = Math.max(1, Math.ceil(n / 10))
+    let done = 0
+    let failed = ''
+    for (let i = 0; i < n; i += size) {
+      const chunk = ids.slice(i, i + size)
+      const res = await api(kind === 'delete' ? '/api/reports/bulk/delete' : '/api/reports/bulk/read', { method: 'POST', body: JSON.stringify(kind === 'delete' ? { ids: chunk } : { ids: chunk, read: kind === 'read' }) }, { activity: false }).catch(() => null)
+      if (!res?.ok) {
+        failed = (await res?.json().catch(() => null))?.error ?? `Could not ${kind === 'delete' ? 'delete' : 'update'} ${done ? 'all of them' : 'them'}${res ? ` (${res.status})` : ': the server is unreachable'}`
+        break
+      }
+      done += chunk.length
+      busy.progress(done)
+      setBulk((b) => (b ? { ...b, done } : b))
+    }
+    const finished = new Set(ids.slice(0, done))
+    // the dashboard's own copy too (the server's update also comes over the live feed)
+    useDashboard.setState((s) =>
+      kind === 'delete' ? { reports: s.reports.filter((r) => !finished.has(r.id)) } : { reports: s.reports.map((r) => (finished.has(r.id) ? { ...r, read: kind === 'read' } : r)) },
+    )
+    if (kind === 'delete' && done) {
+      // fold the deleted rows away, then they're gone for good
+      const removing: BulkRun = { ...start, ids: finished, done, removing: true }
+      bulkRef.current = removing
+      setBulk(removing)
+      if (finished.has(picked)) setUrl({ ri: null })
+      await new Promise((r) => setTimeout(r, 260))
+      setGone((g) => new Set([...g, ...finished]))
+    }
+    busy.end(failed || undefined)
+    if (failed) useDashboard.setState({ syncError: failed })
+    bulkRef.current = null
+    setBulk(null)
+    setReload((x) => x + 1)
+  }
   const first = data && data.total ? (data.page - 1) * data.per + 1 : 0
   const last = data ? Math.min(data.total, data.page * data.per) : 0
   return (
@@ -610,25 +694,19 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
             items={data.items}
             selected={selected}
             onSelect={setSelected}
-            onRead={(read) => {
-              for (const id of selected) markReport(id, read)
-              setSelected(new Set())
-              setTimeout(() => setReload((n) => n + 1), 400)
-            }}
+            bulk={bulk}
+            onRead={(read) => void runBulk(read ? 'read' : 'unread')}
             onDelete={async () => {
               const n = selected.size
               if (!(await confirm({ title: `Delete ${n} report${n === 1 ? '' : 's'}?`, message: "They're removed from Reports. This can't be undone.", confirmLabel: 'Delete' }))) return
-              for (const id of selected) removeReport(id)
-              if (selected.has(picked)) setUrl({ ri: null })
-              setSelected(new Set())
-              setTimeout(() => setReload((n) => n + 1), 400)
+              void runBulk('delete')
             }}
           />
         )}
         <ul key={query} className={`list reports-modal__list ui-stagger${selected.size ? ' is-picking' : ''}`}>
           {/* one item per piece of work (a job's or a task's reports, on this page), opening into its steps */}
           {withDays(
-            groupReports(data?.items ?? []),
+            groupReports((data?.items ?? []).filter((r) => !gone.has(r.id))),
             (g) => g.reports[0].finishedAt,
             now,
             (g) => {
@@ -649,10 +727,12 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
                   onOpen={() => pick(r.id)}
                   checked={selected.has(r.id)}
                   onCheck={(on) => checkOne([r.id], on)}
+                  busy={rowBusy(r.id)}
                 />
               )
               if (g.reports.length === 1) return row(g.reports[0])
               const ids = g.reports.map((r) => r.id)
+              const jobBusy = ids.every((id) => rowBusy(id)) ? rowBusy(ids[0]) : undefined
               const n = ids.filter((id) => selected.has(id)).length
               return (
                 <JobRow
@@ -663,6 +743,7 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
                   holds={wide && ids.includes(picked)}
                   checked={n === 0 ? 'none' : n === ids.length ? 'all' : 'some'}
                   onCheck={(on) => checkOne(ids, on)}
+                  busy={jobBusy}
                 />
               )
             },
@@ -710,9 +791,51 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
 }
 
 /** View all: pick reports on this page, then one action on all of them. */
-function BulkBar({ items, selected, onSelect, onRead, onDelete }: { items: WorkReport[]; selected: Set<string>; onSelect: (s: Set<string>) => void; onRead: (read: boolean) => void; onDelete: () => void }) {
+interface BulkRun {
+  kind: 'read' | 'unread' | 'delete'
+  ids: Set<string>
+  done: number
+  total: number
+  removing: boolean
+}
+
+function BulkBar({
+  items,
+  selected,
+  onSelect,
+  onRead,
+  onDelete,
+  bulk,
+}: {
+  items: WorkReport[]
+  selected: Set<string>
+  onSelect: (s: Set<string>) => void
+  onRead: (read: boolean) => void
+  onDelete: () => void
+  bulk: BulkRun | null
+}) {
   const all = items.length > 0 && items.every((r) => selected.has(r.id))
   const some = selected.size > 0
+  // running: what it's doing and how far, in place of the actions
+  if (bulk) {
+    const pct = Math.round((bulk.done / bulk.total) * 100)
+    const verb = bulk.kind === 'delete' ? (bulk.removing ? 'Deleted' : 'Deleting') : bulk.kind === 'read' ? 'Marking read' : 'Marking unread'
+    return (
+      <div className={`reports-bulk is-on is-running reports-bulk--${bulk.kind}`} role="status" aria-live="polite">
+        <LuLoader className="row-busy__spin" />
+        <span className="reports-bulk__progress-text">
+          {verb} {bulk.total} report{bulk.total === 1 ? '' : 's'}
+          {!bulk.removing && '…'}
+          <span className="muted">
+            {bulk.done}/{bulk.total}
+          </span>
+        </span>
+        <span className="reports-bulk__bar" aria-hidden>
+          <span style={{ width: `${pct}%` }} />
+        </span>
+      </div>
+    )
+  }
   return (
     <div className={`reports-bulk${some ? ' is-on' : ''}`}>
       <label className="reports-bulk__all">

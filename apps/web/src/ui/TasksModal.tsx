@@ -20,7 +20,7 @@ import {
 import { LuArchive, LuMinus, LuArrowDown, LuArrowUp, LuArrowUpDown, LuColumns3, LuCalendar, LuKanban, LuList, LuPlus, LuSearch, LuSlidersHorizontal, LuX, LuGripVertical, LuChevronLeft, LuChevronRight } from 'react-icons/lu'
 import type { OfficeTask, TaskStatusDef } from '@after-office/shared'
 import { useClock, useNow } from '../state/clock'
-import { useDashboard } from '../state/dashboard'
+import { useDashboard, useLeaving } from '../state/dashboard'
 import { useOffice, avatarStyle } from '../state/store'
 import { liveApi, useLive } from '../state/live'
 import { Modal } from './Modal'
@@ -464,6 +464,8 @@ function TaskRow({ task: t, onOpen }: { task: OfficeTask; onOpen: () => void }) 
   const due = dueInfo(t.deadline, now)
   const done = t.status === 'done'
   const mobile = useMediaQuery(MOBILE)
+  // deleted: folds away (styles: .is-leaving)
+  const leaving = useLeaving(t.id) ? ' is-leaving' : ''
   const statusDef = useStatusDef(t)
   const agent = useOffice((s) => s.agents.find((a) => a.id === t.agentId))
   const timezone = useClock((s) => s.timezone)
@@ -471,7 +473,7 @@ function TaskRow({ task: t, onOpen }: { task: OfficeTask; onOpen: () => void }) 
   if (mobile) {
     const status = statusDef
     return (
-      <div className={`task-m${done ? ' task--done' : ''}`}>
+      <div className={`task-m${done ? ' task--done' : ''}${leaving}`}>
         <input type="checkbox" checked={done} onChange={() => toggleTask(t.id)} aria-label={done ? 'Mark not done' : 'Mark done'} />
         <button className="task-m__main" onClick={onOpen}>
           <span className="task-m__title">
@@ -499,7 +501,7 @@ function TaskRow({ task: t, onOpen }: { task: OfficeTask; onOpen: () => void }) 
     )
   }
   return (
-    <div className={`task-table__row${done ? ' task--done' : ''}`}>
+    <div className={`task-table__row${done ? ' task--done' : ''}${leaving}`}>
       <input type="checkbox" checked={done} onChange={() => toggleTask(t.id)} aria-label={done ? 'Mark not done' : 'Mark done'} />
       <button className="row__title truncate task-table__title" data-tip="Open task" onClick={onOpen}>
         <BlockedBadge task={t} />
@@ -640,9 +642,10 @@ function Card({ task: t, overlay, onOpen, grip }: { task: OfficeTask; overlay?: 
   const due = dueInfo(t.deadline, now)
   const timezone = useClock((s) => s.timezone)
   const date = dateTime(t.deadline, timezone)
+  const leaving = useLeaving(t.id)
 
   return (
-    <article className={`card-task card-task--grip${done ? ' card-task--done' : ''}${overlay ? ' card-task--overlay' : ''}`}>
+    <article className={`card-task card-task--grip${done ? ' card-task--done' : ''}${overlay ? ' card-task--overlay' : ''}${leaving ? ' is-leaving' : ''}`}>
       {(grip || overlay) && (
         <button type="button" className="card-task__grip" aria-label={`Move “${t.title}”`} {...grip}>
           <LuGripVertical />

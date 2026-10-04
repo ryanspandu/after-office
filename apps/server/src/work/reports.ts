@@ -52,6 +52,29 @@ export function markReport(id: string, read: boolean) {
   publishWork('reports')
 }
 
+/** Several at once (Reports → pick → Read / Unread / Delete): one broadcast, not one per report. Unknown ids are
+ *  skipped (another tab may have deleted them already). Returns how many were changed. */
+const MAX_BULK = 500
+const bulkIds = (ids: unknown): string[] => {
+  if (!Array.isArray(ids) || ids.length > MAX_BULK || ids.some((x) => typeof x !== 'string')) throw new AgentError(`ids: a list of at most ${MAX_BULK} report ids`, 400)
+  return [...new Set(ids as string[])]
+}
+export function markReports(ids: unknown, read: boolean) {
+  let n = 0
+  for (const id of bulkIds(ids)) {
+    const r = reportsRepo.get(id)
+    if (r && r.read !== read) (reportsRepo.put({ ...r, read }), n++)
+  }
+  if (n) publishWork('reports')
+  return n
+}
+export function removeReports(ids: unknown) {
+  let n = 0
+  for (const id of bulkIds(ids)) if (reportsRepo.get(id)) (reportsRepo.remove(id), n++)
+  if (n) publishWork('reports')
+  return n
+}
+
 export function markAllReportsRead() {
   for (const r of reportsRepo.latest(1000)) if (!r.read) reportsRepo.put({ ...r, read: true })
   publishWork('reports')

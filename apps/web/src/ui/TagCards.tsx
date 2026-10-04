@@ -47,6 +47,8 @@ function summary(tasks: OfficeTask[], now: number) {
 export function TagCards({ onChange }: { onChange: (tagId: string) => void }) {
   const tasks = useDashboard((s) => s.tasks)
   const tags = useDashboard((s) => s.tags)
+  // a deleted tag's card folds away first (styles: .is-leaving)
+  const leaving = useDashboard((s) => s.leaving)
   const now = useNow(60_000).getTime()
   const [showAll, setShowAll] = useState(false)
   const { focus, setFocus, box } = useCardFocus()
@@ -68,6 +70,7 @@ export function TagCards({ onChange }: { onChange: (tagId: string) => void }) {
             now,
           )}
           on={focus === t.id}
+          leaving={leaving[t.id]}
           onFocus={() => setFocus(t.id)}
           onPick={() => onChange(t.id)}
         />
@@ -82,12 +85,12 @@ export function TagCards({ onChange }: { onChange: (tagId: string) => void }) {
   )
 }
 
-function TagCard({ i, title, icon, color, s, on, onFocus, onPick }: { i: number; title: string; icon: ReactNode; color: string; s: ReturnType<typeof summary>; on: boolean; onFocus: () => void; onPick: () => void }) {
+function TagCard({ i, title, icon, color, s, on, leaving, onFocus, onPick }: { i: number; title: string; icon: ReactNode; color: string; s: ReturnType<typeof summary>; on: boolean; leaving?: boolean; onFocus: () => void; onPick: () => void }) {
   const agents = useOffice((st) => st.agents)
   const state = s.open ? (s.late ? 'late' : 'active') : s.done ? 'done' : 'empty'
   return (
     // a click on the card moves the focus to it; only its footer opens the tag
-    <div role="option" aria-selected={on} className={`tag-card tag-card--static${on ? ' is-on' : ''}`} style={{ ['--c' as string]: color, ['--i' as string]: Math.min(i, 12) }} onClick={onFocus}>
+    <div role="option" aria-selected={on} className={`tag-card tag-card--static${on ? ' is-on' : ''}${leaving ? ' is-leaving' : ''}`} style={{ ['--c' as string]: color, ['--i' as string]: Math.min(i, 12) }} onClick={onFocus}>
       <span className="tag-card__top">
         <span className="tag-card__icon">{icon}</span>
         <span className={`tag-card__badge tag-card__badge--${state}`}>{state === 'late' ? `${s.late} late` : state}</span>

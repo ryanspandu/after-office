@@ -164,6 +164,8 @@ interface DashboardStore {
   toggleFullscreen: () => void
   /** Last failed save in live mode, shown to the user. */
   syncError: string | null
+  /** deleted, playing their way out (the row folds away) before they leave the lists: see useLeaving */
+  leaving: Record<string, true>
   /** Back to the built-in sample data (leaving live mode). */
   loadDemoWork: () => void
 }
@@ -217,6 +219,9 @@ export function mergeServer<T extends { id: string }>(server: T[], local: T[]): 
 }
 
 /** Stable-enough ids that the client can create before the server has seen the document. */
+/** How long a deleted row takes to fold away (styles: .is-leaving, the same length). */
+export const LEAVE_MS = 240
+
 const newId = (prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 12)}`
 
 export const useDashboard = create<DashboardStore>((set, get) => {
@@ -224,6 +229,18 @@ export const useDashboard = create<DashboardStore>((set, get) => {
   // text fields save as you type, so task saves are debounced
   const saveTask = (id: string) => push(`/api/tasks/${id}`, id, () => get().tasks.find((x) => x.id === id) ?? null, 'PUT', 400)
   const saveCron = (id: string) => push(`/api/crons/${id}`, id, () => get().crons.find((x) => x.id === id) ?? null)
+  // a delete: the row plays its way out first (styles: .is-leaving), then it's removed and the server told
+  const leaveThen = (id: string, remove: () => void) => {
+    if (get().leaving[id]) return
+    set((s) => ({ leaving: { ...s.leaving, [id]: true } }))
+    setTimeout(() => {
+      remove()
+      set((s) => {
+        const { [id]: _, ...rest } = s.leaving
+        return { leaving: rest }
+      })
+    }, LEAVE_MS)
+  }
   // live mode starts empty: the server's snapshot fills it (sample data first would flash and then jump)
   const demo = useOffice.getState().source === 'demo'
   return {
@@ -236,6 +253,7 @@ export const useDashboard = create<DashboardStore>((set, get) => {
     range: { preset: 'today', from: today(), to: today() },
     fullscreen: false,
     syncError: null,
+    leaving: {},
 
     addCron: (c) => {
       const id = newId('cron')
@@ -247,10 +265,11 @@ export const useDashboard = create<DashboardStore>((set, get) => {
       // run history is server-owned; don't echo local lastRuns back
       if (!('lastRuns' in patch && Object.keys(patch).length === 1)) saveCron(id)
     },
-    removeCron: (id) => {
-      set((s) => ({ crons: s.crons.filter((c) => c.id !== id) }))
-      push(`/api/crons/${id}`, id, () => undefined, 'DELETE')
-    },
+    removeCron: (id) =>
+      leaveThen(id, () => {
+        set((s) => ({ crons: s.crons.filter((c) => c.id !== id) }))
+        push(`/api/crons/${id}`, id, () => undefined, 'DELETE')
+      }),
     addTask: (t) => {
       const id = newId('task')
       set((s) => ({ tasks: [...s.tasks, { status: 'todo', ...t, id }] }))
@@ -264,10 +283,11 @@ export const useDashboard = create<DashboardStore>((set, get) => {
       set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, status: t.status === 'done' ? 'todo' : 'done' } : t)) }))
       saveTask(id)
     },
-    removeTask: (id) => {
-      set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }))
-      push(`/api/tasks/${id}`, id, () => undefined, 'DELETE')
-    },
+    removeTask: (id) =>
+      leaveThen(id, () => {
+        set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }))
+        push(`/api/tasks/${id}`, id, () => undefined, 'DELETE')
+      }),
     tags: [],
     putTag: (tag) => {
       const id = tag.id ?? newId('tag')
@@ -276,11 +296,12 @@ export const useDashboard = create<DashboardStore>((set, get) => {
       push(`/api/tags/${id}`, id, () => ({ name: next.name, color: next.color, icon: next.icon }))
       return id
     },
-    removeTag: (id) => {
-      const strip = <T extends { tags?: string[] }>(x: T): T => (x.tags?.includes(id) ? { ...x, tags: x.tags.filter((t) => t !== id) } : x)
-      set((s) => ({ tags: s.tags.filter((t) => t.id !== id), tasks: s.tasks.map(strip), reports: s.reports.map(strip) }))
-      push(`/api/tags/${id}`, id, () => undefined, 'DELETE')
-    },
+    removeTag: (id) =>
+      leaveThen(id, () => {
+        const strip = <T extends { tags?: string[] }>(x: T): T => (x.tags?.includes(id) ? { ...x, tags: x.tags.filter((t) => t !== id) } : x)
+        set((s) => ({ tags: s.tags.filter((t) => t.id !== id), tasks: s.tasks.map(strip), reports: s.reports.map(strip) }))
+        push(`/api/tags/${id}`, id, () => undefined, 'DELETE')
+      }),
     setReportTags: (id, tags) => {
       set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, tags } : r)) }))
       push(`/api/reports/${id}/tags`, `${id}:tags`, () => ({ tags }))
@@ -293,10 +314,11 @@ export const useDashboard = create<DashboardStore>((set, get) => {
       set((s) => ({ reports: s.reports.map((r) => ({ ...r, read: true })) }))
       push('/api/reports/read-all', 'reports:all', () => ({}), 'POST')
     },
-    removeReport: (id) => {
-      set((s) => ({ reports: s.reports.filter((r) => r.id !== id) }))
-      push(`/api/reports/${id}`, id, () => undefined, 'DELETE')
-    },
+    removeReport: (id) =>
+      leaveThen(id, () => {
+        set((s) => ({ reports: s.reports.filter((r) => r.id !== id) }))
+        push(`/api/reports/${id}`, id, () => undefined, 'DELETE')
+      }),
     resolveReview: (id) => set((s) => ({ reviews: s.reviews.filter((r) => r.id !== id) })),
     setRange: (range) => set((s) => ({ range: { ...s.range, ...range } })),
     setMetrics: (metrics) => set({ metrics }),
@@ -329,3 +351,6 @@ export function formatTokens(n: number) {
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
   return String(n)
 }
+
+/** This one was just deleted and is on its way out (give its row .is-leaving). */
+export const useLeaving = (id: string) => useDashboard((s) => !!s.leaving[id])

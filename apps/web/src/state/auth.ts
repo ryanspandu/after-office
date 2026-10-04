@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { busyFor, beginBusy } from './busy'
 
 // Browser side of the server session (HttpOnly cookie). We only ever learn *who* is signed in.
 // Signing in takes the password, then a 6-digit code from the authenticator app (two-factor). Until two-factor is set
@@ -105,14 +106,26 @@ export const useAuth = create<AuthStore>((set, get) => ({
   expire: () => set({ status: 'signed-out', user: null, twoFactor: null, ticket: null }),
 }))
 
-/** fetch() for our API: same-origin cookies, JSON bodies, and a 401 sends you back to the login page. */
-export async function api(path: string, init?: RequestInit) {
-  const res = await fetch(path, {
-    credentials: 'same-origin',
-    ...init,
-    // every write says application/json, even without a body (DELETE, bare POST): the server requires it as CSRF defence
-    headers: { ...(init?.method && init.method !== 'GET' ? { 'content-type': 'application/json' } : {}), ...(init?.body ? { 'content-type': 'application/json' } : {}), ...init?.headers },
-  })
+/**
+ * fetch() for our API: same-origin cookies, JSON bodies, and a 401 sends you back to the login page. A delete or a
+ * save shows while it runs (state/busy.ts); `activity: false` when the caller shows its own progress.
+ */
+export async function api(path: string, init?: RequestInit, opts?: { activity?: false }) {
+  const what = opts?.activity === false ? null : busyFor(path, init?.method ?? 'GET')
+  const act = what && beginBusy(what.kind, what.label)
+  let res: Response
+  try {
+    res = await fetch(path, {
+      credentials: 'same-origin',
+      ...init,
+      // every write says application/json, even without a body (DELETE, bare POST): the server requires it as CSRF defence
+      headers: { ...(init?.method && init.method !== 'GET' ? { 'content-type': 'application/json' } : {}), ...(init?.body ? { 'content-type': 'application/json' } : {}), ...init?.headers },
+    })
+  } catch (e) {
+    act?.end(what!.kind === 'delete' ? 'Could not delete: the server is unreachable' : 'Could not save: the server is unreachable')
+    throw e
+  }
+  act?.end(res.ok || res.status === 409 ? undefined : `Could not ${what!.kind === 'delete' ? 'delete' : 'save'}${what!.label ? ` the ${what!.label}` : ''} (${res.status})`)
   if (res.status === 401) useAuth.getState().expire()
   // signed in with the password only (two-factor not set up yet): straight to the setup
   if (res.status === 403 && useAuth.getState().status === 'signed-in') {
