@@ -185,6 +185,6 @@
 .reports-modal__list .report-row__main { padding: 8px 8px; border-radius: 12px; }
 .reports-modal__list .report-row__check { left: 8px; top: 10px; }
 .reports-modal__list .report-day { margin-top: 6px; }
-/* View all: a job's steps like the rest of the list (no guide line, no rules between them: rounded tiles with a gap) */
-.reports-modal__list .job-row__steps { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 4px 22px; padding: 0; border-left: 0; }
+/* View all: a job's steps like the rest of the list (its guide line on the left, no rules between them: rounded tiles with a gap) */
+.reports-modal__list .job-row__steps { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 4px 22px; padding: 0 0 0 8px; border-left: 2px solid var(--line); }
 .reports-modal__list .job-row__steps > .report-row + .report-row { border-top: none; }
