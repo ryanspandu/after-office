@@ -1,7 +1,7 @@
 import { OwnerAvatar } from './EditProfile'
 import { useState, type FormEvent, useEffect, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuTag, LuFolderGit2, LuCalendarClock, LuCrown, LuListChecks, LuListTodo, LuPlay, LuPlus, LuSearch, LuTrash2, LuX, LuActivity } from 'react-icons/lu'
+import { LuTag, LuFolderGit2, LuCalendarClock, LuCrown, LuListChecks, LuListTodo, LuPencil, LuPlay, LuPlus, LuSearch, LuTrash2, LuX, LuActivity } from 'react-icons/lu'
 import { tip } from './Tooltip'
 import { openUrl } from '../state/url'
 import type { CronJob, OfficeTask, TaskPriority, TaskStatus } from '@after-office/shared'
@@ -95,6 +95,8 @@ export function CronPanel() {
 
   const nowMin = toMin(hhmm)
   const [q, setQ] = useState('')
+  // one job at a time shows its controls (toggle, agent, run, edit, delete): a tap on the job unfolds them
+  const [openId, setOpenId] = useState<string | null>(null)
   // the search stays folded behind its button until asked for
   const [searching, setSearching] = useState(false)
   const searchBox = useRef<HTMLDivElement>(null)
@@ -138,6 +140,8 @@ export function CronPanel() {
             key={c.id}
             cron={c}
             nowMin={nowMin}
+            open={openId === c.id}
+            onOpen={() => setOpenId((id) => (id === c.id ? null : c.id))}
             agent={agents.find((a) => a.id === c.agentId)}
             onToggle={() => updateCron(c.id, { enabled: !c.enabled })}
             onAssign={(agentId) => updateCron(c.id, { agentId: agentId || null })}
@@ -157,6 +161,8 @@ export function CronPanel() {
 function CronRow({
   cron,
   nowMin,
+  open,
+  onOpen,
   agent,
   onToggle,
   onAssign,
@@ -165,6 +171,8 @@ function CronRow({
 }: {
   cron: CronJob
   nowMin: number
+  open: boolean
+  onOpen: () => void
   agent?: OfficeAgent
   onToggle: () => void
   onAssign: (id: string) => void
@@ -176,22 +184,33 @@ function CronRow({
   const timezone = useClock((s) => s.timezone)
   const nextLabel = nextRunLabel(cron, useNow(30_000), timezone)
   return (
-    <li className={`row cron${cron.enabled ? '' : ' row--off'}`}>
+    // a tap anywhere on the job (but its controls) unfolds or folds its controls; a pick in the agent menu (drawn
+    // outside the row, but its clicks bubble here through React) doesn't count
+    <li
+      className={`row cron${cron.enabled ? '' : ' row--off'}${open ? ' is-open' : ''}`}
+      onClick={(e) => e.currentTarget.contains(e.target as Node) && !(e.target as Element).closest('.cron__fold') && onOpen()}
+    >
       <div className="cron__time" data-tip={nextLabel ? `Runs on its own · next: ${nextLabel}` : cron.enabled ? 'Assign an agent to run it' : 'Off: turn it on to run on schedule'}>
         {next}
         {cron.times.length > 1 && <span className="cron__more">+{cron.times.length - 1}</span>}
       </div>
       <div className="row__body">
-        <button className="cron__name" onClick={onEdit} data-tip="Edit daily job">
+        <button className="cron__name" aria-expanded={open} {...tip(cron.name)}>
           {cron.name}
         </button>
         <div className="row__meta">
           <span className="muted truncate">
             {describeDays(cron.days)}
             {cron.times.length > 1 && ` · ${cron.times.join(', ')}`}
+            {/* folded: who runs it (the agent picker is in the controls) */}
+            {!open && ` · ${agent?.name ?? 'No agent'}`}
+            {!open && !cron.enabled && ' · Off'}
           </span>
           {flash && <span className="flash">{flash}</span>}
         </div>
+        {/* the controls, folded until the job is tapped (styles: cron.css .cron__fold) */}
+        <div className={`cron__fold${open ? ' is-open' : ''}`} inert={!open || undefined}>
+        <div>
         <div className="row__actions">
           <label className="toggle" data-tip={cron.enabled ? 'Disable' : 'Enable'}>
             <input type="checkbox" checked={cron.enabled} onChange={onToggle} />
@@ -210,9 +229,14 @@ function CronRow({
           >
             <LuPlay />
           </button>
+          <button className="icon-btn small" data-tip="Edit daily job" aria-label="Edit daily job" onClick={onEdit}>
+            <LuPencil />
+          </button>
           <button className="icon-btn small ghost" data-tip="Delete daily job" aria-label="Delete daily job" onClick={onRemove}>
             <LuX />
           </button>
+        </div>
+        </div>
         </div>
       </div>
     </li>
