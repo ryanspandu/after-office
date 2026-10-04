@@ -124,6 +124,8 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
       return
     }
     set({ status: 'done' })
+    // done with it: the task closes (Reopen stays in the list's task, should it be needed)
+    onClose()
   }
   const done = task.status === 'done'
   const due = dueInfo(task.deadline, now)
@@ -284,7 +286,9 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
           </div>
         )}
 
-        <footer className="modal__foot task-detail__foot">
+        {/* a tap here keeps the focus where it is: on a phone the footer is slimmer while you type (styles: tasks.css),
+            and the field losing focus first would grow it back under your finger before the tap lands */}
+        <footer className="modal__foot task-detail__foot" onMouseDown={(e) => e.preventDefault()}>
           <button
             className="ghost"
             onClick={async () => {
@@ -329,7 +333,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
               </button>
             </>
           ) : (
-            <button className={done ? '' : 'primary'} onClick={() => (done ? set({ status: 'todo' }) : void finish())} data-tip={done ? undefined : 'A note still in the box is sent with it'}>
+            <button className={done ? 'task-detail__main' : 'primary task-detail__main'} onClick={() => (done ? set({ status: 'todo' }) : void finish())} data-tip={done ? undefined : 'A note still in the box is sent with it'}>
               {done ? (
                 <>
                   <LuRotateCcw /> Reopen

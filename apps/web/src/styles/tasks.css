@@ -144,8 +144,15 @@ button.danger-solid:hover:not(:disabled) { color: #fff; opacity: 0.9; border-col
 .timeline__composer .timeline__send:disabled { opacity: 0.35; }
 .check-pill--stopped { color: #d97706; background: rgba(217, 119, 6, 0.14); }
 .blocked-badge--stopped { color: #d97706; }
-/* phones: while you type in the task (the keyboard is up), Delete / Mark done / Close step aside so the box and what
-   you're writing stay in view; they're back as soon as you leave the field */
+/* phones: while you type in the task (the keyboard is up), the footer shrinks to one slim row with just the main
+   action (Mark done / Accept / Resume / Reopen), so the box and what you're writing stay in view; Close is the ✕ above.
+   Everything is back as soon as you leave the field. */
 @media (max-width: 768px) and (pointer: coarse) {
-  .task-detail:has(:is(textarea, input[type='text'], input:not([type]), [contenteditable='true']):focus) .task-detail__foot { display: none; }
+  .task-detail:has(:is(textarea, input[type='text'], input:not([type]), [contenteditable='true']):focus) .task-detail__foot {
+    flex-wrap: nowrap; justify-content: flex-end; padding-top: 8px; padding-bottom: 8px;
+  }
+  .task-detail:has(:is(textarea, input[type='text'], input:not([type]), [contenteditable='true']):focus) .task-detail__foot > :not(.primary, .accent, .task-detail__main) { display: none; }
+  .task-detail:has(:is(textarea, input[type='text'], input:not([type]), [contenteditable='true']):focus) .task-detail__foot > button {
+    flex: 0 0 auto; min-height: 36px; padding: 0 16px; font-size: 13.5px;
+  }
 }

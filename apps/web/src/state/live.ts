@@ -227,11 +227,18 @@ export function useLiveSync() {
     loadSystem()
     const sys = setInterval(loadSystem, 5000)
 
-    // Back in the foreground (phones suspend background tabs and installed apps): a stream that went quiet is
-    // replaced right away instead of waiting for the watchdog, and the snapshot brings everything up to date.
-    const onResume = () => {
+    // Back in the foreground (phones suspend background tabs and installed apps): after more than a moment away the
+    // stream is replaced right away, so the fresh snapshot brings every count up to date at once, instead of waiting
+    // for the watchdog or trusting a stream the phone may have frozen. Same when the network comes back.
+    let hiddenAt = 0
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') hiddenAt = Date.now()
+    }
+    const onResume = (e?: Event) => {
       if (closed || document.visibilityState !== 'visible') return
-      if (!es || es.readyState === EventSource.CLOSED || Date.now() - lastHeard > 10_000) {
+      const away = hiddenAt ? Date.now() - hiddenAt : 0
+      hiddenAt = 0
+      if (e?.type === 'online' || away > 3_000 || !es || es.readyState === EventSource.CLOSED || Date.now() - lastHeard > 10_000) {
         clearTimeout(retry)
         if (es) {
           const old = es
@@ -243,12 +250,16 @@ export function useLiveSync() {
       }
       void loadSystem()
     }
+    document.addEventListener('visibilitychange', onHide)
     document.addEventListener('visibilitychange', onResume)
     window.addEventListener('pageshow', onResume)
+    window.addEventListener('online', onResume)
     return () => {
       closed = true
+      document.removeEventListener('visibilitychange', onHide)
       document.removeEventListener('visibilitychange', onResume)
       window.removeEventListener('pageshow', onResume)
+      window.removeEventListener('online', onResume)
       clearTimeout(retry)
       clearInterval(watchdog)
       clearInterval(sys)
