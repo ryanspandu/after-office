@@ -356,6 +356,8 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
             loadGit(here.current)
             void load(here.current, true)
           }}
+          // after looking at the remote: only the bar (what's new there)
+          onChecked={() => loadGit(here.current)}
         />
       )}
       {newFolder !== null && (
@@ -573,9 +575,24 @@ const GIT_MARK: Record<FolderGit['entries'][string], string> = {
 }
 
 /** The folder's git repo in one line: branch, ahead / behind, what's not committed, the last commit. */
-function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: number; root: string; dir: string; onChanged: () => void }) {
+function GitLine({ git, now, root, dir, onChanged, onChecked }: { git: FolderGit; now: number; root: string; dir: string; onChanged: () => void; onChecked: () => void }) {
   const [busy, setBusy] = useState<'discard' | 'push' | 'pull' | 'switch' | null>(null)
   const [committing, setCommitting] = useState(false)
+  // the remote is looked at when the folder opens, so "N to pull" is true (once a minute at most, per repo)
+  const [checking, setChecking] = useState(false)
+  useEffect(() => {
+    if (!git.hasRemote) return
+    let gone = false
+    setChecking(true)
+    void api('/api/workspaces/git/fetch', { method: 'POST', body: JSON.stringify({ root, path: dir }) }, { activity: false })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { skipped?: boolean } | null) => !gone && d && !d.skipped && onChecked())
+      .catch(() => undefined)
+      .finally(() => !gone && setChecking(false))
+    return () => void (gone = true)
+    // once per repo opened (not on every refresh of its bar)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [git.repo, root, !!git.hasRemote])
   // the branches menu (the branch name opens it)
   // whose git identity (name, email, SSH key) this repo's commits, pulls and pushes use: the "as" button
   const [asMenu, setAsMenu] = useState<{ x: number; y: number; above: number } | null>(null)
@@ -648,9 +665,10 @@ function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: numb
         </span>
       ) : (
         <span className="fb__git-clean">
-          <LuCheck /> All committed
+          <LuCheck /> {git.hasRemote && git.behind !== undefined && git.behind === 0 && !git.ahead ? 'Up to date' : 'All committed'}
         </span>
       )}
+      {checking && <LuLoader className="spin fb__git-checking" data-tip="Checking the remote" aria-label="Checking the remote" />}
       {git.lastCommit && (
         <span className="fb__git-last muted truncate" data-tip={`${git.lastCommit.subject}${git.lastCommit.author ? ` · ${git.lastCommit.author}` : ''}`}>
           Last commit: {git.lastCommit.subject} · {ago(now - git.lastCommit.at)}
@@ -672,7 +690,7 @@ function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: numb
             {!git.committer.hasKey && <span className="fb__git-nokey">no key</span>}
           </button>
         )}
-        {git.hasRemote && git.branch && (
+        {git.hasRemote && git.branch && (git.behind ?? 0) > 0 && (
           <button className="small" onClick={() => void call('pull')} disabled={!!busy} data-tip={`Fetch and catch up with the remote${git.committer ? `, with ${git.committer.name}'s key` : ''}`}>
             {busy === 'pull' ? <LuLoader className="spin" /> : <LuArrowDownToLine />} Pull{git.behind ? ` ↓${git.behind}` : ''}
           </button>

@@ -248,6 +248,25 @@ export async function gitSwitch(root: string, rel: string, branchIn: unknown) {
   return { ok: true, branch }
 }
 
+// the last time each repo was looked at on the remote: opening a folder checks it, at most once a minute
+const fetchedAt = new Map<string, number>()
+const FETCH_EVERY_MS = 60_000
+
+/** Look at the remote (no change to any file or branch of ours), so "N to pull" is true. Quiet when it can't: no
+ *  remote, no key yet, offline: the bar then shows what it knew. */
+export async function gitFetch(root: string, rel = '', agentId?: string) {
+  const top = await repoOf(root, rel)
+  if (Date.now() - (fetchedAt.get(top) ?? 0) < FETCH_EVERY_MS) return { ok: true, skipped: true }
+  fetchedAt.set(top, Date.now())
+  const remotes = (await git(top, ['remote'])).out.trim()
+  if (!remotes) return { ok: true, skipped: true }
+  const who = agentId ? agentsRepo.get(agentId) : gitOwner(top)
+  const r = await gitWrite(top, who, ['fetch', '--prune', '--quiet'], 45_000)
+  // tried again sooner when it failed
+  if (!r.ok) fetchedAt.delete(top)
+  return { ok: r.ok, skipped: false }
+}
+
 /** Fetch and bring the branch up to date, only when that is a straight catch-up (no merge commits, no conflicts). */
 export async function gitPull(root: string, rel = '', agentId?: string) {
   const top = await repoOf(root, rel)

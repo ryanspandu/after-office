@@ -48,3 +48,4 @@ button.fb__git-branch:hover:not(:disabled) { background: var(--card-2); border-c
 /* "as <agent>": whose git identity the bar's actions use */
 .fb__git-as { color: var(--muted); }
 .fb__git-nokey { margin-left: 4px; padding: 0 5px; border-radius: 999px; font-size: 10px; background: var(--hl-soft); color: var(--hl-ink); }
+.fb__git-checking { flex-shrink: 0; color: var(--muted); font-size: 12px; }

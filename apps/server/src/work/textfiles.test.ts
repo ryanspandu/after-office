@@ -191,3 +191,26 @@ test('whose git identity a repo uses: one with an SSH key wins, and a pick stick
   await expect(setGitAs(repo, '', 'nobody')).rejects.toThrow('No such agent')
   settingsRepo.delete(`gitAs:${real}`)
 })
+
+test('looking at the remote makes "N to pull" true, and is not repeated every second', async () => {
+  const { gitFetch, folderGit } = await import('./workspaces')
+  const mine = join(PROJECTS_DIR, 'git-fetch-test')
+  const theirs = join(PROJECTS_DIR, 'git-fetch-theirs')
+  const remote = join(PROJECTS_DIR, 'git-fetch-remote.git')
+  const g = (dir: string, ...a: string[]) => Bun.spawnSync(['git', '-C', dir, '-c', 'user.name=T', '-c', 'user.email=t@t', ...a])
+  Bun.spawnSync(['git', 'init', '-q', '--bare', '-b', 'main', remote])
+  mkdirSync(mine, { recursive: true })
+  g(mine, 'init', '-q', '-b', 'main')
+  g(mine, 'commit', '-q', '--allow-empty', '-m', 'seed')
+  g(mine, 'remote', 'add', 'origin', remote)
+  g(mine, 'push', '-q', '-u', 'origin', 'main')
+  Bun.spawnSync(['git', 'clone', '-q', remote, theirs])
+  g(theirs, 'commit', '-q', '--allow-empty', '-m', 'new upstream')
+  g(theirs, 'push', '-q', 'origin', 'main')
+  // not known here yet
+  expect((await folderGit(mine))!.behind).toBe(0)
+  expect((await gitFetch(mine)).skipped).toBe(false)
+  expect((await folderGit(mine))!.behind).toBe(1)
+  // asked again at once: nothing to do
+  expect((await gitFetch(mine)).skipped).toBe(true)
+})

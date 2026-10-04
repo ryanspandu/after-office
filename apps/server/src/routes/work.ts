@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
 import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, ownerNotesRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
-import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, readTextFile, writeTextFile, folderGit, gitBranches, gitCommit, gitDiscard, gitPull, gitPush, gitSwitch, setGitAs, addEmptyFile, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
+import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, readTextFile, writeTextFile, folderGit, gitBranches, gitCommit, gitDiscard, gitFetch, gitPull, gitPush, gitSwitch, setGitAs, addEmptyFile, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
 import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder, renameProjectFolder } from '../work/projectFolders'
 import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDevice, sendPush } from '../push'
@@ -358,6 +358,7 @@ workRoutes.post('/workspaces/git/:action', async (c) => {
   if (action === 'commit') return c.json(await gitCommit(root, rel, b.message, b.agentId || undefined))
   if (action === 'push') return c.json(await gitPush(root, rel, b.agentId || undefined))
   if (action === 'as') return c.json(await setGitAs(root, rel, b.agentId))
+  if (action === 'fetch') return c.json(await gitFetch(root, rel, b.agentId || undefined))
   if (action === 'pull') return c.json(await gitPull(root, rel, b.agentId || undefined))
   if (action === 'switch') return c.json(await gitSwitch(root, rel, (b as { branch?: unknown }).branch))
   return c.json({ error: 'Unknown action' }, 404)
