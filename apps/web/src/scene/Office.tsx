@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { MapControls, PerformanceMonitor } from '@react-three/drei'
+import type { Vector3 } from 'three'
 import { useOffice } from '../state/store'
 import { Agent } from './Agent'
 import { Cat } from './Cat'
@@ -147,15 +148,18 @@ const START_CLOSER = 1.5
 /** Zoom so the whole scene fits and keep the camera on the isometric diagonal from its center. */
 function FitCamera({ layout }: { layout: Layout }) {
   const { camera, size } = useThree()
+  const controls = useThree((s) => s.controls) as unknown as { target: Vector3; update: () => void } | null
   const b = bounds(layout)
-  // refit on a real resize or a new layout, not on a few pixels (a navbar line appearing): that kept resetting the
-  // zoom the owner had set
-  const last = useRef<{ w: number; h: number; key: string } | null>(null)
+  // Refit on a new layout or a real change of width (a rotated phone, a resized window), never on height alone: on a
+  // phone the height changes all the time (the keyboard of a modal's field, the browser bar, a sheet) and refitting
+  // then threw away the owner's pan and zoom. A stage hidden or collapsed for a moment (a few px) is ignored too.
+  const last = useRef<{ w: number; key: string } | null>(null)
   useEffect(() => {
+    if (size.width < 80 || size.height < 80) return
     const key = `${b.minX},${b.maxX},${b.minZ},${b.maxZ}`
     const prev = last.current
-    if (prev && prev.key === key && Math.abs(prev.w - size.width) < 32 && Math.abs(prev.h - size.height) < 32) return
-    last.current = { w: size.width, h: size.height, key }
+    if (prev && prev.key === key && Math.abs(prev.w - size.width) < 32) return
+    last.current = { w: size.width, key }
     const [cx, , cz] = center(layout)
     // the building's footprint (not the lot): the office is what's looked at
     const f = layout.floor
@@ -170,8 +174,14 @@ function FitCamera({ layout }: { layout: Layout }) {
     camera.position.set(cx + 22, 20, cz + 22)
     camera.lookAt(cx, 0, cz)
     camera.updateProjectionMatrix()
+    // the controls look at their own target: move it with the camera, or the next frame turns the camera from its
+    // new place towards the old (panned) target, off the isometric diagonal: the "angle changes" glitch
+    if (controls) {
+      controls.target.set(cx, 0, cz)
+      controls.update()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, size.width, size.height, b.minX, b.maxX, b.minZ, b.maxZ])
+  }, [camera, controls, size.width, size.height, b.minX, b.maxX, b.minZ, b.maxZ])
   return null
 }
 
