@@ -325,6 +325,10 @@ export const liveApi = {
   addGitIdentity: (id: string, g: { label: string; name: string; email: string; match: string[] }) => call(`/api/agents/${id}/git/identities`, g),
   updateGitIdentity: (id: string, gid: string, g: { label: string; name: string; email: string; match: string[] }) => call(`/api/agents/${id}/git/identities/${gid}`, g, 'PUT'),
   removeGitIdentity: (id: string, gid: string) => call(`/api/agents/${id}/git/identities/${gid}`, undefined, 'DELETE'),
+  /** its secrets (tokens for its projects' services, environment variables of its sessions): names, never values */
+  secrets: (id: string) => api(`/api/agents/${id}/secrets`).then((r) => (r.ok ? (r.json() as Promise<{ name: string; last4: string; updatedAt: number }[]>) : [])),
+  putSecret: (id: string, name: string, value: string) => call(`/api/agents/${id}/secrets`, { name, value }, 'PUT') as Promise<{ name: string; last4: string; updatedAt: number }>,
+  removeSecret: (id: string, name: string) => call(`/api/agents/${id}/secrets/${encodeURIComponent(name)}`, undefined, 'DELETE'),
   /** Can the agents' tmux server still start sessions? (isolated: the VPS setup, restarted with systemd instead) */
   agentServer: () => api('/api/agents-server').then((r) => (r.ok ? (r.json() as Promise<{ canStartSessions: boolean; isolated: boolean }>) : null)),
   /** Restart every agent (their tmux server): each resumes its conversation. */

@@ -19,6 +19,9 @@ const BODIES: Record<RulePackId, string> = {
 - A plan, proposal or other working document you're asked for (outside plan mode) is not part of the project: write
   it in \`${PLANS_DIR}/\` (create it if needed), named like \`YYYY-MM-DD-<topic>.md\`, never inside a project's folder,
   unless the owner names another place. Mention its path. (In plan mode, Claude Code keeps the plan itself.)
+- Tokens the owner set for you (Overview → Secrets) are environment variables of your session (e.g. \`EXPO_TOKEN\`,
+  \`RAILWAY_TOKEN\`): the tools that use them read them on their own. Never print, log, echo or commit their values,
+  and never paste them into files or messages. One you need and don't have: ask the owner to add it there.
 - Stuck or unsure? Ask instead of guessing. Never publish, deploy, delete data or spend money without the owner's
   approval.`,
   engineering: `## Software engineering

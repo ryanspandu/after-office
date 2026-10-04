@@ -19,6 +19,7 @@ import { accountSkill, accountSkillList } from '../agents/accountSkills'
 import { agentFile, agentFiles, fileResponse } from '../agents/files'
 import { tmux } from '../agents/tmux'
 import { restartAgentServer, restartWhenIdle } from '../agents/reconciler'
+import { listSecrets, putSecret, removeSecret } from '../agents/secrets'
 import { applyRules, cleanPacks, rulesIn } from '../agents/rules'
 import { readInFolder, writeInFolder } from '../agents/safefs'
 import { join } from 'node:path'
@@ -187,6 +188,22 @@ agentRoutes.put('/agents/:id/git/identities/:gid', async (c) => {
 agentRoutes.delete('/agents/:id/git/identities/:gid', async (c) => {
   await removeIdentity(agentRow(c.req.param('id')), c.req.param('gid'))
   await gitChanged(c.req.param('id'))
+  return c.json({ ok: true })
+})
+// secrets (Overview → Secrets): tokens for its projects' services, as environment variables of its sessions.
+// Write-only (names and last 4 characters come back, never values); a change restarts it once it's idle.
+agentRoutes.get('/agents/:id/secrets', (c) => c.json(listSecrets(agentRow(c.req.param('id')).id)))
+agentRoutes.put('/agents/:id/secrets', async (c) => {
+  const row = agentRow(c.req.param('id'))
+  const b = await c.req.json<{ name?: unknown; value?: unknown }>().catch(() => ({}) as { name?: unknown; value?: unknown })
+  const info = putSecret(row.id, b.name, b.value)
+  restartWhenIdle(row.id)
+  return c.json(info)
+})
+agentRoutes.delete('/agents/:id/secrets/:name', (c) => {
+  const row = agentRow(c.req.param('id'))
+  removeSecret(row.id, c.req.param('name'))
+  restartWhenIdle(row.id)
   return c.json({ ok: true })
 })
 // SSH keys: the default identity's, or ?identity=<id> for an extra one

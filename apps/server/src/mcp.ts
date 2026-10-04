@@ -651,8 +651,9 @@ function buildServer(managerId: string) {
           .describe("office rules for its CLAUDE.md: 'office' is always included; add 'engineering' for an agent that writes code (per-project runtimes and services, preview ports). Default: by its role. The owner can change them before approving."),
         figure: z
           .enum(['woman', 'man'])
-          .optional()
-          .describe("its character in the office. Set it from what the owner said (e.g. \"a female secretary\", \"cewek\", \"she\"); don't guess from the name alone. Unset: the dashboard picks one, and the owner can change it."),
+          .describe(
+            "its character in the office (always set it): one that fits the name you give it (e.g. Lena, Sari, Maya → woman; Raka, Budi, Leo → man), or what the owner said (\"a female secretary\", \"cewek\"), which wins. The owner can change it before approving.",
+          ),
       },
     },
     async ({ name, role, brief, model, permissionMode, folder, figure, connectors, effort, rules }) => {

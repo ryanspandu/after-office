@@ -127,8 +127,12 @@ describe('after-office MCP', () => {
     expect(reportsRepo.latest(5).some((x) => x.kind === 'note' && x.text.includes('Owner task'))).toBe(true)
   })
 
+  test('create_agent: its character is always picked (to fit the name)', async () => {
+    expect((await call('create_agent', { name: 'Lena', role: 'QA' })).isError).toBe(true)
+  })
+
   test('create_agent validates before starting anything', async () => {
-    const r = await call('create_agent', { name: 'Zed', role: 'QA', folder: '/etc/nope' })
+    const r = await call('create_agent', { name: 'Zed', role: 'QA', folder: '/etc/nope', figure: 'man' })
     expect(r.isError).toBe(true)
     expect(r.content[0].text).toContain('Folder must be inside')
   })
@@ -151,15 +155,15 @@ describe('after-office MCP', () => {
       return { h, card: getPending(h.id)!.input as { rules: string[] } }
     }
     // picked by the manager ('office' always added)
-    const a = await hireCard({ name: 'Kira', role: 'Content writer', rules: ['engineering'] })
+    const a = await hireCard({ name: 'Kira', role: 'Content writer', rules: ['engineering'], figure: 'woman' })
     expect(a.h.rules).toEqual(['office', 'engineering'])
     expect(a.card.rules).toEqual(['office', 'engineering'])
     // not given: by the role
-    const b = await hireCard({ name: 'Tomo', role: 'Backend engineer' })
+    const b = await hireCard({ name: 'Tomo', role: 'Backend engineer', figure: 'man' })
     expect(b.h.rules).toBeUndefined()
     expect(b.card.rules).toEqual(['office', 'engineering'])
     // an unknown set is refused by the tool's schema
-    expect((await call('create_agent', { name: 'Uno', role: 'QA', rules: ['astrology'] })).isError).toBe(true)
+    expect((await call('create_agent', { name: 'Uno', role: 'QA', rules: ['astrology'], figure: 'man' })).isError).toBe(true)
     // the owner's change on the card wins
     expect(withEdits(a.h as never, { type: 'allow', hire: { rules: [] } }).rules).toEqual(['office'])
 
@@ -271,7 +275,7 @@ describe('after-office MCP', () => {
     }
     // hires still wait for the owner
     const hiresBefore = JSON.parse(settingsRepo.get('pendingHires') ?? '[]').length
-    expect((await call('create_agent', { name: 'Bossy', role: 'QA' })).isError).toBeFalsy()
+    expect((await call('create_agent', { name: 'Bossy', role: 'QA', figure: 'woman' })).isError).toBeFalsy()
     expect(JSON.parse(settingsRepo.get('pendingHires') ?? '[]').length).toBe(hiresBefore + 1)
     expect(bossModeState()).toMatchObject({ tasks: 1, messages: 1, sendBacks: MAX_MANAGER_REVISIONS + 1 })
 

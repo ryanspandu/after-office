@@ -24,6 +24,7 @@ import { FigurePicker } from './FigurePicker'
 import { ConnectorsTab } from './agent/ConnectorsTab'
 import { AgentActivityTab } from './Activity'
 import { GitSection } from './agent/GitSection'
+import { SecretsSection } from './agent/SecretsSection'
 import { getParam, setUrl, useUrl } from '../state/url'
 import { tip } from './Tooltip'
 import { RulesPicker } from './RulesPicker'
@@ -392,6 +393,7 @@ function Overview({ agent, live, draft, set }: { agent: OfficeAgent; live: boole
           </div>
           {error && <p className="warn">{error}</p>}
           <GitSection agent={agent} />
+          <SecretsSection agent={agent} />
           <dl className="facts">
             <dt>Status</dt>
             <dd>{busy ? `${busy === 'model' || busy === 'effort' ? 'Restarting' : 'Switching'}…` : agent.status}</dd>

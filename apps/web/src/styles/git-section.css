@@ -17,3 +17,12 @@
 .git-identity__label:hover, .git-identity__label:focus { border-color: var(--line); background: var(--card-2); }
 .git-identity textarea { font-size: 12px; resize: vertical; }
 .git-section__add { align-self: flex-start; }
+/* Overview → Secrets (ui/agent/SecretsSection.tsx) */
+.secrets { border-top: 0; margin-top: -4px; }
+.secrets__hint { margin: -4px 0 0; }
+.secrets__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.secrets__row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; background: var(--card-2); }
+.secrets__name { font-size: 12.5px; }
+.secrets__value { font: 12px ui-monospace, Menlo, monospace; }
+.secrets__form { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+.secrets__get { display: inline-flex; align-items: center; gap: 4px; color: var(--hl); text-decoration: none; }

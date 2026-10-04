@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
+import { dropSecrets, secretEnv } from './secrets'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { DEFAULT_MANAGER, DEFAULT_MODEL, EFFORTS, isEffort, defaultRulePacks, type RulePackId, type AgentEffort, type AgentFigure, type AgentKind, type AgentProfile, type LiveMode } from '@after-office/shared'
 import { agentsRepo, queueRepo, sideSessionsRepo, type AgentRow, type SideSessionRow, extraDirsOf } from '../db'
@@ -441,6 +442,8 @@ async function startProcess(row: AgentRow, p: { tmuxName: string; sessionId: str
     cwd: row.cwd,
     // its own token: it can only report (and use MCP tools) as itself
     env: {
+      // the owner's tokens for its projects' services (Overview → Secrets): first, so the office's own below win
+      ...secretEnv(row.id),
       AO_AGENT_ID: row.id,
       AO_HOOK_TOKEN: agentToken(row.id),
       // which of its sessions this is (hooks, status line and MCP calls say so)
@@ -685,6 +688,7 @@ export async function deleteAgent(id: string) {
   await tmux.killSession(row.tmux_session)
   for (const side of sideSessionsRepo.forAgent(id)) if (!side.closed_at) await tmux.killSession(side.tmux_session).catch(() => {})
   sideSessionsRepo.removeAgent(id)
+  dropSecrets(id)
   // its git identities and SSH keys go with it
   await removeGitFor(row).catch(() => {})
   agentsRepo.remove(id)
