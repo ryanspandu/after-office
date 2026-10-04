@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OwnerNoteSummary, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, TaskStatusDef, WorkState, Workspace, GitCommit } from '@after-office/shared'
 import { api, useAuth } from './auth'
 import { mergeServer, useDashboard, ymd } from './dashboard'
+import { resumeReportBulk } from './reportBulk'
 import { useOffice } from './store'
 import { useClock } from './clock'
 
@@ -220,6 +221,8 @@ export function useLiveSync() {
       src.onopen = () => {
         useLive.setState({ connected: true })
         loadUsage()
+        // a Read / Unread / Delete on many reports cut short by a reload: carry on with it
+        resumeReportBulk()
       }
       src.onerror = () => fail(src)
     }

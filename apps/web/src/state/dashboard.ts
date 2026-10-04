@@ -136,6 +136,10 @@ interface DashboardStore {
   reviews: FollowUp[]
   /** Finished task / cron reports, newest first */
   reports: WorkReport[]
+  /** older reports than the live list holds, loaded as the Reports panel scrolls down (by id): opened, marked and
+   *  deleted like the others */
+  olderReports: Record<string, WorkReport>
+  keepOlderReports: (items: WorkReport[]) => void
   markReport: (id: string, read: boolean) => void
   setReportTags: (id: string, tags: string[]) => void
   /** the owner's labels for tasks and reports */
@@ -219,6 +223,11 @@ export function mergeServer<T extends { id: string }>(server: T[], local: T[]): 
 }
 
 /** Stable-enough ids that the client can create before the server has seen the document. */
+/** An older report changed (read, tags), if it's one of those loaded. */
+function patchOlder(older: Record<string, WorkReport>, id: string, patch: Partial<WorkReport>) {
+  return older[id] ? { ...older, [id]: { ...older[id], ...patch } } : older
+}
+
 /** How long a deleted row takes to fold away (styles: .is-leaving, the same length). */
 export const LEAVE_MS = 240
 
@@ -254,6 +263,8 @@ export const useDashboard = create<DashboardStore>((set, get) => {
     fullscreen: false,
     syncError: null,
     leaving: {},
+    olderReports: {},
+    keepOlderReports: (items) => set((s) => ({ olderReports: { ...s.olderReports, ...Object.fromEntries(items.map((r) => [r.id, r])) } })),
 
     addCron: (c) => {
       const id = newId('cron')
@@ -303,20 +314,23 @@ export const useDashboard = create<DashboardStore>((set, get) => {
         push(`/api/tags/${id}`, id, () => undefined, 'DELETE')
       }),
     setReportTags: (id, tags) => {
-      set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, tags } : r)) }))
+      set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, tags } : r)), olderReports: patchOlder(s.olderReports, id, { tags }) }))
       push(`/api/reports/${id}/tags`, `${id}:tags`, () => ({ tags }))
     },
     markReport: (id, read) => {
-      set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, read } : r)) }))
+      set((s) => ({ reports: s.reports.map((r) => (r.id === id ? { ...r, read } : r)), olderReports: patchOlder(s.olderReports, id, { read }) }))
       push(`/api/reports/${id}/read`, id, () => ({ read }), 'POST')
     },
     markAllReportsRead: () => {
-      set((s) => ({ reports: s.reports.map((r) => ({ ...r, read: true })) }))
+      set((s) => ({ reports: s.reports.map((r) => ({ ...r, read: true })), olderReports: Object.fromEntries(Object.entries(s.olderReports).map(([id, r]) => [id, { ...r, read: true }])) }))
       push('/api/reports/read-all', 'reports:all', () => ({}), 'POST')
     },
     removeReport: (id) =>
       leaveThen(id, () => {
-        set((s) => ({ reports: s.reports.filter((r) => r.id !== id) }))
+        set((s) => {
+          const { [id]: _, ...olderReports } = s.olderReports
+          return { reports: s.reports.filter((r) => r.id !== id), olderReports }
+        })
         push(`/api/reports/${id}`, id, () => undefined, 'DELETE')
       }),
     resolveReview: (id) => set((s) => ({ reviews: s.reviews.filter((r) => r.id !== id) })),

@@ -14,7 +14,7 @@ import { confirm } from './Confirm'
 import { tip } from './Tooltip'
 import { useWorkReady } from '../state/live'
 import { api } from '../state/auth'
-import { beginBusy } from '../state/busy'
+import { bulkStateOf, runReportBulk, useReportBulk, type ReportBulk } from '../state/reportBulk'
 import { openUrl, setUrl, useUrl } from '../state/url'
 import { RangePicker, type PickedRange } from './DateRangePicker'
 import { Select } from './Select'
@@ -22,6 +22,7 @@ import { TagChips, TagFilter, TagPicker } from './tags'
 import { NotesList } from './OwnerNotes'
 import { REPORTS, useMinimized } from '../state/minimized'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
+import { ScrollTabs } from './ScrollTabs'
 
 // Reports: what an agent said when it finished a task or a cron run (its final message), kept apart from the chat
 // so finished work can be reviewed later. Written by the server on the agent's Stop hook; no LLM involved.
@@ -319,17 +320,109 @@ const remember = (key: string, v: string) => {
 }
 
 /** The card: Reports (the manager's summaries, the agents' reports) | Notes (the owner's own). */
+/** Does a report belong under a filter tab? The same rules as the server's (GET /api/reports ?filter). */
+function inFilter(r: WorkReport, f: Filter, managerIds: Set<string>) {
+  const manager = r.kind === 'note' || managerIds.has(r.agentId)
+  if (f === 'unread') return !r.read
+  if (f === 'failed') return !r.ok
+  if (f === 'manager') return manager
+  if (f === 'agents') return !manager
+  if (f === 'task') return r.kind === 'task'
+  if (f === 'daily') return r.kind === 'cron'
+  return true
+}
+
+const PANEL_TAB_KEY = 'after-office:reports-panel-tab'
+const PANEL_STEP = 20
+const PANEL_PAGE = 50
+
+/**
+ * The Reports panel's list under a tab: the live reports first (the newest the dashboard holds), then older ones
+ * loaded from the server as it scrolls down. `more()` shows the next few (and fetches a page when those run out).
+ */
+function useReportFeed(filter: Filter) {
+  const live = useOffice((s) => s.source === 'live')
+  const reports = useDashboard((s) => s.reports)
+  const older = useDashboard((s) => s.olderReports)
+  const agents = useOffice((s) => s.agents)
+  const [limit, setLimit] = useState(PANEL_STEP)
+  // server pages fetched for this tab, and whether there are more
+  const [paging, setPaging] = useState({ page: 0, more: true, loading: false })
+  const pagingRef = useRef(paging)
+  pagingRef.current = paging
+  useEffect(() => {
+    setLimit(PANEL_STEP)
+    setPaging({ page: 0, more: true, loading: false })
+  }, [filter])
+  const managerIds = useMemo(() => new Set(agents.filter((a) => a.kind === 'manager').map((a) => a.id)), [agents])
+  // the live list is the newest of them all, so under any tab it's the start of the server's list too: the server's
+  // pages are fetched from where it ends (not from the first, which it already holds)
+  const liveUnderTab = useMemo(() => reports.filter((r) => inFilter(r, filter, managerIds)).length, [reports, filter, managerIds])
+  const all = useMemo(() => {
+    const ids = new Set(reports.map((r) => r.id))
+    // an older one newer than the oldest live one but not among them was deleted since
+    const oldestLive = reports.reduce((m, r) => Math.min(m, r.finishedAt), Infinity)
+    const extra = Object.values(older).filter((r) => !ids.has(r.id) && r.finishedAt < oldestLive)
+    // a step of the manager's task is left to the manager's summary (shown inside that job's item)
+    return [...reports, ...extra].filter((r) => (!r.viaManager || r.job) && inFilter(r, filter, managerIds)).sort((a, b) => b.finishedAt - a.finishedAt)
+  }, [reports, older, managerIds, filter])
+  const fetchPage = async () => {
+    const p = pagingRef.current
+    if (!live || p.loading || !p.more) return
+    setPaging({ ...p, loading: true })
+    try {
+      const page = p.page ? p.page + 1 : Math.floor(liveUnderTab / PANEL_PAGE) + 1
+      const res = await api(`/api/reports?${new URLSearchParams({ filter: filter === 'daily' ? 'cron' : filter, per: String(PANEL_PAGE), page: String(page) })}`)
+      if (!res.ok) throw new Error()
+      const d = (await res.json()) as ReportPage
+      useDashboard.getState().keepOlderReports(d.items)
+      setPaging({ page: d.page, more: d.page < d.pages, loading: false })
+      setLimit((n) => n + PANEL_STEP)
+    } catch {
+      // try again on the next scroll
+      setPaging({ ...p, loading: false })
+    }
+  }
+  const more = () => {
+    if (limit < all.length) setLimit((n) => n + PANEL_STEP)
+    else void fetchPage()
+  }
+  // a short list that doesn't fill the panel yet: fetch until it does (or there's no more)
+  const exhausted = !live || !paging.more
+  return { items: all.slice(0, limit), more, loading: paging.loading, page: paging.page, end: limit >= all.length && exhausted, total: all.length }
+}
+
 export function ReportsPanel() {
   const ready = useWorkReady()
   const reports = useDashboard((s) => s.reports)
   const now = useNow(60_000).getTime()
   const [view, setView] = useState<PanelView>(() => remembered(VIEW_KEY, ['reports', 'notes'] as const, 'reports'))
   const pickView = (v: PanelView) => (setView(v), remember(VIEW_KEY, v))
-  // One list, one item per piece of work. A step of the manager's task is left to the manager's summary (it shows
-  // inside that job's item); everything else (the manager's notes, the owner's own tasks, daily jobs) is its own.
-  const shown = reports.filter((r) => !r.viaManager || r.job)
-  const unread = shown.filter((r) => !r.read).length
-  const items = groupReports(shown)
+  // which kind of report: one tab each (remembered)
+  const [tab, setTab] = useState<Filter>(() => remembered(PANEL_TAB_KEY, FILTERS.map((f) => f.id), 'all'))
+  const pickTab = (f: Filter) => (setTab(f), remember(PANEL_TAB_KEY, f))
+  const unread = reports.filter((r) => (!r.viaManager || r.job) && !r.read).length
+  const feed = useReportFeed(tab)
+  // a Read / Unread / Delete on picked reports, running: its rows show it here too (and deleted ones stay out)
+  const bulk = useReportBulk((st) => st.run)
+  const gone = useReportBulk((st) => st.gone)
+  const items = groupReports(feed.items.filter((r) => !gone.has(r.id)))
+  // the list's end: in view (or nearly) → the next ones
+  const listRef = useRef<HTMLUListElement>(null)
+  const endRef = useRef<HTMLLIElement>(null)
+  const moreRef = useRef(feed.more)
+  moreRef.current = feed.more
+  useEffect(() => {
+    const end = endRef.current
+    if (!end || view !== 'reports') return
+    // the box that scrolls: the list itself on a computer, the sheet on a phone
+    let root: HTMLElement | null = listRef.current
+    while (root && !/(auto|scroll)/.test(getComputedStyle(root).overflowY)) root = root.parentElement
+    const io = new IntersectionObserver((e) => e[0]?.isIntersecting && moreRef.current(), { root, rootMargin: '0px 0px 320px 0px' })
+    io.observe(end)
+    return () => io.disconnect()
+    // watched again after each step, so a list still short of the bottom keeps loading
+  }, [view, tab, feed.end, feed.items.length, feed.page])
   return (
     <section className="card card--reports">
       <header className="card__head">
@@ -352,7 +445,7 @@ export function ReportsPanel() {
               <LuPlus />
             </button>
           )}
-          <button className="small" onClick={() => (view === 'notes' ? openUrl({ notes: '1' }) : openUrl({ reports: 'all', page: null, q: null }))}>
+          <button className="small" onClick={() => (view === 'notes' ? openUrl({ notes: '1' }) : openUrl({ reports: tab === 'all' ? 'all' : tab, page: null, q: null }))}>
             View all
           </button>
         </span>
@@ -360,21 +453,47 @@ export function ReportsPanel() {
       {view === 'notes' ? (
         <NotesList />
       ) : (
-        <ul className="list ui-switch">
-          {withDays(
-            items.slice(0, 20),
-            (g) => g.reports[0].finishedAt,
-            now,
-            (g) =>
-              g.reports.length > 1 ? (
-                <JobRow key={g.key} g={g} now={now} />
-              ) : (
-                <ReportRow key={g.key} r={g.reports[0]} now={now} onOpen={() => openUrl({ report: g.reports[0].id })} />
-              ),
-            (g) => g.key,
-          )}
-          {!items.length && ready && <li className="empty">Finished work shows up here: the manager's summaries, your own tasks and daily jobs.</li>}
-        </ul>
+        <>
+          <div className="reports-panel__tabs">
+            <ScrollTabs className="reports-panel__tabrow" label="Kinds of reports" active={tab}>
+              {FILTERS.map((f) => (
+                <button key={f.id} role="tab" aria-selected={tab === f.id} className={tab === f.id ? 'active' : ''} onClick={() => pickTab(f.id)}>
+                  {f.label}
+                  {f.id === 'unread' && unread > 0 && <span className="reports-panel__tabcount">{unread}</span>}
+                </button>
+              ))}
+            </ScrollTabs>
+          </div>
+          <ul ref={listRef} key={tab} className="list reports-panel__list ui-switch">
+            {withDays(
+              items,
+              (g) => g.reports[0].finishedAt,
+              now,
+              (g) =>
+                g.reports.length > 1 ? (
+                  <JobRow key={g.key} g={g} now={now} busy={g.reports.every((r) => bulkStateOf(bulk, r.id)) ? bulkStateOf(bulk, g.reports[0].id) : undefined} />
+                ) : (
+                  <ReportRow key={g.key} r={g.reports[0]} now={now} onOpen={() => openUrl({ report: g.reports[0].id })} busy={bulkStateOf(bulk, g.reports[0].id)} />
+                ),
+              (g) => g.key,
+            )}
+            {/* the end of the list: coming into view loads the next ones (a few rows that look like rows meanwhile) */}
+            {!feed.end && (
+              <li ref={endRef} className="reports-panel__more" aria-busy={feed.loading || undefined}>
+                {[0, 1].map((i) => (
+                  <span key={i} className="reports-panel__skeleton" aria-hidden>
+                    <span />
+                    <span />
+                  </span>
+                ))}
+              </li>
+            )}
+            {feed.end && feed.total > PANEL_STEP && <li className="reports-panel__end muted">That's all.</li>}
+            {!feed.total && ready && feed.end && (
+              <li className="empty">{tab === 'all' ? "Finished work shows up here: the manager's summaries, your own tasks and daily jobs." : 'Nothing here.'}</li>
+            )}
+          </ul>
+        </>
       )}
     </section>
   )
@@ -434,13 +553,10 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
   // reports picked for one action on all of them (read, unread, delete)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [reload, setReload] = useState(0)
-  // an action on the picked ones, running: which, on what, how far (the rows show it; nothing else can be picked
-  // for it meanwhile). "removing": deleted, the rows fold away before the list reloads without them.
-  const [bulk, setBulk] = useState<BulkRun | null>(null)
-  const bulkRef = useRef<BulkRun | null>(null)
-  bulkRef.current = bulk
-  // deleted here: never drawn again, even if a refresh races the reload
-  const [gone, setGone] = useState<Set<string>>(new Set())
+  // an action on picked ones, running (state/reportBulk.ts): it goes on (and shows) with this window closed too
+  const bulk = useReportBulk((st) => st.run)
+  const gone = useReportBulk((st) => st.gone)
+  const bulkDone = useReportBulk((st) => st.finishedAt)
   const anyUnread = useDashboard((s) => s.reports.some((r) => !r.read))
   // the newest report the dashboard knows: a new one arriving (or one changing) refreshes the page
   // refetch when a report arrives, is read, or is (un)tagged
@@ -490,7 +606,7 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
   }).toString()
   useEffect(() => {
     // the page holds still while an action on it runs (its rows show the progress); it reloads once that's done
-    if (bulkRef.current) return
+    if (useReportBulk.getState().run) return
     let gone = false
     api(`/api/reports?${query}`)
       .then(async (r) => {
@@ -507,7 +623,7 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
       .catch((e: Error) => !gone && setError(e.message))
     return () => void (gone = true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, latestKey, reload])
+  }, [query, latestKey, reload, bulkDone])
   // another page or filter: nothing picked any more
   useEffect(() => setSelected(new Set()), [query])
 
@@ -516,53 +632,13 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
   const picked = params.ri ?? ''
   const pickedReport = useDashboard((s) => s.reports.find((r) => r.id === picked)) ?? data?.items.find((r) => r.id === picked)
   const pick = (id: string) => (wide ? setUrl({ ri: id }) : openUrl({ report: id }))
-  const rowBusy = (id: string): RowBusy | undefined =>
-    bulk?.ids.has(id) ? (bulk.removing ? 'removing' : bulk.kind === 'delete' ? 'deleting' : 'updating') : undefined
-  /** Read / Unread / Delete on the picked ones: in about ten steps, so the bar moves; the rows show it meanwhile. */
-  const runBulk = async (kind: BulkRun['kind']) => {
+  const rowBusy = (id: string): RowBusy | undefined => bulkStateOf(bulk, id)
+  const runBulk = (kind: ReportBulk['kind']) => {
     const ids = [...selected]
-    if (!ids.length || bulkRef.current) return
-    const n = ids.length
-    const idSet = new Set(ids)
-    const what = `${n} report${n === 1 ? '' : 's'}`
-    const busy = beginBusy(kind === 'delete' ? 'delete' : 'save', what, n)
-    const start: BulkRun = { kind, ids: idSet, done: 0, total: n, removing: false }
-    bulkRef.current = start
-    setBulk(start)
+    if (!ids.length || bulk) return
     setSelected(new Set())
-    const size = Math.max(1, Math.ceil(n / 10))
-    let done = 0
-    let failed = ''
-    for (let i = 0; i < n; i += size) {
-      const chunk = ids.slice(i, i + size)
-      const res = await api(kind === 'delete' ? '/api/reports/bulk/delete' : '/api/reports/bulk/read', { method: 'POST', body: JSON.stringify(kind === 'delete' ? { ids: chunk } : { ids: chunk, read: kind === 'read' }) }, { activity: false }).catch(() => null)
-      if (!res?.ok) {
-        failed = (await res?.json().catch(() => null))?.error ?? `Could not ${kind === 'delete' ? 'delete' : 'update'} ${done ? 'all of them' : 'them'}${res ? ` (${res.status})` : ': the server is unreachable'}`
-        break
-      }
-      done += chunk.length
-      busy.progress(done)
-      setBulk((b) => (b ? { ...b, done } : b))
-    }
-    const finished = new Set(ids.slice(0, done))
-    // the dashboard's own copy too (the server's update also comes over the live feed)
-    useDashboard.setState((s) =>
-      kind === 'delete' ? { reports: s.reports.filter((r) => !finished.has(r.id)) } : { reports: s.reports.map((r) => (finished.has(r.id) ? { ...r, read: kind === 'read' } : r)) },
-    )
-    if (kind === 'delete' && done) {
-      // fold the deleted rows away, then they're gone for good
-      const removing: BulkRun = { ...start, ids: finished, done, removing: true }
-      bulkRef.current = removing
-      setBulk(removing)
-      if (finished.has(picked)) setUrl({ ri: null })
-      await new Promise((r) => setTimeout(r, 260))
-      setGone((g) => new Set([...g, ...finished]))
-    }
-    busy.end(failed || undefined)
-    if (failed) useDashboard.setState({ syncError: failed })
-    bulkRef.current = null
-    setBulk(null)
-    setReload((x) => x + 1)
+    if (kind === 'delete' && ids.includes(picked)) setUrl({ ri: null })
+    void runReportBulk(kind, ids)
   }
   const first = data && data.total ? (data.page - 1) * data.per + 1 : 0
   const last = data ? Math.min(data.total, data.page * data.per) : 0
@@ -791,14 +867,6 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
 }
 
 /** View all: pick reports on this page, then one action on all of them. */
-interface BulkRun {
-  kind: 'read' | 'unread' | 'delete'
-  ids: Set<string>
-  done: number
-  total: number
-  removing: boolean
-}
-
 function BulkBar({
   items,
   selected,
@@ -812,22 +880,23 @@ function BulkBar({
   onSelect: (s: Set<string>) => void
   onRead: (read: boolean) => void
   onDelete: () => void
-  bulk: BulkRun | null
+  bulk: ReportBulk | null
 }) {
   const all = items.length > 0 && items.every((r) => selected.has(r.id))
   const some = selected.size > 0
   // running: what it's doing and how far, in place of the actions
   if (bulk) {
-    const pct = Math.round((bulk.done / bulk.total) * 100)
+    const total = bulk.ids.length
+    const pct = Math.round((bulk.done / total) * 100)
     const verb = bulk.kind === 'delete' ? (bulk.removing ? 'Deleted' : 'Deleting') : bulk.kind === 'read' ? 'Marking read' : 'Marking unread'
     return (
       <div className={`reports-bulk is-on is-running reports-bulk--${bulk.kind}`} role="status" aria-live="polite">
         <LuLoader className="row-busy__spin" />
         <span className="reports-bulk__progress-text">
-          {verb} {bulk.total} report{bulk.total === 1 ? '' : 's'}
+          {verb} {total} report{total === 1 ? '' : 's'}
           {!bulk.removing && '…'}
           <span className="muted">
-            {bulk.done}/{bulk.total}
+            {bulk.done}/{total}
           </span>
         </span>
         <span className="reports-bulk__bar" aria-hidden>
@@ -872,7 +941,7 @@ function BulkBar({
 
 /** One report. Opening it marks it read. */
 export function ReportModal({ id, onClose, onMinimize }: { id: string; onClose: () => void; onMinimize?: (title: string) => void }) {
-  const r = useDashboard((s) => s.reports.find((x) => x.id === id))
+  const r = useDashboard((s) => s.reports.find((x) => x.id === id) ?? s.olderReports[id])
   // full size for long reports and wide tables
   const max = useModalMaximize(640)
   // its chip goes once it's open again

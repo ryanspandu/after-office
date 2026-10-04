@@ -224,3 +224,21 @@
   .report-row.is-deleting::after, .report-row.is-updating::after, .row-busy__spin { animation: none; }
   .report-row.is-removing { animation-duration: 0.01s; }
 }
+
+/* ── the Reports panel: a tab per kind, and the list loading more as it scrolls (ui/Reports.tsx ReportsPanel) ── */
+.reports-panel__tabs { display: flex; margin: -2px 0 8px; min-width: 0; }
+.reports-panel__tabrow button { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 10px; white-space: nowrap; }
+.reports-panel__tabcount { min-width: 16px; padding: 0 5px; border-radius: 999px; font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center; background: var(--hl); color: #fff; }
+.reports-panel__tabrow button.active .reports-panel__tabcount { background: var(--accent-fg); color: var(--accent); }
+/* scrolls like an app: momentum, no pull of the page behind, rows far down not laid out until near */
+.reports-panel__list { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scroll-behavior: auto; }
+.reports-panel__list > .report-row { content-visibility: auto; contain-intrinsic-size: auto 72px; }
+/* the end of the list: a couple of placeholder rows while the next ones load */
+.reports-panel__more { list-style: none; display: flex; flex-direction: column; gap: 10px; padding: 10px 8px 12px 34px; }
+.reports-panel__skeleton { display: flex; flex-direction: column; gap: 6px; }
+.reports-panel__skeleton > span { display: block; height: 10px; border-radius: 6px; background: linear-gradient(90deg, var(--card-2) 25%, color-mix(in srgb, var(--line) 80%, transparent) 50%, var(--card-2) 75%) 0 0 / 200% 100%; animation: skeleton-shine 1.2s linear infinite; }
+.reports-panel__skeleton > span:first-child { width: 70%; height: 12px; }
+.reports-panel__skeleton > span:last-child { width: 92%; }
+.reports-panel__end { list-style: none; padding: 10px 0 12px; text-align: center; font-size: 11.5px; }
+@keyframes skeleton-shine { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .reports-panel__skeleton > span { animation: none; } }
