@@ -353,3 +353,6 @@ span.stab { padding: 0 4px 0 10px; }
 .tool__row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .tool__row > .tool__head { flex: 1; min-width: 0; }
 .tool__report { flex-shrink: 0; }
+/* a report link under a message: readable (its title is what tells them apart) */
+.msg__report { max-width: min(420px, 100%); gap: 7px; padding: 6px 12px; border-radius: 10px; font-size: 13px; }
+.msg__report svg { font-size: 15px; }

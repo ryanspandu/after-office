@@ -264,6 +264,9 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
     setOutgoing((o) => (o?.files.forEach((p) => p.thumb && URL.revokeObjectURL(p.thumb)), null))
   }, [delivered])
 
+  // a follow-up sent within a minute of the last message (while that one is still being answered): one answer for both
+  const lastSent = useRef(0)
+  const [joinedNote, setJoinedNote] = useState(false)
   const send = async (said?: string) => {
     const body = (said ?? text).trim()
     if (offline || sending || pending.uploading || (!body && !pending.ids.length)) return
@@ -275,7 +278,12 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
     setText('')
     stick.current = true
     try {
-      await liveApi.prompt(agent.id, body, pending.ids, context.value, sk)
+      const r = await liveApi.prompt(agent.id, body, pending.ids, context.value, sk, at - lastSent.current < 60_000)
+      lastSent.current = at
+      if (r?.joined) {
+        setJoinedNote(true)
+        setTimeout(() => setJoinedNote(false), 6000)
+      }
       // the main session's answer is read out when this was said (side sessions aren't watched)
       if (spoken.current && !sk) talkedByVoice(agent.id)
       spoken.current = false
@@ -634,6 +642,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       {offline && (session ? <div className="chat__notice">Starting the session…</div> : <OfflineBanner agent={agent} />)}
       {error && <div className="chat__error">{error}</div>}
       {!error && notice && agent.status === 'waiting' && <div className="chat__notice">{notice}</div>}
+      {joinedNote && <div className="chat__notice">Added to the answer in progress: {agent.name} answers both messages together.</div>}
       {stoppedTask && (
         <div className="chat__notice chat__notice--stopped">
           <span>

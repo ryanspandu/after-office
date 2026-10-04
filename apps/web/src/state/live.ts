@@ -290,8 +290,15 @@ export const liveApi = {
   /** `uploads`: ids of files attached (staged) for this message; the server moves them into the agent's folder */
   /** `ctx`: the folder and tags picked above the message box (optional) */
   /** `session`: one of its side sessions (s2, s3…; unset: its main session) */
-  prompt: (id: string, text: string, uploads: string[] = [], ctx?: { folder: string; tags: string[] }, session?: string) =>
-    call(`/api/agents/${id}/prompt${session ? `?session=${session}` : ''}`, { text, ...(uploads.length ? { uploads } : {}), ...(ctx?.folder ? { folder: ctx.folder } : {}), ...(ctx?.tags.length ? { tags: ctx.tags } : {}) }),
+  /** `join`: a follow-up right after the last message: added to the answer in progress (the server decides). */
+  prompt: (id: string, text: string, uploads: string[] = [], ctx?: { folder: string; tags: string[] }, session?: string, join = false) =>
+    call(`/api/agents/${id}/prompt${session ? `?session=${session}` : ''}`, {
+      text,
+      ...(uploads.length ? { uploads } : {}),
+      ...(ctx?.folder ? { folder: ctx.folder } : {}),
+      ...(ctx?.tags.length ? { tags: ctx.tags } : {}),
+      ...(join ? { join: true } : {}),
+    }) as Promise<{ ok: boolean; joined?: boolean }>,
   /** Attach a file in the chat: staged on the server until the message is sent (then it goes into the agent's folder). */
   upload: async (id: string, file: File): Promise<StagedUpload> => {
     // raw bytes + the name in a header (the server's one exception to JSON-only writes, see auth.ts)

@@ -4,12 +4,12 @@ import { noteOwnerMessage } from '../work/activity'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { FollowUpDecision, LiveMode } from '@after-office/shared'
-import { agentsRepo, sideSessionsRepo, usageRepo } from '../db'
+import { agentsRepo, sideSessionsRepo, usageRepo, tasksRepo } from '../db'
 import { existsSync } from 'node:fs'
-import { cleanChatContext, contextBlock, expectChatReport, withContext, stopActiveTask } from '../work/work'
+import { active, cleanChatContext, contextBlock, expectChatReport, withContext, stopActiveTask } from '../work/work'
 import { decide } from '../agents/ingest'
 import { AgentError, changeFolder, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeFolder, randomStyle, grantFolder, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
-import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime } from '../agents/registry'
+import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime, runtimeOf, sideRuntimeOf } from '../agents/registry'
 import type { Runtime } from '../agents/state'
 import { readChat } from '../agents/transcripts'
 import { requireSameOrigin, terminalSocket } from '../agents/term'
@@ -64,7 +64,7 @@ agentRoutes.delete('/agents/:id', async (c) => {
 })
 
 agentRoutes.post('/agents/:id/prompt', async (c) => {
-  const { text, uploads, folder: folderIn, tags } = await c.req.json<{ text: string; uploads?: unknown; folder?: unknown; tags?: unknown }>()
+  const { text, uploads, folder: folderIn, tags, join } = await c.req.json<{ text: string; uploads?: unknown; folder?: unknown; tags?: unknown; join?: unknown }>()
   // ?session=s2: one of its side sessions (unset: its main session)
   const key = sessionKeyOf(c.req.query('session'))
   // the folder and tags picked above the message box (optional): a block after the owner's words (work/chatContext.ts)
@@ -89,8 +89,15 @@ agentRoutes.post('/agents/:id/prompt', async (c) => {
   }
   // the Activity log: this turn is the owner's, from this device
   noteOwnerMessage(id, requestWho(c))
+  // a follow-up right after the owner's last message (the dashboard says so) while the agent is still answering that
+  // one: its answer is stopped and this goes in now, so one answer covers both (Claude Code would otherwise keep it
+  // for after, a second answer). Never over a task or a daily run: those finish first.
+  const rt = key ? sideRuntimeOf(id, key) : runtimeOf(id)
+  const onTask = key ? tasksRepo.active().some((t) => t.agentId === id && t.sessionKey === key && t.status === 'in_progress') : active.has(id)
+  const joined = join === true && rt.status === 'working' && !onTask
+  if (joined) await interrupt(id, key)
   await sendPrompt(id, message, key)
-  return c.json({ ok: true })
+  return c.json({ ok: true, joined })
 })
 
 // a file attached in the chat (one per request: raw bytes, its name URL-encoded in X-File-Name). Only staged: it goes
