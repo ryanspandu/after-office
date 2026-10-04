@@ -18,3 +18,8 @@
 .usage-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--hl); transition: width 0.4s; }
 .usage-bar--warm > span { background: #e0a21b; }
 .usage-bar--hot > span { background: var(--danger); }
+/* the context window list: one column of rows; on phones three in view, the rest scrolls */
+.usage-ctx { display: flex; flex-direction: column; gap: 10px; }
+@media (max-width: 768px) {
+  .usage-ctx { max-height: var(--ctx-max, none); overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+}

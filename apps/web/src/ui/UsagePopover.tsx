@@ -114,11 +114,21 @@ function UsageDetails({ onClose }: { onClose: () => void }) {
   const tz = useClock((s) => s.timezone)
   const now = useNow(30_000).getTime()
   const withContext = agents.filter((a) => a.status !== 'offline' && (a.contextPct != null || a.contextTokens != null))
+  // the height of the first three rows: how tall the list may be on a phone
+  const ctxRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ctxRef.current
+    const third = el?.children[2] as HTMLElement | undefined
+    if (!el) return
+    el.style.setProperty('--ctx-max', third ? `${third.offsetTop - el.offsetTop + third.offsetHeight + 2}px` : 'none')
+  }, [withContext.length])
 
   return (
     <>
       <section className="usage-pop__section">
         <h3>Context window</h3>
+        {/* phones: three agents in view, the rest a scroll away (styles: .usage-ctx) */}
+        <div className="usage-ctx" ref={ctxRef}>
         {withContext.map((a) => {
           const pct = a.contextPct ?? (a.contextTokens && a.contextSize ? (a.contextTokens / a.contextSize) * 100 : 0)
           return (
@@ -135,6 +145,7 @@ function UsageDetails({ onClose }: { onClose: () => void }) {
             </div>
           )
         })}
+        </div>
         {!withContext.length && <p className="muted usage-pop__empty">Shows up once an agent is running.</p>}
       </section>
 
