@@ -86,6 +86,7 @@ export default function CodeMirrorBox({
   onSave,
   readOnly,
   dark,
+  focus = true,
 }: {
   name: string
   value: string
@@ -93,6 +94,8 @@ export default function CodeMirrorBox({
   onSave: () => void
   readOnly: boolean
   dark: boolean
+  /** the cursor in it when it opens (editing); reading doesn't take the focus */
+  focus?: boolean
 }) {
   const extensions = useMemo(() => {
     const lang = languageOf(name).ext
@@ -112,7 +115,7 @@ export default function CodeMirrorBox({
       readOnly={readOnly}
       editable={!readOnly}
       height="100%"
-      autoFocus
+      autoFocus={focus}
       basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: true, bracketMatching: true, closeBrackets: true, autocompletion: true, tabSize: 2 }}
     />
   )

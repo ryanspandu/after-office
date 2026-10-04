@@ -99,6 +99,9 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
   )
   // a text file open in the editor (its path)
   const [editing, setEditing] = useState<string | null>(null)
+  // opened to change it (a new file, or Edit from its menu) rather than to read it (a click)
+  const [editMode, setEditMode] = useState(false)
+  const openFile = (p: string, edit: boolean) => (setEditMode(edit), setEditing(p))
   // hidden files (.env, .gitignore, .claude…) shown too: remembered in this browser
   const [hidden, setHidden] = useState(() => {
     try {
@@ -169,7 +172,7 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
         const made = (await post('/api/workspaces/newfile', { root, path, name })) as { path: string }
         setNewFolder(null)
         await load(path)
-        setEditing(made.path)
+        openFile(made.path, true)
         return
       }
       await post('/api/workspaces/folders', { root, path, name })
@@ -244,7 +247,7 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
     const p = join(path, e.name)
     if (e.dir) return void load(p)
     // text and code: straight into the editor
-    if (isTextFile(e.name)) return void setEditing(p)
+    if (isTextFile(e.name)) return void openFile(p, false)
     const att = { path: p, size: e.size, ...(e.image ? { image: true } : {}) }
     if (canPreview(att)) setPreview(att)
     else saveUrl(fileUrl(root, p), e.name)
@@ -474,7 +477,7 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
               label: menu.entry.dir ? 'Open' : canPreview({ path: menu.entry.name, size: menu.entry.size }) ? 'Preview' : 'Download',
               run: () => open(menu.entry),
             },
-            ...(!menu.entry.dir && !menu.entry.image ? [{ icon: <LuFileCode />, label: 'Edit', run: () => setEditing(join(path, menu.entry.name)) }] : []),
+            ...(!menu.entry.dir && !menu.entry.image ? [{ icon: <LuFileCode />, label: 'Edit', run: () => openFile(join(path, menu.entry.name), true) }] : []),
             // hidden ones (.env, .claude…): read and edited here, not renamed or moved
             ...(menu.entry.name.startsWith('.') ? [] : [{ icon: <LuPencil />, label: 'Rename', run: () => setRenaming(menu.entry.name) }]),
             ...(menu.entry.dir || canPreview({ path: menu.entry.name, size: menu.entry.size })
@@ -485,7 +488,7 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
           ]}
         />
       )}
-      {editing && <FileEditor root={root} path={editing} onClose={() => setEditing(null)} onSaved={() => void load(here.current, true)} />}
+      {editing && <FileEditor key={editing} root={root} path={editing} edit={editMode} onClose={() => setEditing(null)} onSaved={() => void load(here.current, true)} />}
       {preview && <FilePreview file={{ path: `${root}/${preview.path}`, size: preview.size }} url={fileUrl(root, preview.path)} onClose={() => setPreview(null)} />}
     </div>
   )

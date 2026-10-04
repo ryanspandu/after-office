@@ -8,7 +8,8 @@ import { useModalMaximize } from './Maximize'
 import { Modal } from './Modal'
 
 // A text file of a folder opened in an editor (the Files browser): VS Code's look, its language's colours, saved in
-// place (⌘S). A save over a version an agent wrote meanwhile asks first. Markdown can be previewed.
+// place (⌘S). It opens for reading (Markdown as a page, code read only); Edit turns it into the editor. A save over
+// a version an agent wrote meanwhile asks first.
 
 const CodeMirrorBox = lazy(() => import('./CodeMirrorBox'))
 
@@ -34,7 +35,7 @@ interface Loaded {
   editable: boolean
 }
 
-export function FileEditor({ root, path, onClose, onSaved }: { root: string; path: string; onClose: () => void; onSaved?: () => void }) {
+export function FileEditor({ root, path, onClose, onSaved, edit = false }: { root: string; path: string; onClose: () => void; onSaved?: () => void; edit?: boolean }) {
   const name = path.split('/').pop() ?? path
   const dark = useDaylight() < 0.5
   const max = useModalMaximize(980, 'after-office:file-editor-full')
@@ -43,8 +44,11 @@ export function FileEditor({ root, path, onClose, onSaved }: { root: string; pat
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
-  const [preview, setPreview] = useState(false)
   const markdown = /\.(md|mdx|markdown)$/i.test(name)
+  // reading (the default) or editing (Edit; a new file, or Edit from its menu, opens editing)
+  const [editing, setEditing] = useState(edit)
+  // while editing Markdown: how it reads
+  const [preview, setPreview] = useState(false)
   const dirty = !!file && text !== file.text
 
   const load = useCallback(async () => {
@@ -110,13 +114,18 @@ export function FileEditor({ root, path, onClose, onSaved }: { root: string; pat
               <LuLock /> Read only
             </span>
           )}
-          {file?.editable && <span className="code-editor__state muted">{saving ? 'Saving…' : dirty ? 'Unsaved' : savedAt ? 'Saved' : ''}</span>}
-          {markdown && file && (
-            <button className="icon-btn small ghost" aria-pressed={preview} onClick={() => setPreview((v) => !v)} data-tip={preview ? 'Edit' : 'Preview'} aria-label={preview ? 'Edit' : 'Preview'}>
+          {file?.editable && editing && <span className="code-editor__state muted">{saving ? 'Saving…' : dirty ? 'Unsaved' : savedAt ? 'Saved' : ''}</span>}
+          {markdown && file && editing && (
+            <button className="icon-btn small ghost" aria-pressed={preview} onClick={() => setPreview((v) => !v)} data-tip={preview ? 'Back to the text' : 'Preview'} aria-label={preview ? 'Back to the text' : 'Preview'}>
               {preview ? <LuPencil /> : <LuEye />}
             </button>
           )}
-          {file?.editable && (
+          {file?.editable && !editing && (
+            <button className="small" onClick={() => (setEditing(true), setPreview(false))} data-tip="Change this file">
+              <LuPencil /> Edit
+            </button>
+          )}
+          {file?.editable && editing && (
             <button className="small primary" onClick={() => void save()} disabled={!dirty || saving} data-tip="Save (⌘S / Ctrl+S)">
               {savedAt && !dirty ? <LuCheck /> : <LuSave />} Save
             </button>
@@ -133,7 +142,7 @@ export function FileEditor({ root, path, onClose, onSaved }: { root: string; pat
               <LuLoader className="spin" />
             </div>
           )
-        ) : preview ? (
+        ) : (markdown && !editing) || (editing && preview) ? (
           <div className="code-editor__preview">
             <Markdown text={text} />
           </div>
@@ -145,7 +154,7 @@ export function FileEditor({ root, path, onClose, onSaved }: { root: string; pat
               </div>
             }
           >
-            <CodeMirrorBox name={name} value={text} onChange={setText} onSave={() => void saveRef.current()} readOnly={!file.editable} dark={dark} />
+            <CodeMirrorBox name={name} value={text} onChange={setText} onSave={() => void saveRef.current()} readOnly={!file.editable || !editing} dark={dark} focus={editing} />
           </Suspense>
         )}
       </div>
