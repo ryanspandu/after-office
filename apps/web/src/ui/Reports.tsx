@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { LuSlidersHorizontal, LuCheckCheck, LuMail, LuMinus, LuChevronLeft, LuChevronRight, LuCircleAlert, LuCircleCheck, LuCircleX, LuClock, LuHourglass, LuLoader, LuRefreshCw, LuHand, LuCrown, LuFileText, LuFolder, LuLayers, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
 import type { OfficeTask, ReportOutcome, WorkJob, WorkReport } from '@after-office/shared'
@@ -189,9 +189,30 @@ function jobState(tasks: OfficeTask[]): 'working' | 'waiting' | 'review' | 'done
   return 'done'
 }
 
-/** One job: its title, how it stands, the latest step's words; opens into its steps. */
-function JobRow({ g, now }: { g: ReportGroup; now: number }) {
-  const [open, setOpen] = useState(false)
+/**
+ * One job: its title, how it stands, the latest step's words; opens into its steps. View all: `step` draws each step
+ * (its checkbox, picked for reading), the job's checkbox picks them all, and it's open while one of them is read.
+ */
+function JobRow({
+  g,
+  now,
+  step,
+  holds,
+  checked,
+  onCheck,
+}: {
+  g: ReportGroup
+  now: number
+  step?: (r: WorkReport) => ReactNode
+  /** a step of it is the one being read: shown open */
+  holds?: boolean
+  checked?: 'all' | 'some' | 'none'
+  onCheck?: (on: boolean) => void
+}) {
+  const [open, setOpen] = useState(!!holds)
+  useEffect(() => {
+    if (holds) setOpen(true)
+  }, [holds])
   const reports = [...g.reports].sort((a, b) => b.finishedAt - a.finishedAt)
   // its words: the manager's latest summary if there is one, else the latest step's
   const latest = reports.find((r) => r.kind === 'note') ?? reports[0]
@@ -207,7 +228,17 @@ function JobRow({ g, now }: { g: ReportGroup; now: number }) {
   const firstLine = latest.text.replace(/[#*`>_-]/g, '').split('\n').find((l) => l.trim()) ?? ''
   const steps = g.reports.length
   return (
-    <li className={`report-row job-row${unread ? ' report-row--unread' : ''}${open ? ' is-open' : ''}`}>
+    <li className={`report-row job-row${unread ? ' report-row--unread' : ''}${open ? ' is-open' : ''}${onCheck ? ' report-row--checkable' : ''}${checked === 'all' ? ' is-checked' : ''}`}>
+      {onCheck && (
+        <input
+          type="checkbox"
+          className="report-row__check"
+          checked={checked === 'all'}
+          ref={(el) => void (el && (el.indeterminate = checked === 'some'))}
+          onChange={(e) => onCheck(e.target.checked)}
+          aria-label={`Pick every report of “${g.job?.title ?? latest.title}”`}
+        />
+      )}
       <button className="report-row__main" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <LuLayers className="report__icon" />
         <span className="report-row__body">
@@ -234,9 +265,7 @@ function JobRow({ g, now }: { g: ReportGroup; now: number }) {
       </button>
       {open && (
         <ul className="job-row__steps ui-drop ui-stagger">
-          {reports.map((r) => (
-            <ReportRow key={r.id} r={r} now={now} showJob={false} onOpen={() => openUrl({ report: r.id })} />
-          ))}
+          {reports.map((r) => (step ? <Fragment key={r.id}>{step(r)}</Fragment> : <ReportRow key={r.id} r={r} now={now} showJob={false} onOpen={() => openUrl({ report: r.id })} />))}
         </ul>
       )}
     </li>
@@ -597,29 +626,47 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
           />
         )}
         <ul key={query} className={`list reports-modal__list ui-stagger${selected.size ? ' is-picking' : ''}`}>
+          {/* one item per piece of work (a job's or a task's reports, on this page), opening into its steps */}
           {withDays(
-            data?.items ?? [],
-            (r) => r.finishedAt,
+            groupReports(data?.items ?? []),
+            (g) => g.reports[0].finishedAt,
             now,
-            (r) => (
-              <ReportRow
-                key={r.id}
-                r={r}
-                now={now}
-                picked={wide && r.id === picked}
-                onOpen={() => pick(r.id)}
-                checked={selected.has(r.id)}
-                onCheck={(on) =>
-                  setSelected((cur) => {
-                    const next = new Set(cur)
-                    if (on) next.add(r.id)
-                    else next.delete(r.id)
-                    return next
-                  })
-                }
-              />
-            ),
-            (r) => r.id,
+            (g) => {
+              const checkOne = (ids: string[], on: boolean) =>
+                setSelected((cur) => {
+                  const next = new Set(cur)
+                  for (const id of ids) if (on) next.add(id)
+                  else next.delete(id)
+                  return next
+                })
+              const row = (r: WorkReport, inJob = false) => (
+                <ReportRow
+                  key={r.id}
+                  r={r}
+                  now={now}
+                  showJob={!inJob}
+                  picked={wide && r.id === picked}
+                  onOpen={() => pick(r.id)}
+                  checked={selected.has(r.id)}
+                  onCheck={(on) => checkOne([r.id], on)}
+                />
+              )
+              if (g.reports.length === 1) return row(g.reports[0])
+              const ids = g.reports.map((r) => r.id)
+              const n = ids.filter((id) => selected.has(id)).length
+              return (
+                <JobRow
+                  key={g.key}
+                  g={g}
+                  now={now}
+                  step={(r) => row(r, true)}
+                  holds={wide && ids.includes(picked)}
+                  checked={n === 0 ? 'none' : n === ids.length ? 'all' : 'some'}
+                  onCheck={(on) => checkOne(ids, on)}
+                />
+              )
+            },
+            (g) => g.key,
           )}
           {data && !data.items.length && <li className="empty">{q || days || folder || filter !== 'all' ? 'No reports match.' : 'Nothing here.'}</li>}
           {!data && !error && <li className="empty">Loading…</li>}
