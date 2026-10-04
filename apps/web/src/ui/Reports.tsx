@@ -56,6 +56,7 @@ export function ReportRow({
   checked,
   onCheck,
   busy,
+  allTags,
 }: {
   r: WorkReport
   now: number
@@ -67,6 +68,8 @@ export function ReportRow({
   onCheck?: (on: boolean) => void
   /** an action on it is running (it can't be picked meanwhile); "removing": deleted, folding away */
   busy?: RowBusy
+  /** every tag shown (the Reports window has the room); else the first and "+n" */
+  allTags?: boolean
 }) {
   const agent = useOffice((s) => s.agents.find((a) => a.id === r.agentId))
   const firstLine = r.text.replace(/[#*`>_-]/g, '').split('\n').find((l) => l.trim()) ?? ''
@@ -98,7 +101,7 @@ export function ReportRow({
                 <LuLayers /> {r.job.title}
               </span>
             )}
-            <TagChips ids={r.tags} max={1} />
+            <TagChips ids={r.tags} max={allTags ? undefined : 1} />
           </span>
         </span>
         {!r.read && <span className="report-row__dot" aria-label="Unread" />}
@@ -804,6 +807,7 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
                   checked={selected.has(r.id)}
                   onCheck={(on) => checkOne([r.id], on)}
                   busy={rowBusy(r.id)}
+                  allTags
                 />
               )
               if (g.reports.length === 1) return row(g.reports[0])

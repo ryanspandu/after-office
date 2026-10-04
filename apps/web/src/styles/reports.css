@@ -242,3 +242,6 @@
 .reports-panel__end { list-style: none; padding: 10px 0 12px; text-align: center; font-size: 11.5px; }
 @keyframes skeleton-shine { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .reports-panel__skeleton > span { animation: none; } }
+/* the Reports window shows every tag of a row: they wrap under the name and time when there are many */
+.reports-modal__list .report-row__meta { flex-wrap: wrap; row-gap: 4px; }
+.reports-modal__list .report-row__meta .tag-chips { flex-wrap: wrap; min-width: 0; }
