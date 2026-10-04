@@ -5,10 +5,12 @@ import { IMAGE, MAX_BYTES } from '../agents/files'
 import { deleteAgentFolder } from './projectFolders'
 import { basename, dirname, extname, join, sep } from 'node:path'
 import type { FolderGit, GitCommit, GitInfo, Workspace, WorkspaceFolder } from '@after-office/shared'
-import { agentsRepo, extraDirsOf, folderNotesRepo, ownerNotesRepo } from '../db'
+import { agentsRepo, extraDirsOf, folderNotesRepo, ownerNotesRepo, type AgentRow } from '../db'
 import { AgentError } from '../agents/errors'
 import { AGENTS_DIR, PROJECTS_DIR } from '../fsroots'
 import { git } from './git'
+import { runAsAgent } from '../agents/asagent'
+import { gitEnv } from '../agents/git'
 
 // The Projects tab: what the agents are working on, read from their folders. An agent's folder that is a git repo
 // is one project; any other folder is a home for several, one per subfolder. Git runs with the agents' rights and
@@ -55,13 +57,15 @@ export async function folderGit(root: string, rel = ''): Promise<FolderGit | nul
   const top = await git(real, ['rev-parse', '--show-toplevel'])
   if (!top.ok) return null
   const repoTop = top.out.trim()
-  const [branch, status, last, counts, prefix] = await Promise.all([
+  const [branch, status, last, counts, prefix, remotes] = await Promise.all([
     git(real, ['rev-parse', '--abbrev-ref', 'HEAD']),
     git(real, ['status', '--porcelain=v1', '--untracked-files=normal']),
     git(real, ['log', '-1', '--format=%s%x00%ct%x00%an']),
     git(real, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD']),
     git(real, ['rev-parse', '--show-prefix']),
+    git(real, ['remote']),
   ])
+  const owner = gitOwner(repoTop)
   // paths in `git status` are from the repo's top; the folder on screen is `here` below it
   const here = prefix.ok ? prefix.out.trim() : ''
   const entries: FolderGit['entries'] = {}
@@ -88,7 +92,109 @@ export async function folderGit(root: string, rel = ''): Promise<FolderGit | nul
     dirty: lines.length,
     lastCommit: subject !== undefined && at ? { subject: subject.slice(0, 200), at: Number(at) * 1000, author: (author ?? '').slice(0, 80) } : null,
     entries,
+    hasRemote: remotes.ok && !!remotes.out.trim(),
+    committer: owner ? { agentId: owner.id, name: owner.name } : null,
   }
+}
+
+// ── Discard / Commit / Push from the Files browser (the whole repo of the folder on screen) ──
+
+/**
+ * Whose git identity a repo's commits and pushes use: the agent whose folder it's in (the deepest match), else one
+ * that works there (an extra folder), else the manager. Their gitconfig has the name, email and SSH key.
+ */
+export function gitOwner(repo: string): AgentRow | undefined {
+  const agents = agentsRepo.all()
+  // git gives the repo's real path; a folder may be named through a symlink (macOS /var → /private/var)
+  const real = (dir: string) => {
+    try {
+      return realpathSync(dir)
+    } catch {
+      return dir
+    }
+  }
+  const within = (dir: string | null | undefined) => {
+    if (!dir) return false
+    const d = real(dir).replace(/\/+$/, '')
+    return repo === d || repo.startsWith(d + sep)
+  }
+  const byCwd = agents.filter((a) => within(a.cwd)).sort((a, b) => b.cwd.length - a.cwd.length)[0]
+  return byCwd ?? agents.find((a) => extraDirsOf(a).some(within)) ?? agents.find((a) => a.kind === 'manager')
+}
+
+// writing: no hooks or fsmonitor from the repo's config (the dashboard's commit isn't the place for them), no pager
+const WRITE = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.pager=cat']
+
+async function gitWrite(top: string, who: AgentRow | null | undefined, args: string[], timeoutMs = 30_000) {
+  // the agent's gitconfig (written first, as its session does): its name, email and SSH key
+  const vars = who ? await gitEnv(who) : {}
+  const env = ['env', 'GIT_TERMINAL_PROMPT=0', ...Object.entries(vars).map(([k, v]) => `${k}=${v}`)]
+  const r = await runAsAgent([...env, 'git', ...WRITE, '-C', top, ...args], { cwd: top, timeoutMs, mergeStderr: true })
+  return { ok: r.code === 0, out: r.out.trim(), timedOut: r.timedOut }
+}
+/** The last lines of git's words: what to show when it fails. */
+const said = (out: string) => out.split('\n').filter((l) => l.trim() && !/^hint:/.test(l)).slice(-3).join(' ').slice(0, 400)
+
+async function repoOf(root: string, rel: string) {
+  const { real } = inside(root, rel)
+  if (!lstatSync(real).isDirectory()) throw new AgentError('Not a folder', 400)
+  const top = await git(real, ['rev-parse', '--show-toplevel'])
+  if (!top.ok) throw new AgentError('This folder is not in a git repository', 400)
+  return top.out.trim()
+}
+
+/** Throw away every change not committed: tracked files back as committed, new files removed (ignored ones and the
+ *  office's own .claude / .mcp.json stay). */
+export async function gitDiscard(root: string, rel = '') {
+  const top = await repoOf(root, rel)
+  await gitWrite(top, undefined, ['reset', '-q'])
+  // a repo without a commit has nothing to go back to: only the new files go
+  await gitWrite(top, undefined, ['checkout', '--', '.'])
+  const clean = await gitWrite(top, undefined, ['clean', '-fd', '-e', '.claude', '-e', '.mcp.json'])
+  if (!clean.ok) throw new AgentError(`Could not discard: ${said(clean.out)}`, 400)
+  return { ok: true }
+}
+
+/** Commit everything not committed yet, as the folder's agent (or the one picked). */
+export async function gitCommit(root: string, rel: string, messageIn: unknown, agentId?: string) {
+  const message = typeof messageIn === 'string' ? messageIn.trim().slice(0, 5000) : ''
+  if (!message) throw new AgentError('Write a commit message', 400)
+  const top = await repoOf(root, rel)
+  const who = agentId ? agentsRepo.get(agentId) : gitOwner(top)
+  if (agentId && !who) throw new AgentError('No such agent', 404)
+  const add = await gitWrite(top, who, ['add', '-A'])
+  if (!add.ok) throw new AgentError(`Could not stage the changes: ${said(add.out)}`, 400)
+  const commit = await gitWrite(top, who, ['commit', '-q', '-m', message])
+  if (!commit.ok) {
+    if (/nothing to commit|no changes added/i.test(commit.out)) throw new AgentError('Nothing to commit', 400)
+    if (/tell me who you are|empty ident/i.test(commit.out)) throw new AgentError(`${who?.name ?? 'The agent'} has no git name and email yet: set them in its Overview → Git`, 400)
+    throw new AgentError(`Could not commit: ${said(commit.out)}`, 400)
+  }
+  const head = await git(top, ['log', '-1', '--format=%h%x00%s'])
+  const [hash, subject] = head.out.trim().split('\0')
+  return { ok: true, hash, subject, as: who?.name ?? null }
+}
+
+/** Push the branch, as the folder's agent (its SSH key). No upstream yet: to origin, under the same name. */
+export async function gitPush(root: string, rel = '', agentId?: string) {
+  const top = await repoOf(root, rel)
+  const who = agentId ? agentsRepo.get(agentId) : gitOwner(top)
+  const upstream = await git(top, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+  let args = ['push']
+  if (!upstream.ok) {
+    const remotes = (await git(top, ['remote'])).out.split('\n').map((r) => r.trim()).filter(Boolean)
+    if (!remotes.length) throw new AgentError('This repo has no remote to push to', 400)
+    args = ['push', '-u', remotes.includes('origin') ? 'origin' : remotes[0], 'HEAD']
+  }
+  const r = await gitWrite(top, who, args, 90_000)
+  if (!r.ok) {
+    if (r.timedOut) throw new AgentError('Push took too long (the remote did not answer)', 500)
+    if (/permission denied|could not read from remote|authentication failed|publickey/i.test(r.out))
+      throw new AgentError(`The remote refused ${who?.name ?? 'the agent'}'s key: add its SSH key (Overview → Git) to the repo host. ${said(r.out)}`, 400)
+    if (/rejected|non-fast-forward|fetch first/i.test(r.out)) throw new AgentError('The remote has commits you don\'t have yet: pull them first (ask the agent), then push', 409)
+    throw new AgentError(`Could not push: ${said(r.out)}`, 400)
+  }
+  return { ok: true, as: who?.name ?? null }
 }
 
 async function folder(path: string): Promise<WorkspaceFolder> {

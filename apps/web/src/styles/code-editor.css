@@ -30,3 +30,11 @@
 .fb__git-mark--U, .fb__git-mark--A { color: #2fae6b; }
 .fb__git-mark--D { color: #e05252; }
 @media (max-width: 768px) { .fb__git-last { display: none; } }
+/* the git bar's actions (ui/FileBrowser.tsx GitLine): on its right, never squeezed */
+.fb__git-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+.fb__git-actions button { height: 26px; padding: 0 10px; font-size: 12px; }
+.fb__git-actions .danger-text svg { color: var(--danger); }
+.git-commit { display: flex; flex-direction: column; gap: 12px; }
+.git-commit__msg { width: 100%; resize: vertical; min-height: 72px; font: inherit; }
+/* narrow: the actions take their own line under the branch and the counts */
+@media (max-width: 768px) { .fb__git { flex-wrap: wrap; row-gap: 6px; } .fb__git-last { flex-basis: 100%; } .fb__git-actions { margin-left: 0; } }

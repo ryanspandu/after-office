@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
 import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, ownerNotesRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
-import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, readTextFile, writeTextFile, folderGit, addEmptyFile, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
+import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, readTextFile, writeTextFile, folderGit, gitCommit, gitDiscard, gitPush, addEmptyFile, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
 import { countEntries, deleteProjectFolder, isOwnProjectFolder, makeProjectFolder, renameProjectFolder } from '../work/projectFolders'
 import { addPushDevice, pushDeviceFor, pushDevices, pushPublicKey, removePushDevice, sendPush } from '../push'
@@ -347,6 +347,17 @@ workRoutes.get('/workspaces/search', (c) => c.json(searchFolders((c.req.query('q
 workRoutes.get('/workspaces/files', (c) => c.json(listFolder(c.req.query('root') ?? '', c.req.query('path') ?? '', c.req.query('hidden') === '1')))
 // the git repo of the folder on screen: branch, what's not committed, which entries that touches
 workRoutes.get('/workspaces/git', async (c) => c.json(await folderGit(c.req.query('root') ?? '', c.req.query('path') ?? '')))
+// the Files browser's git bar: Discard all, Commit, Push (the whole repo of the folder on screen)
+workRoutes.post('/workspaces/git/:action', async (c) => {
+  const b = await c.req.json<{ root?: string; path?: string; message?: unknown; agentId?: string }>().catch(() => ({}) as { root?: string; path?: string; message?: unknown; agentId?: string })
+  const root = b.root ?? ''
+  const rel = b.path ?? ''
+  const action = c.req.param('action')
+  if (action === 'discard') return c.json(await gitDiscard(root, rel))
+  if (action === 'commit') return c.json(await gitCommit(root, rel, b.message, b.agentId || undefined))
+  if (action === 'push') return c.json(await gitPush(root, rel, b.agentId || undefined))
+  return c.json({ error: 'Unknown action' }, 404)
+})
 // a text file in the editor: read it, save it (refused if it changed since it was opened, unless forced)
 workRoutes.get('/workspaces/text', (c) => c.json(readTextFile(c.req.query('root') ?? '', c.req.query('path') ?? '')))
 workRoutes.put('/workspaces/text', async (c) => {

@@ -19,6 +19,10 @@ import {
   LuFolderPlus,
   LuFilePlus,
   LuGitBranch,
+  LuGitCommitHorizontal,
+  LuArrowUpFromLine,
+  LuLoader,
+  LuUndo2,
   LuLink,
   LuPencil,
   LuRefreshCw,
@@ -35,6 +39,10 @@ import { ago } from './FollowUps'
 import { SearchBox } from './SearchBox'
 import { FileEditor, isTextFile } from './FileEditor'
 import { ActionMenu, type MenuAction } from './ActionMenu'
+import { Modal } from './Modal'
+import { Select } from './Select'
+import { useDashboard } from '../state/dashboard'
+import { useOffice } from '../state/store'
 
 // A file manager for a folder the agents work in (the folder details, an agent's Folder tab): browse, preview, upload,
 // new folders, rename, download (one file, or several as a .zip) and delete, which moves things to the office's trash
@@ -332,7 +340,19 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
           <LuRefreshCw className={loading ? 'spin' : ''} />
         </button>
       </div>
-      {gitLine && <GitLine git={gitLine} now={now} />}
+      {gitLine && (
+        <GitLine
+          git={gitLine}
+          now={now}
+          root={root}
+          dir={here.current}
+          // after a commit, push or discard: the bar and the list (its change marks, files back or gone)
+          onChanged={() => {
+            loadGit(here.current)
+            void load(here.current, true)
+          }}
+        />
+      )}
       {newFolder !== null && (
         <div className="fb__new">
           {newKind === 'file' ? <LuFile className="fb__new-icon" /> : <LuFolder className="fb__new-icon" />}
@@ -548,7 +568,37 @@ const GIT_MARK: Record<FolderGit['entries'][string], string> = {
 }
 
 /** The folder's git repo in one line: branch, ahead / behind, what's not committed, the last commit. */
-function GitLine({ git, now }: { git: FolderGit; now: number }) {
+function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: number; root: string; dir: string; onChanged: () => void }) {
+  const [busy, setBusy] = useState<'discard' | 'push' | null>(null)
+  const [committing, setCommitting] = useState(false)
+  // Push: a remote, a branch, and something to push (or no upstream yet: the first push sets it)
+  const canPush = !!git.hasRemote && !!git.branch && (git.ahead === undefined || git.ahead > 0)
+  const run = async (action: 'discard' | 'push') => {
+    if (busy) return
+    if (action === 'discard') {
+      const ok = await confirm({
+        title: `Discard ${git.dirty} change${git.dirty === 1 ? '' : 's'}?`,
+        message: (
+          <>
+            Every file of <b>{git.repo}</b> goes back to how it was last committed, and new files are deleted (ignored files, like .env or
+            node_modules, stay). This can't be undone.
+          </>
+        ),
+        confirmLabel: 'Discard all',
+      })
+      if (!ok) return
+    }
+    setBusy(action)
+    try {
+      const r = await api(`/api/workspaces/git/${action}`, { method: 'POST', body: JSON.stringify({ root, path: dir }) })
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Could not ${action} (${r.status})`)
+      onChanged()
+    } catch (e) {
+      useDashboard.setState({ syncError: e instanceof Error ? e.message : `Could not ${action}` })
+    } finally {
+      setBusy(null)
+    }
+  }
   return (
     <div className="fb__git">
       <span className="fb__git-branch" data-tip={`Git repo: ${git.repo}`}>
@@ -573,6 +623,108 @@ function GitLine({ git, now }: { git: FolderGit; now: number }) {
           Last commit: {git.lastCommit.subject} · {ago(now - git.lastCommit.at)}
         </span>
       )}
+      <span className="fb__git-actions">
+        {git.dirty > 0 && (
+          <>
+            <button className="small ghost danger-text" onClick={() => void run('discard')} disabled={!!busy} data-tip="Throw away every change not committed">
+              {busy === 'discard' ? <LuLoader className="spin" /> : <LuUndo2 />} Discard
+            </button>
+            <button className="small" onClick={() => setCommitting(true)} disabled={!!busy} data-tip={git.committer ? `Commit everything, as ${git.committer.name}` : 'Commit everything'}>
+              <LuGitCommitHorizontal /> Commit
+            </button>
+          </>
+        )}
+        {canPush && (
+          <button
+            className="small primary"
+            onClick={() => void run('push')}
+            disabled={!!busy}
+            data-tip={git.ahead === undefined ? 'First push: sets where this branch goes (origin)' : `Push ${git.ahead} commit${git.ahead === 1 ? '' : 's'}${git.committer ? `, with ${git.committer.name}'s key` : ''}`}
+          >
+            {busy === 'push' ? <LuLoader className="spin" /> : <LuArrowUpFromLine />} Push{git.ahead ? ` ↑${git.ahead}` : ''}
+          </button>
+        )}
+      </span>
+      {committing && <CommitModal git={git} root={root} dir={dir} onClose={() => setCommitting(false)} onDone={onChanged} />}
     </div>
+  )
+}
+
+/** Commit everything not committed yet (a message, and whose identity: the folder's agent by default); can push too. */
+function CommitModal({ git, root, dir, onClose, onDone }: { git: FolderGit; root: string; dir: string; onClose: () => void; onDone: () => void }) {
+  const agents = useOffice((s) => s.agents)
+  const [message, setMessage] = useState('')
+  const [as, setAs] = useState(git.committer?.agentId ?? '')
+  const [busy, setBusy] = useState<'commit' | 'push' | null>(null)
+  const [error, setError] = useState('')
+  const post = async (action: 'commit' | 'push') => {
+    const r = await api(`/api/workspaces/git/${action}`, { method: 'POST', body: JSON.stringify({ root, path: dir, message, agentId: as || undefined }) })
+    if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Could not ${action} (${r.status})`)
+  }
+  const submit = async (andPush: boolean) => {
+    if (!message.trim() || busy) return
+    setError('')
+    setBusy('commit')
+    try {
+      await post('commit')
+      if (andPush) {
+        setBusy('push')
+        try {
+          await post('push')
+        } catch (e) {
+          // committed all the same: say why the push didn't go
+          onDone()
+          setBusy(null)
+          return setError(`Committed, but not pushed: ${e instanceof Error ? e.message : 'the push failed'}`)
+        }
+      }
+      onDone()
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not commit')
+    } finally {
+      setBusy(null)
+    }
+  }
+  const canPush = !!git.hasRemote && !!git.branch
+  return (
+    <Modal open onClose={onClose} title={`Commit to ${git.branch ?? 'HEAD'}`} description={`${git.dirty} change${git.dirty === 1 ? '' : 's'} in ${git.repo}, all of them`} width={480}>
+      <div className="modal__body git-commit">
+        <label className="field">
+          <span className="field__label">Message</span>
+          <textarea
+            className="git-commit__msg"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="What changed, e.g. fix: login redirect"
+            rows={3}
+            autoFocus
+            onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && void submit(false)}
+          />
+        </label>
+        <label className="field">
+          <span className="field__label">As</span>
+          <Select
+            ariaLabel="Whose git identity"
+            value={as}
+            options={[...agents.map((a) => ({ value: a.id, label: a.name })), ...(as ? [] : [{ value: '', label: 'The server’s git settings' }])]}
+            onChange={setAs}
+          />
+          <span className="field__hint">Their git name, email and SSH key (Overview → Git) sign the commit and push it.</span>
+        </label>
+        {error && <p className="danger-text">{error}</p>}
+        <footer className="modal__foot">
+          <button onClick={onClose}>Cancel</button>
+          {canPush && (
+            <button onClick={() => void submit(true)} disabled={!message.trim() || !!busy}>
+              {busy === 'push' ? <LuLoader className="spin" /> : <LuArrowUpFromLine />} Commit & push
+            </button>
+          )}
+          <button className="primary" onClick={() => void submit(false)} disabled={!message.trim() || !!busy} data-tip="⌘↵ / Ctrl+↵">
+            {busy === 'commit' ? <LuLoader className="spin" /> : <LuGitCommitHorizontal />} Commit
+          </button>
+        </footer>
+      </div>
+    </Modal>
   )
 }

@@ -711,6 +711,10 @@ export interface FolderGit {
   /** what's changed inside the folder on screen, by the name of its entry there (a folder: something inside it):
    *  M changed, A added (staged), D deleted, U untracked, R renamed */
   entries: Record<string, 'M' | 'A' | 'D' | 'U' | 'R'>
+  /** whether a remote is set (Push needs one) */
+  hasRemote?: boolean
+  /** whose git identity (name, email, SSH key) Commit and Push use: the agent the folder belongs to */
+  committer?: { agentId: string; name: string } | null
 }
 
 export interface WorkspaceFolder {
