@@ -63,7 +63,7 @@
 .nav-metrics > .metric { flex: 1 1 auto; max-width: 220px; }
 /* desktop: the timezone popup (ui/Navbar.tsx TimezonePop) */
 .tz-btn { width: 30px; height: 30px; }
-.tz-btn.is-on { color: var(--hl); background: var(--hl-soft); }
+.tz-btn.is-on { color: var(--hl-ink); background: var(--hl-soft); }
 .tz-pop { position: fixed; z-index: 1500; width: 300px; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18); animation: ui-pop-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; transform-origin: top center; }
 .tz-pop__head { display: flex; align-items: center; gap: 8px; padding: 0 2px 0 4px; font-size: 13px; }
 .tz-pop__head .muted { flex: 1; min-width: 0; font-size: 12px; }
@@ -72,5 +72,5 @@
 .tz-pop__list button { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 9px; font-size: 13px; cursor: pointer; }
 .tz-pop__list button:hover { background: var(--card-2); }
 .tz-pop__list button.is-on { font-weight: 600; background: var(--hl-soft); color: var(--text); }
-.tz-pop__list button svg { margin-left: auto; color: var(--hl); flex-shrink: 0; }
+.tz-pop__list button svg { margin-left: auto; color: var(--hl-ink); flex-shrink: 0; }
 .tz-pop__list .empty { padding: 10px; font-size: 12.5px; }

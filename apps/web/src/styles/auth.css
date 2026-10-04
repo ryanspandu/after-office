@@ -33,7 +33,7 @@
 .tfa { display: flex; flex-direction: column; gap: 12px; }
 .tfa__why { margin: 0; font-size: 13px; line-height: 1.5; }
 .tfa__steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; font-size: 13px; line-height: 1.5; }
-.tfa__steps li::marker { color: var(--hl); font-weight: 700; }
+.tfa__steps li::marker { color: var(--hl-ink); font-weight: 700; }
 .tfa__qr-row { display: flex; gap: 14px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 .tfa-qr { width: 164px; height: 164px; flex-shrink: 0; padding: 6px; border-radius: 12px; background: #fff; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); }
 .tfa-qr svg { width: 100%; height: 100%; display: block; }

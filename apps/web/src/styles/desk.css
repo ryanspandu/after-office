@@ -34,4 +34,4 @@
 .desk-bar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 900; display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 8px 8px 8px 16px; border-radius: 999px; font-size: 12.5px; color: var(--muted); background: var(--card); border: 1px solid var(--line); box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2); }
 .desk-bar > span { min-width: 0; }
 .desk-bar button { flex-shrink: 0; }
-.icon-btn.is-on { color: var(--hl); background: var(--hl-soft); }
+.icon-btn.is-on { color: var(--hl-ink); background: var(--hl-soft); }

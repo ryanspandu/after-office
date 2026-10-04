@@ -15,10 +15,10 @@
 .profile__list li + li { border-top: 1px solid var(--line); }
 .profile__device { display: flex; align-items: center; gap: 10px; padding: 9px 2px; }
 .profile__icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--card-2); flex-shrink: 0; }
-.profile__device.is-current .profile__icon { background: var(--hl-soft); color: var(--hl); }
+.profile__device.is-current .profile__icon { background: var(--hl-soft); color: var(--hl-ink); }
 .profile__body { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .profile__title { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 500; }
-.profile__badge { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--hl-soft); color: var(--hl); }
+.profile__badge { font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--hl-soft); color: var(--hl-ink); }
 .profile__meta { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .profile__others { align-self: flex-start; }
 .profile__log li { display: flex; align-items: center; gap: 8px; padding: 7px 2px; font-size: 12.5px; min-width: 0; }
@@ -84,7 +84,7 @@
 /* Profile → Security: password and two-factor */
 .profile__security { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .profile__sec-btn { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; text-align: left; justify-content: flex-start; min-width: 0; }
-.profile__sec-btn > svg { flex-shrink: 0; width: 16px; height: 16px; color: var(--hl); }
+.profile__sec-btn > svg { flex-shrink: 0; width: 16px; height: 16px; color: var(--hl-ink); }
 .profile__sec-btn > span { display: grid; gap: 1px; min-width: 0; }
 .profile__sec-btn b { font-size: 13px; font-weight: 600; }
 .profile__sec-btn .muted { font-size: 11.5px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

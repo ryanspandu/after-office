@@ -59,7 +59,7 @@ button.fu__msg:hover:not(:disabled) { text-decoration: underline; text-underline
 .fu--to-review { --c: var(--working); }
 .fu--mine { --c: var(--hl); }
 .fu--note { --c: var(--hl); }
-.chip--me { color: var(--hl); background: var(--hl-soft); }
+.chip--me { color: var(--hl-ink); background: var(--hl-soft); }
 .task-me { display: inline-flex; }
 /* a card's buttons sit at its bottom, whatever the length of its text (cards in a row line up) */
 .fu .fu__actions, .fu .fu__reply, .fu .fu__options { margin-top: auto; }

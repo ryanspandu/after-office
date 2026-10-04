@@ -2,7 +2,7 @@
 .rules-picker { display: flex; flex-wrap: wrap; gap: 6px; }
 .rules-chip { font-size: 12.5px; padding: 5px 11px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); color: var(--muted); }
 .rules-chip.is-on { color: var(--text); border-color: color-mix(in srgb, var(--hl) 55%, var(--line)); background: color-mix(in srgb, var(--hl) 10%, var(--card)); }
-.rules-chip.is-on svg { color: var(--hl); }
+.rules-chip.is-on svg { color: var(--hl-ink); }
 .rules-chip:disabled { opacity: 1; cursor: default; }
 .office-rules { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
 .office-rules .field__label { margin: 0; }
@@ -13,7 +13,7 @@
 .rs__multi-value.rules-mv--fixed { padding-right: 8px; }
 .rules-mv--fixed .rs__multi-value__remove { display: none; }
 .rules-opt { display: flex; align-items: flex-start; gap: 8px; }
-.rules-opt__check { width: 14px; flex-shrink: 0; color: var(--hl); font-weight: 700; }
+.rules-opt__check { width: 14px; flex-shrink: 0; color: var(--hl-ink); font-weight: 700; }
 .rules-opt__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; white-space: normal; }
 .rules-opt__text .muted { font-size: 12px; line-height: 1.35; }
 /* the rules menu: a little room between options; chosen ones in orange */

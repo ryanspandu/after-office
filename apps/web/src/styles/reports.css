@@ -144,8 +144,8 @@
 .outcome--done, .outcome--pass { color: #2fbf71; background: rgba(47, 191, 113, 0.13); }
 .outcome--revise { color: #d9a400; background: rgba(217, 164, 0, 0.14); }
 .outcome--failed { color: var(--danger); background: color-mix(in srgb, var(--danger) 13%, transparent); }
-.outcome--needs_you { color: var(--hl); background: var(--hl-soft); }
-.outcome--working { color: var(--hl); background: var(--hl-soft); }
+.outcome--needs_you { color: var(--hl-ink); background: var(--hl-soft); }
+.outcome--working { color: var(--hl-ink); background: var(--hl-soft); }
 .outcome--working svg { animation: spin 1.2s linear infinite; }
 .outcome--review { color: #2f9fbf; background: rgba(47, 159, 191, 0.13); }
 @media (prefers-reduced-motion: reduce) { .outcome--working svg { animation: none; } }

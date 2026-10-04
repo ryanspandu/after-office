@@ -11,7 +11,7 @@
 .voice-lang { display: inline-flex; flex-shrink: 0; padding: 2px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
 .voice-lang button { all: unset; cursor: pointer; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; color: var(--muted); }
 .voice-lang button.is-on { color: var(--accent-fg); background: var(--accent); }
-.manager-voice.is-on { color: var(--hl); background: var(--hl-soft); }
+.manager-voice.is-on { color: var(--hl-ink); background: var(--hl-soft); }
 .voice-pop { position: fixed; z-index: 1500; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22); }
 .voice-pop__head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
 .voice-pop__head b { flex: 1; }
@@ -26,11 +26,11 @@
 .mic-btn.is-holding { box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 25%, transparent); }
 .mic-btn { touch-action: none; -webkit-user-select: none; user-select: none; }
 .voice-auto { all: unset; box-sizing: border-box; flex-shrink: 0; cursor: pointer; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 600; color: var(--muted); background: var(--card); border: 1px solid var(--line); white-space: nowrap; }
-.voice-auto.is-on { color: var(--hl); background: var(--hl-soft); border-color: color-mix(in srgb, var(--hl) 35%, transparent); }
+.voice-auto.is-on { color: var(--hl-ink); background: var(--hl-soft); border-color: color-mix(in srgb, var(--hl) 35%, transparent); }
 .voice-auto { display: inline-flex; align-items: center; gap: 4px; }
 .voice-auto svg { font-size: 11px; }
 /* an answer being read out (navbar): who, and stop */
-.speaking-chip { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--hl); background: var(--hl-soft); border: none; }
+.speaking-chip { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--hl-ink); background: var(--hl-soft); border: none; }
 .speaking-chip svg { font-size: 11px; }
 .speaking-chip__bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
 .speaking-chip__bars i { width: 3px; border-radius: 2px; background: currentColor; animation: speak-bar 0.9s ease-in-out infinite; }

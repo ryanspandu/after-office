@@ -38,7 +38,7 @@
 }
 .ws__head:hover { background: var(--card-2); }
 .ws__head:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
-.ws__icon { color: var(--hl); flex-shrink: 0; font-size: 15px; }
+.ws__icon { color: var(--hl-ink); flex-shrink: 0; font-size: 15px; }
 .ws__name { min-width: 0; }
 .ws__head .ws__agents { margin-left: auto; }
 .ws__agents { display: inline-flex; gap: 3px; align-items: center; flex-shrink: 0; }
@@ -53,7 +53,7 @@
 .ws-meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 11.5px; font-weight: 400; }
 .ws-meta--block { padding: 0 8px 2px 55px; }
 .ws-meta__branch { display: inline-flex; align-items: center; gap: 3px; color: var(--text); }
-.ws-meta__dirty { color: var(--hl); flex-shrink: 0; }
+.ws-meta__dirty { color: var(--hl-ink); flex-shrink: 0; }
 .ws-detail { display: flex; flex-direction: column; gap: 14px; }
 .ws-detail__path { display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 10px; border-radius: 9px; background: var(--card-2); }
 .ws-detail__path code { flex: 1; min-width: 0; font-size: 12px; }
@@ -93,10 +93,10 @@
 /* running app previews (ui/Previews.tsx), at the top of the Projects tab */
 .previews { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; padding: 8px; border: 1px solid color-mix(in srgb, var(--hl) 35%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--hl) 6%, var(--card)); }
 .previews__head { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
-.previews__head svg { color: var(--hl); }
+.previews__head svg { color: var(--hl-ink); }
 .preview-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 13px; min-width: 0; }
 .preview-row:hover { background: var(--card-2); }
-.preview-row__port { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; color: var(--hl); font-weight: 600; flex-shrink: 0; }
+.preview-row__port { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; color: var(--hl-ink); font-weight: 600; flex-shrink: 0; }
 .preview-row__go { margin-left: auto; color: var(--muted); flex-shrink: 0; }
 /* Projects tab: two lists (the projects folder / the agents' folders) */
 .ws-tabs { display: flex; width: 100%; box-sizing: border-box; margin: 0 0 8px; }
@@ -121,7 +121,7 @@
 .tree__open:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; border-radius: 6px; }
 .tree__spacer { width: 22px; flex-shrink: 0; }
 .tree__icon { flex-shrink: 0; color: var(--muted); font-size: 14px; }
-.tree__icon--dir { color: var(--hl); }
+.tree__icon--dir { color: var(--hl-ink); }
 .tree__name-wrap { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
 .tree__name-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .tree__name { min-width: 0; }
@@ -173,7 +173,7 @@
 .fd__trash { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .fd__trash li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
 .fd__trash li:last-child { border-bottom: none; }
-.fd__trash li .fb__folder { color: var(--hl); flex-shrink: 0; }
+.fd__trash li .fb__folder { color: var(--hl-ink); flex-shrink: 0; }
 .fd__trash-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .fd__trash-body .muted { font-size: 11.5px; }
 /* phones: the sections become a row of tabs on top; agents and actions under the content */
@@ -229,7 +229,7 @@
 .fnotes__editor .tiptap pre { padding: 10px 12px; border-radius: 8px; background: var(--card); font-size: 13px; overflow-x: auto; }
 .fnotes__editor .tiptap code { font-family: ui-monospace, 'SF Mono', monospace; font-size: 0.92em; }
 .fnotes__editor .tiptap :not(pre) > code { padding: 1px 5px; border-radius: 5px; background: var(--card); }
-.fnotes__editor .tiptap a { color: var(--hl); text-decoration: underline; }
+.fnotes__editor .tiptap a { color: var(--hl-ink); text-decoration: underline; }
 .fnotes__editor .tiptap ul[data-type='taskList'] { list-style: none; padding-left: 2px; }
 .fnotes__editor .tiptap ul[data-type='taskList'] li { display: flex; align-items: flex-start; gap: 8px; }
 .fnotes__editor .tiptap ul[data-type='taskList'] li > label { margin-top: 3px; flex-shrink: 0; }
@@ -285,7 +285,7 @@
   display: inline-flex; align-items: center; gap: 7px; min-width: 0; height: 100%; padding: 0 4px 0 12px;
   background: none; border: 0; color: var(--text); font-size: 12.5px; font-weight: 500; cursor: pointer;
 }
-.fmin__open svg { flex: none; color: var(--hl); }
+.fmin__open svg { flex: none; color: var(--hl-ink); }
 .fmin__close {
   display: inline-grid; place-items: center; flex: none; width: 26px; height: 26px; margin-right: 4px; border-radius: 50%;
   background: none; border: 0; color: var(--muted); cursor: pointer;
@@ -295,16 +295,16 @@
   all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px;
   background: var(--card); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, .22); color: var(--text); font-size: 16px; cursor: pointer;
 }
-.fmin__more[aria-expanded='true'] { background: var(--text); color: var(--card); }
+.fmin__more[aria-expanded='true'] { background: var(--accent); color: var(--accent-fg); }
 .fmin__close:hover { background: var(--accent-soft); }
 /* phones: a round button on the stage, right above the menu button (.nav-burger: right 12px, bottom 12px, 42px) */
 .fmin-fab {
   all: unset; box-sizing: border-box; position: absolute; right: 62px; bottom: 12px; z-index: 5; /* left of the menu button (.nav-burger: 42px at the corner) */
-  display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; cursor: pointer; font-size: 18px; color: var(--hl);
+  display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; cursor: pointer; font-size: 18px; color: var(--hl-ink);
   background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); box-shadow: var(--shadow);
   animation: fmin-in .18s ease-out;
 }
-.fmin-fab[aria-expanded='true'] { background: var(--text); color: var(--card); }
+.fmin-fab[aria-expanded='true'] { background: var(--accent); color: var(--accent-fg); }
 .fmin-fab:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
 .fmin-fab__count {
   position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box; border-radius: 999px;
@@ -320,7 +320,7 @@
 .fmin-menu__open {
   all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 6px 8px 10px; cursor: pointer;
 }
-.fmin-menu__open > svg { flex: none; font-size: 17px; color: var(--hl); }
+.fmin-menu__open > svg { flex: none; font-size: 17px; color: var(--hl-ink); }
 .fmin-menu__text { display: flex; flex-direction: column; min-width: 0; font-size: 13.5px; font-weight: 500; }
 .fmin-menu__text .muted { font-size: 11px; font-weight: 400; }
 .fmin-menu__row .fmin__close { width: 34px; height: 34px; }
@@ -382,3 +382,5 @@
 .fmin__ruler { position: absolute; left: 0; top: 0; display: flex; gap: 6px; visibility: hidden; pointer-events: none; white-space: nowrap; }
 .fmin__ruler .fmin__chip { flex-shrink: 0; animation: none; }
 .fmin--docked > .fmin__chip, .fmin--docked > .fmin__more { flex-shrink: 0; }
+/* light mode: the chips' note/folder icons in grey, so orange is left for what's active or needs you */
+:root:not([data-theme='night']) :is(.fmin__open svg, .fmin-menu__open > svg) { color: var(--muted); }

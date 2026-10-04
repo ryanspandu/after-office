@@ -2,11 +2,11 @@
 .manager-btn {
   position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; white-space: nowrap;
 }
-.manager-btn svg { color: var(--hl); }
+.manager-btn svg { color: var(--hl-ink); }
 .manager-btn .icon-btn__count { top: -6px; right: -6px; }
-.manager-badge { display: inline-grid; place-items: center; color: var(--hl); font-size: 12px; }
+.manager-badge { display: inline-grid; place-items: center; color: var(--hl-ink); font-size: 12px; }
 .manager-avatar { display: grid; place-items: center; font-size: 18px; color: #fff; }
-.by-manager { display: inline-grid; place-items: center; color: var(--hl); font-size: 11px; }
+.by-manager { display: inline-grid; place-items: center; color: var(--hl-ink); font-size: 11px; }
 .by-manager--label { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; background: var(--hl-soft); }
 .team-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .team-list li + li { border-top: 1px solid var(--line); }
@@ -19,7 +19,7 @@
 .team-row__body { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .team-row__title { font-size: 13.5px; font-weight: 500; }
 .team-row__meta { font-size: 12px; color: var(--muted); }
-.report__icon--note { color: var(--hl); }
+.report__icon--note { color: var(--hl-ink); }
 .dock--six .dock__btn { width: 54px; }
 /* name tags: crown for the manager, a marker when an agent just got a task from it */
 .tag__crown { color: #e3a92b; font-size: 12px; flex-shrink: 0; }

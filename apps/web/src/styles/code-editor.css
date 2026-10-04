@@ -17,7 +17,7 @@
 }
 /* the Files browser: hidden entries a little dimmer; the "show hidden" button on */
 .fb__item.is-hidden .fb__name, .fb__item.is-hidden .fb__icon { opacity: 0.6; }
-.fb__bar .icon-btn.is-on { color: var(--hl); }
+.fb__bar .icon-btn.is-on { color: var(--hl-ink); }
 /* the Files browser: the folder's git repo in one line under its bar, and a letter by each changed entry (VS Code's colours) */
 .fb__git { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 12px; border-bottom: 1px solid var(--line); font-size: 12px; white-space: nowrap; overflow: hidden; }
 .fb__git-branch { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; flex-shrink: 0; }

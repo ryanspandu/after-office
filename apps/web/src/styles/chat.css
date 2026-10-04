@@ -59,7 +59,7 @@
   align-self: stretch; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px;
   background: var(--hl-soft); border: 1px solid color-mix(in srgb, var(--hl) 40%, transparent);
 }
-.req__head { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--hl); }
+.req__head { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--hl-ink); }
 .req__msg { font-size: 13px; overflow-wrap: anywhere; }
 .req__msg code { font-size: 12.5px; }
 .req__actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -69,7 +69,7 @@
 .offline-banner { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); font-size: 13px; }
 .offline-banner--broken { border-color: color-mix(in srgb, var(--hl) 55%, var(--line)); }
 .offline-banner__icon { color: var(--muted); font-size: 16px; display: grid; place-items: center; flex-shrink: 0; }
-.offline-banner--broken .offline-banner__icon { color: var(--hl); }
+.offline-banner--broken .offline-banner__icon { color: var(--hl-ink); }
 .offline-banner__text { flex: 1; min-width: 0; line-height: 1.45; }
 .offline-banner__actions { display: flex; gap: 6px; flex-shrink: 0; }
 @media (max-width: 640px) {
@@ -189,7 +189,7 @@
 .chat-ctx__field--tags .rs { min-width: 200px; }
 .chat-ctx__icon { color: var(--muted); font-size: 13px; flex-shrink: 0; }
 .chat-ctx__hint { font-size: 11.5px; }
-.chat__composer .chat__ctx-toggle.is-on { color: var(--hl); }
+.chat__composer .chat__ctx-toggle.is-on { color: var(--hl-ink); }
 .chat-ctx-chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; margin-top: 4px; }
 .chat-ctx-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--card-2); color: var(--muted); }
 @media (max-width: 768px) {
@@ -203,7 +203,7 @@
 .chat-ctx .rs--multi .rs__dropdown-indicator { padding: 2px; }
 /* clearing the picks: a small pill at the row's right end */
 .chat-ctx__clear { all: unset; box-sizing: border-box; margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--card-2); color: var(--text); font-size: 12px; cursor: pointer; }
-.chat-ctx__clear:hover { border-color: var(--hl); color: var(--hl); }
+.chat-ctx__clear:hover { border-color: var(--hl); color: var(--hl-ink); }
 .chat-ctx__clear:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
 .chat-ctx__clear svg { font-size: 12px; }
 
@@ -222,7 +222,7 @@
 .composer-menu__pop button { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 14px; cursor: pointer; }
 .composer-menu__pop button:active, .composer-menu__pop button:hover { background: var(--card-2); }
 .composer-menu__pop button svg { color: var(--muted); font-size: 16px; }
-.composer-menu__pop button.is-on svg { color: var(--hl); }
+.composer-menu__pop button.is-on svg { color: var(--hl-ink); }
 @media (prefers-reduced-motion: reduce) { .composer-menu__pop, .composer-menu__btn svg { transition: none; } }
 
 /* an agent's sessions: Main + side sessions (ui/agent/SessionTabs.tsx) */
@@ -326,7 +326,7 @@ span.stab { padding: 0 4px 0 10px; }
 /* phones (full screen): the special keys behind one round button beside the command line, in a popup above it */
 .tkeys--floating { position: relative; }
 .tkeys__fab { width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; font-size: 18px; }
-.tkeys__fab.is-on { background: var(--text); color: var(--card); border-color: var(--text); }
+.tkeys__fab.is-on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .tkeys__pop {
   position: absolute; right: 0; bottom: calc(100% + 10px); width: min(340px, calc(100vw - 20px)); box-sizing: border-box;
   max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px;
@@ -348,11 +348,13 @@ span.stab { padding: 0 4px 0 10px; }
   all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px; max-width: 260px; padding: 3px 9px;
   border-radius: 8px; border: 1px solid var(--line); background: var(--card); font-size: 11.5px; color: var(--text); cursor: pointer;
 }
-.msg__report:hover { border-color: var(--hl); color: var(--hl); }
-.msg__report svg { flex-shrink: 0; color: var(--hl); }
+.msg__report:hover { border-color: var(--hl); color: var(--hl-ink); }
+.msg__report svg { flex-shrink: 0; color: var(--hl-ink); }
 .tool__row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .tool__row > .tool__head { flex: 1; min-width: 0; }
 .tool__report { flex-shrink: 0; }
 /* a report link under a message: readable (its title is what tells them apart) */
 .msg__report { max-width: min(420px, 100%); gap: 7px; padding: 6px 12px; border-radius: 10px; font-size: 13px; }
 .msg__report svg { font-size: 15px; }
+/* light mode: your messages in a soft orange (long text reads better dark on light than white on orange) */
+:root:not([data-theme='night']) .msg--user { background: #fde4cd; color: var(--text); }

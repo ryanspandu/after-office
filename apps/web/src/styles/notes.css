@@ -68,12 +68,12 @@
 /* a note's row: pinned / shared marks after its title */
 .report-row__title-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .report-row__title-line > .report-row__title { min-width: 0; }
-.note-row__flag { flex: none; font-size: 12px; color: var(--hl); }
+.note-row__flag { flex: none; font-size: 12px; color: var(--hl-ink); }
 /* the note's window: "Share with agents" beside the tags */
 .note-modal__share { display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card-2); font-size: 12.5px; cursor: pointer; white-space: nowrap; }
 .note-modal__share > svg { color: var(--muted); }
-.note-modal__share:has(input:checked) > svg { color: var(--hl); }
-.icon-btn.is-on { color: var(--hl); }
+.note-modal__share:has(input:checked) > svg { color: var(--hl-ink); }
+.icon-btn.is-on { color: var(--hl-ink); }
 .note-modal__share { min-height: 30px; box-sizing: border-box; }
 @media (max-width: 768px) {
   /* phones: the folder and Share on one line, the tags on the next, full width */
@@ -90,10 +90,10 @@
 /* a folder's details → Notes: its notes, "New note" on top */
 .folder-notes { gap: 8px; overflow-x: hidden; }
 .folder-notes__head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
-.note-row__folder { flex: none; font-size: 12px; color: var(--hl); }
+.note-row__folder { flex: none; font-size: 12px; color: var(--hl-ink); }
 /* the note's folder, above project and tags (it's set where the note was made) */
 .note-modal__folder { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
-.note-modal__folder > svg { color: var(--hl); }
+.note-modal__folder > svg { color: var(--hl-ink); }
 /* a folder's note opened right in its details: the editor fills the panel, Back on top */
 .fd__panel.note-inline { height: auto; flex: 1; min-height: 0; gap: 10px; overflow: hidden; padding-bottom: 2px; }
 .note-inline__bar { display: flex; align-items: center; gap: 6px; flex: none; margin: -2px 0 -4px; }
@@ -109,3 +109,5 @@
 }
 .fnotes__menu > .fnotes__group { border-left: 0; padding: 2px; }
 .fnotes__menu > .fnotes__group + .fnotes__group { border-top: 1px solid var(--line); padding-top: 4px; }
+/* light mode: the folder icon on notes in grey (orange stays for what's active or needs you) */
+:root:not([data-theme='night']) :is(.note-row__folder, .note-modal__folder > svg) { color: var(--muted); }

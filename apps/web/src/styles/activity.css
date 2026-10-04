@@ -5,16 +5,16 @@
 .activity__status { display: grid; place-items: center; flex-shrink: 0; color: var(--muted); }
 .activity__status svg { width: 15px; height: 15px; }
 .activity__row.is-ok .activity__status { color: var(--working); }
-.activity__row.is-waiting .activity__status { color: var(--hl); }
+.activity__row.is-waiting .activity__status { color: var(--hl-ink); }
 .activity__row.is-bad .activity__status { color: var(--danger); }
 .activity__body { display: grid; gap: 1px; min-width: 0; flex: 1; }
 .activity__what { font-size: 12.5px; display: flex; align-items: center; gap: 5px; min-width: 0; }
 .activity__what b { font-weight: 600; }
 .activity__meta { font-size: 11.5px; }
-.activity__boss { width: 12px; height: 12px; color: var(--hl); vertical-align: -2px; }
+.activity__boss { width: 12px; height: 12px; color: var(--hl-ink); vertical-align: -2px; }
 .activity__access { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: var(--card-2); color: var(--muted); }
 .activity__access svg { width: 10px; height: 10px; }
-.activity__access--write { color: var(--hl); background: color-mix(in srgb, var(--hl) 12%, transparent); }
+.activity__access--write { color: var(--hl-ink); background: color-mix(in srgb, var(--hl) 12%, transparent); }
 .activity__empty { margin: 8px 0; font-size: 12.5px; }
 .activity__more { align-self: center; margin-top: 6px; }
 .activity-tab, .activity-side { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
@@ -26,6 +26,6 @@
 .activity-modal__filters > * { min-width: 150px; }
 .activity-modal__csv { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0 !important; padding: 6px 12px; border-radius: 999px; font-size: 13px; background: var(--card-2); border: 1px solid var(--line); color: var(--text); text-decoration: none; }
 .activity-detail__chain { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
-.activity-detail__chain li::marker { color: var(--hl); }
+.activity-detail__chain li::marker { color: var(--hl-ink); }
 .activity-detail__reads { margin: 0 0 4px; padding-left: 16px; font-size: 12.5px; overflow-wrap: anywhere; }
 .activity-detail dd code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; padding: 6px 8px; border-radius: 8px; background: var(--card-2); border: 1px solid var(--line); }

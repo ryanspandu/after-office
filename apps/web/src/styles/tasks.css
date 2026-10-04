@@ -71,7 +71,7 @@ button.danger-solid:hover:not(:disabled) { color: #fff; opacity: 0.9; border-col
 .agents-modal .agents-card .card__head { justify-content: flex-start; }
 .agents-modal .agents-card .list { max-height: 55vh; }
 /* ── task dependencies ─────────────────────────────────────────────── */
-.blocked-badge { display: inline-grid; place-items: center; color: var(--hl); font-size: 11px; flex-shrink: 0; vertical-align: -1px; }
+.blocked-badge { display: inline-grid; place-items: center; color: var(--hl-ink); font-size: 11px; flex-shrink: 0; vertical-align: -1px; }
 .waits-opt { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .waits-opt .truncate { flex: 1; min-width: 0; }
 .waits-opt .muted { font-size: 11px; flex-shrink: 0; }
@@ -89,8 +89,8 @@ button.danger-solid:hover:not(:disabled) { color: #fff; opacity: 0.9; border-col
   display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%;
   background: var(--card-2); color: var(--muted); font-size: 12px;
 }
-.timeline__item--manager .timeline__icon { color: var(--hl); background: var(--hl-soft); }
-.timeline__item--revision .timeline__icon { color: var(--hl); }
+.timeline__item--manager .timeline__icon { color: var(--hl-ink); background: var(--hl-soft); }
+.timeline__item--revision .timeline__icon { color: var(--hl-ink); }
 .timeline__item--report .timeline__icon { color: #2fbf71; }
 .timeline__body { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .timeline__head { display: flex; align-items: center; gap: 6px; font-size: 12.5px; min-width: 0; }
@@ -109,11 +109,11 @@ button.danger-solid:hover:not(:disabled) { color: #fff; opacity: 0.9; border-col
 .check-badge--running { color: var(--muted); }
 .check-badge--passed { color: #2fbf71; }
 .check-badge--failed { color: var(--danger); }
-.check-badge--approval { color: var(--hl); }
+.check-badge--approval { color: var(--hl-ink); }
 .check-pill { display: inline-flex; align-items: center; font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; background: var(--card-2); color: var(--muted); }
 .check-pill--passed { color: #2fbf71; background: rgba(47, 191, 113, 0.12); }
 .check-pill--failed { color: var(--danger); background: rgba(220, 60, 60, 0.1); }
-.check-pill--approval { color: var(--hl); background: var(--hl-soft); }
+.check-pill--approval { color: var(--hl-ink); background: var(--hl-soft); }
 /* ── changes (TaskDiff) ────────────────────────────────────────────── */
 .diff__label { display: flex; align-items: center; gap: 6px; }
 .diff__reload { margin-left: auto; }
@@ -144,3 +144,8 @@ button.danger-solid:hover:not(:disabled) { color: #fff; opacity: 0.9; border-col
 .timeline__composer .timeline__send:disabled { opacity: 0.35; }
 .check-pill--stopped { color: #d97706; background: rgba(217, 119, 6, 0.14); }
 .blocked-badge--stopped { color: #d97706; }
+/* phones: while you type in the task (the keyboard is up), Delete / Mark done / Close step aside so the box and what
+   you're writing stay in view; they're back as soon as you leave the field */
+@media (max-width: 768px) and (pointer: coarse) {
+  .task-detail:has(:is(textarea, input[type='text'], input:not([type]), [contenteditable='true']):focus) .task-detail__foot { display: none; }
+}

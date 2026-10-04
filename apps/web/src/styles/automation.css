@@ -16,7 +16,7 @@
 .automation__state { margin: 0; font-size: 12.5px; color: var(--muted); padding: 8px 10px; border-radius: 9px; background: var(--card-2); }
 .automation__state.is-paused { color: var(--text); background: var(--hl-soft); }
 .icon-btn__dot { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--hl); box-shadow: 0 0 0 2px var(--card); }
-.automation-btn--paused { color: var(--hl); }
+.automation-btn--paused { color: var(--hl-ink); }
 .usage-pop__brake { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; padding: 7px 10px; border-radius: 9px; background: var(--card-2); font-size: 12px; }
 .usage-pop__brake.is-paused { background: var(--hl-soft); }
 /* Boss mode (ui/BossMode.tsx) */
@@ -32,7 +32,7 @@
 .boss-modal__head { display: block; font-size: 12px; font-weight: 700; margin-bottom: 6px; }
 .boss-modal__lists ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; line-height: 1.4; }
 .boss-modal__lists li { display: flex; gap: 6px; align-items: flex-start; }
-.boss-modal__lists li svg { flex-shrink: 0; margin-top: 2px; color: var(--hl); }
+.boss-modal__lists li svg { flex-shrink: 0; margin-top: 2px; color: var(--hl-ink); }
 .boss-modal__lists ul.is-kept li svg { color: var(--working); }
 .boss-modal__hours { display: flex; flex-wrap: wrap; }
 .boss-modal__time { display: block; margin-top: 6px; max-width: 260px; }

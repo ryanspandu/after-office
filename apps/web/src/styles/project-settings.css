@@ -31,5 +31,5 @@
 .move-office__drop.has-file { border-style: solid; }
 .move-office__drop .muted { font-size: 12px; }
 .move-office__drop-icon { font-size: 26px; color: var(--muted); margin-bottom: 4px; }
-.move-office__drop.is-over .move-office__drop-icon, .move-office__drop.has-file .move-office__drop-icon { color: var(--hl); }
+.move-office__drop.is-over .move-office__drop-icon, .move-office__drop.has-file .move-office__drop-icon { color: var(--hl-ink); }
 .move-office__drop-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

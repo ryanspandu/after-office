@@ -35,7 +35,7 @@
   all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 7px;
   padding: 0 11px; height: 100%; min-height: inherit; cursor: pointer;
 }
-.folder-select__pick > svg { flex: none; color: var(--hl); }
+.folder-select__pick > svg { flex: none; color: var(--hl-ink); }
 .folder-select__pick:focus-visible { outline: 2px solid var(--hl); outline-offset: 1px; border-radius: 999px; }
 .folder-select__clear {
   all: unset; display: grid; place-items: center; flex: none; width: 20px; height: 20px; margin-right: 5px; border-radius: 50%;

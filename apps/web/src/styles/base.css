@@ -1,32 +1,36 @@
 /* ── tokens ─────────────────────────────────────────────────────────── */
 :root,
 :root[data-theme='day'] {
-  --bg: #e4e4e2;
-  --surface: #efefed;
+  /* warm off-white, so the panels sit with the office scene (wood, beige) instead of against it */
+  --bg: #f3f2ef;
+  --surface: #ecebe7;
   --card: #ffffff;
-  --card-2: #f5f5f3;
-  --line: #e6e6e3;
+  --card-2: #f7f6f3;
+  --line: #e3e1dc;
   --text: #151515;
-  --muted: #9a9a96;
-  /* ink = primary action / active state (black on light) */
-  --accent: #151515;
+  /* ≥ 4.5:1 on the cards and the background */
+  --muted: #6f6e69;
+  /* primary action / active state: the brand orange (white text on it) */
+  --accent: #dc6510;
   --accent-fg: #ffffff;
-  --accent-soft: #f0f0ee;
-  /* highlight = warm orange/yellow from the brand */
+  --accent-soft: #f0efeb;
+  /* highlight = warm orange/yellow from the brand; --hl-ink: the same orange as text/icons, dark enough to read */
   --hl: #f07a1d;
+  --hl-ink: #b85a0b;
   --hl-2: #f5b914;
   --hl-soft: #fff3e3;
-  --stage-a: #f7f7f6;
-  --stage-b: #e7e7e5;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 30px rgba(0, 0, 0, 0.05);
+  --stage-a: #f9f8f5;
+  --stage-b: #ebe9e4;
+  /* a hairline ring, so cards stand off the light background */
+  --shadow: 0 0 0 1px rgba(60, 45, 25, 0.07), 0 1px 2px rgba(60, 45, 25, 0.05), 0 8px 24px rgba(60, 45, 25, 0.06);
 
   --working: #2f8f57;
   --working-bg: #e7f4ec;
-  --waiting: #d9620f;
+  --waiting: #c2570c;
   --waiting-bg: #fff0e2;
-  --idle: #6f6f6b;
-  --idle-bg: #efefed;
-  --meeting: #a8790a;
+  --idle: #5f5f5b;
+  --idle-bg: #eeede9;
+  --meeting: #8f6608;
   --meeting-bg: #fdf4d9;
   --danger: #d9463b;
 
@@ -47,6 +51,7 @@
   --accent-fg: #111111;
   --accent-soft: #242424;
   --hl: #ff8a2e;
+  --hl-ink: #ff8a2e;
   --hl-2: #f7c233;
   --hl-soft: rgba(255, 138, 46, 0.14);
   --stage-a: #1b1b1b;
@@ -187,7 +192,7 @@ textarea { resize: vertical; }
 .toggle input:checked + span::after { transform: translateX(12px); }
 
 .badge { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
-.badge--hot { background: var(--hl-soft); color: var(--hl); }
+.badge--hot { background: var(--hl-soft); color: var(--hl-ink); }
 .badge--accent { background: var(--hl); color: #fff; }
 
 .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); }

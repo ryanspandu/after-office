@@ -3,7 +3,7 @@
 .chat__float { position: absolute; top: 6px; right: 10px; z-index: 3; display: flex; gap: 6px; align-items: center; }
 .chat__float .icon-btn, .chat__float button.small { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); background: var(--card); }
 .chat__info { width: 36px; height: 36px; font-size: 16px; }
-.chat__info.is-on { background: var(--text); color: var(--card); }
+.chat__info.is-on { background: var(--accent); color: var(--accent-fg); }
 .chat__bar--sheet {
   position: absolute; top: 48px; left: 6px; right: 6px; z-index: 4; flex-direction: column; align-items: stretch; gap: 10px;
   padding: 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line);

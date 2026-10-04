@@ -36,7 +36,7 @@
   display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; cursor: pointer; font-size: 19px; color: var(--text);
   background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); box-shadow: var(--shadow);
 }
-.nav-burger[aria-expanded='true'] { background: var(--text); color: var(--card); }
+.nav-burger[aria-expanded='true'] { background: var(--accent); color: var(--accent-fg); }
 .nav-burger:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
 /* …and the menu opens upwards from it (two classes: motion.css, loaded later, sets the usual downward one) */
 .popover.nav-menu--up { transform-origin: bottom right; animation-name: popover-up-in; }

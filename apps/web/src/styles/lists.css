@@ -21,7 +21,7 @@
 
 .cron__time {
   font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
-  background: var(--hl-soft); color: var(--hl); border-radius: 8px; padding: 3px 0;
+  background: var(--hl-soft); color: var(--hl-ink); border-radius: 8px; padding: 3px 0;
   /* fixed width so "10:00 +2" and "02:00" line up the rows */
   width: 66px; flex-shrink: 0; text-align: center; box-sizing: border-box;
 }

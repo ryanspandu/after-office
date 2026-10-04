@@ -20,7 +20,7 @@
 .dp .react-datepicker__day { color: var(--text); width: 2rem; line-height: 2rem; border-radius: 8px; }
 .dp .react-datepicker__day:hover { background: var(--card-2); border-radius: 8px; }
 .dp .react-datepicker__day--outside-month { color: var(--muted); opacity: 0.5; }
-.dp .react-datepicker__day--today { color: var(--hl); font-weight: 700; }
+.dp .react-datepicker__day--today { color: var(--hl-ink); font-weight: 700; }
 .dp .react-datepicker__day--selected, .dp .react-datepicker__day--keyboard-selected { background: var(--accent); color: var(--accent-fg); }
 .dp .react-datepicker__navigation { top: 8px; }
 .dp .react-datepicker__navigation-icon::before { border-color: var(--muted); }
@@ -33,7 +33,7 @@
   display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
   padding: 10px 12px 9px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: 13px;
 }
-.tp__value { font-variant-numeric: tabular-nums; color: var(--hl); }
+.tp__value { font-variant-numeric: tabular-nums; color: var(--hl-ink); }
 .tp__cols { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; position: relative; }
 .tp__col { overflow-y: auto; padding: 6px 4px; display: flex; flex-direction: column; gap: 2px; }
 /* inside the date picker the columns are as tall as the calendar; alone they get a fixed height */

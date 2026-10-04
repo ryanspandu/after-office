@@ -1,6 +1,6 @@
 /* agents card: search and pins */
 .agents-search { margin: 0 0 6px; }
-.pin-badge { display: inline-grid; place-items: center; color: var(--hl); font-size: 12px; margin-left: 2px; }
+.pin-badge { display: inline-grid; place-items: center; color: var(--hl-ink); font-size: 12px; margin-left: 2px; }
 /* a pinned agent's pin button: orange (the pin colour), not the black of other pressed toggles */
 .icon-btn.pin-btn[aria-pressed='true'] { background: var(--hl); border-color: var(--hl); color: #fff; }
 .icon-btn.pin-btn[aria-pressed='true']:hover:not(:disabled) { border-color: var(--hl); filter: brightness(0.95); }

@@ -6,12 +6,12 @@
 
 /* manager task approvals under "For you" */
 .fu--delegation, .fu--hire, .fu--check { --c: var(--hl); }
-.fu--delegation .fu__kind { color: var(--hl); }
+.fu--delegation .fu__kind { color: var(--hl-ink); }
 .automation__signout { display: flex; align-items: center; gap: 12px; justify-content: space-between; flex-wrap: wrap; }
 .automation__signout .field__hint { flex: 1; min-width: 200px; }
 .md-img { font-style: italic; }
 /* cron form: when it runs next on its own */
 .cron-next { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 9px 12px; border-radius: 10px; background: var(--hl-soft); color: var(--text); font-size: 12.5px; line-height: 1.45; }
-.cron-next > svg { color: var(--hl); flex-shrink: 0; margin-top: 2px; }
+.cron-next > svg { color: var(--hl-ink); flex-shrink: 0; margin-top: 2px; }
 .cron-next--off { background: var(--card-2); color: var(--muted); }
 .cron-next--off > svg { color: var(--muted); }
