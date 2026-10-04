@@ -5,7 +5,7 @@ import { IMAGE, MAX_BYTES } from '../agents/files'
 import { deleteAgentFolder } from './projectFolders'
 import { basename, dirname, extname, join, sep } from 'node:path'
 import type { FolderGit, GitCommit, GitInfo, Workspace, WorkspaceFolder } from '@after-office/shared'
-import { agentsRepo, extraDirsOf, folderNotesRepo, ownerNotesRepo, type AgentRow } from '../db'
+import { agentsRepo, extraDirsOf, folderNotesRepo, ownerNotesRepo, reportsRepo, settingsRepo, type AgentRow } from '../db'
 import { AgentError } from '../agents/errors'
 import { AGENTS_DIR, PROJECTS_DIR } from '../fsroots'
 import { git } from './git'
@@ -93,18 +93,23 @@ export async function folderGit(root: string, rel = ''): Promise<FolderGit | nul
     lastCommit: subject !== undefined && at ? { subject: subject.slice(0, 200), at: Number(at) * 1000, author: (author ?? '').slice(0, 80) } : null,
     entries,
     hasRemote: remotes.ok && !!remotes.out.trim(),
-    committer: owner ? { agentId: owner.id, name: owner.name } : null,
+    committer: owner ? { agentId: owner.id, name: owner.name, hasKey: !!owner.ssh_fingerprint, picked: !!settingsRepo.get(`gitAs:${repoTop}`) } : null,
   }
 }
 
 // ── Discard / Commit / Push from the Files browser (the whole repo of the folder on screen) ──
 
 /**
- * Whose git identity a repo's commits and pushes use: the agent whose folder it's in (the deepest match), else one
- * that works there (an extra folder), else the manager. Their gitconfig has the name, email and SSH key.
+ * Whose git identity a repo's commits, pulls and pushes use. The one picked for this repo (the git bar's "as"), else of
+ * the agents that work there (their folder holds it, it's an extra folder of theirs, or they filed reports from it)
+ * the one with an SSH key, then the deepest folder, then the most recent report; else the manager. Their gitconfig has
+ * the name, email and SSH key.
  */
 export function gitOwner(repo: string): AgentRow | undefined {
   const agents = agentsRepo.all()
+  const picked = settingsRepo.get(`gitAs:${repo}`)
+  const chosen = picked ? agents.find((a) => a.id === picked) : undefined
+  if (chosen) return chosen
   // git gives the repo's real path; a folder may be named through a symlink (macOS /var → /private/var)
   const real = (dir: string) => {
     try {
@@ -118,8 +123,34 @@ export function gitOwner(repo: string): AgentRow | undefined {
     const d = real(dir).replace(/\/+$/, '')
     return repo === d || repo.startsWith(d + sep)
   }
-  const byCwd = agents.filter((a) => within(a.cwd)).sort((a, b) => b.cwd.length - a.cwd.length)[0]
-  return byCwd ?? agents.find((a) => extraDirsOf(a).some(within)) ?? agents.find((a) => a.kind === 'manager')
+  // the latest report each agent filed from a folder in this repo
+  const lastReport = new Map<string, number>()
+  for (const r of reportsRepo.latest(1000)) {
+    // a report from this repo (or a folder inside it)
+    const at = r.folder ? real(r.folder) : ''
+    if (!at || !(at === repo || at.startsWith(repo + sep))) continue
+    if (!lastReport.has(r.agentId)) lastReport.set(r.agentId, r.finishedAt)
+  }
+  const ranked = agents
+    .map((a) => {
+      const depth = within(a.cwd) ? a.cwd.length : 0
+      const extra = extraDirsOf(a).some(within)
+      const reported = lastReport.get(a.id) ?? 0
+      return { a, depth, extra, reported, key: !!a.ssh_fingerprint }
+    })
+    .filter((c) => c.depth || c.extra || c.reported)
+    .sort((x, y) => Number(y.key) - Number(x.key) || y.depth - x.depth || Number(y.extra) - Number(x.extra) || y.reported - x.reported)
+  return ranked[0]?.a ?? agents.find((a) => a.kind === 'manager')
+}
+
+/** Pick whose identity this repo's commits, pulls and pushes use ('' : back to the automatic choice). */
+export async function setGitAs(root: string, rel: string, agentId: unknown) {
+  const top = await repoOf(root, rel)
+  const id = typeof agentId === 'string' ? agentId : ''
+  if (id && !agentsRepo.get(id)) throw new AgentError('No such agent', 404)
+  if (id) settingsRepo.set(`gitAs:${top}`, id)
+  else settingsRepo.delete(`gitAs:${top}`)
+  return { ok: true }
 }
 
 // writing: no hooks or fsmonitor from the repo's config (the dashboard's commit isn't the place for them), no pager

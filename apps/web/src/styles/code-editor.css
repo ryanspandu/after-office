@@ -45,3 +45,6 @@ button.fb__git-branch:hover:not(:disabled) { background: var(--card-2); border-c
 /* long lists of branches scroll; the current one reads as ticked */
 .fb-menu--branches { max-height: min(360px, 60vh); overflow-y: auto; min-width: 200px; max-width: 320px; }
 .fb-menu--branches button { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* "as <agent>": whose git identity the bar's actions use */
+.fb__git-as { color: var(--muted); }
+.fb__git-nokey { margin-left: 4px; padding: 0 5px; border-radius: 999px; font-size: 10px; background: var(--hl-soft); color: var(--hl-ink); }

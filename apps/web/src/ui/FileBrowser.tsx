@@ -22,6 +22,8 @@ import {
   LuGitCommitHorizontal,
   LuArrowUpFromLine,
   LuArrowDownToLine,
+  LuKeyRound,
+  LuRotateCcw,
   LuChevronDown,
   LuCloud,
   LuLoader,
@@ -575,6 +577,18 @@ function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: numb
   const [busy, setBusy] = useState<'discard' | 'push' | 'pull' | 'switch' | null>(null)
   const [committing, setCommitting] = useState(false)
   // the branches menu (the branch name opens it)
+  // whose git identity (name, email, SSH key) this repo's commits, pulls and pushes use: the "as" button
+  const [asMenu, setAsMenu] = useState<{ x: number; y: number; above: number } | null>(null)
+  const agents = useOffice((st) => st.agents)
+  const pickAs = async (agentId: string) => {
+    try {
+      const r = await api('/api/workspaces/git/as', { method: 'POST', body: JSON.stringify({ root, path: dir, agentId }) })
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Could not change it (${r.status})`)
+      onChanged()
+    } catch (e) {
+      useDashboard.setState({ syncError: e instanceof Error ? e.message : 'Could not change it' })
+    }
+  }
   const [branches, setBranches] = useState<{ x: number; y: number; above: number; current: string | null; local: string[]; remote: string[] } | null>(null)
   // Push: a remote, a branch, and something to push (or no upstream yet: the first push sets it)
   const canPush = !!git.hasRemote && !!git.branch && (git.ahead === undefined || git.ahead > 0)
@@ -643,6 +657,21 @@ function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: numb
         </span>
       )}
       <span className="fb__git-actions">
+        {git.committer && (
+          <button
+            className="small ghost fb__git-as"
+            onClick={(e) => {
+              const box = e.currentTarget.getBoundingClientRect()
+              setAsMenu({ x: box.left, y: box.bottom + 4, above: box.top - 4 })
+            }}
+            disabled={!!busy}
+            aria-haspopup="menu"
+            data-tip={`Commits, pulls and pushes here use ${git.committer.name}'s git name, email and SSH key${git.committer.hasKey ? '' : ' (no SSH key yet: Overview → Git)'}. Change`}
+          >
+            <LuKeyRound /> as {git.committer.name}
+            {!git.committer.hasKey && <span className="fb__git-nokey">no key</span>}
+          </button>
+        )}
         {git.hasRemote && git.branch && (
           <button className="small" onClick={() => void call('pull')} disabled={!!busy} data-tip={`Fetch and catch up with the remote${git.committer ? `, with ${git.committer.name}'s key` : ''}`}>
             {busy === 'pull' ? <LuLoader className="spin" /> : <LuArrowDownToLine />} Pull{git.behind ? ` ↓${git.behind}` : ''}
@@ -670,6 +699,20 @@ function GitLine({ git, now, root, dir, onChanged }: { git: FolderGit; now: numb
         )}
       </span>
       {committing && <CommitModal git={git} root={root} dir={dir} onClose={() => setCommitting(false)} onDone={onChanged} />}
+      {asMenu && (
+        <ActionMenu
+          className="fb-menu--branches"
+          x={asMenu.x}
+          y={asMenu.y}
+          above={asMenu.above}
+          title="Commit, pull and push as"
+          onClose={() => setAsMenu(null)}
+          actions={[
+            ...agents.map((a) => ({ icon: a.id === git.committer?.agentId ? <LuCheck /> : <LuKeyRound />, label: a.name, run: () => (a.id === git.committer?.agentId && git.committer.picked ? undefined : void pickAs(a.id)) })),
+            ...(git.committer?.picked ? [{ icon: <LuRotateCcw />, label: 'Automatic (the agent working here)', run: () => void pickAs('') }] : []),
+          ]}
+        />
+      )}
       {branches && (
         <ActionMenu
           className="fb-menu--branches"

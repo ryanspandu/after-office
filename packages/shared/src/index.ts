@@ -714,7 +714,7 @@ export interface FolderGit {
   /** whether a remote is set (Push needs one) */
   hasRemote?: boolean
   /** whose git identity (name, email, SSH key) Commit and Push use: the agent the folder belongs to */
-  committer?: { agentId: string; name: string } | null
+  committer?: { agentId: string; name: string; /** it has an SSH key */ hasKey: boolean; /** picked in the git bar (not the automatic choice) */ picked: boolean } | null
 }
 
 export interface WorkspaceFolder {

@@ -167,3 +167,27 @@ test('the git bar: branches, switching, and pulling a straight catch-up', async 
   writeFileSync(join(mine, 'a.txt'), 'dirty\n')
   await expect(gitSwitch(mine, '', 'other')).rejects.toThrow('commit or discard')
 })
+
+test('whose git identity a repo uses: one with an SSH key wins, and a pick sticks', async () => {
+  const { gitOwner, setGitAs } = await import('./workspaces')
+  const { agentsRepo, settingsRepo } = await import('../db')
+  const repo = join(PROJECTS_DIR, 'git-owner-test')
+  mkdirSync(repo, { recursive: true })
+  Bun.spawnSync(['git', '-C', repo, 'init', '-q', '-b', 'main'])
+  const real = Bun.spawnSync(['git', '-C', repo, 'rev-parse', '--show-toplevel']).stdout.toString().trim()
+  const mkAgent = (id: string, name: string, extra: boolean, key: boolean) => {
+    agentsRepo.insert({ id, name, tmux_session: `ao-${id}`, cwd: join(PROJECTS_DIR, 'elsewhere', id), desk: 90, role: 'x', model: 'opus', permission_mode: 'auto', session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'worker' } as never)
+    agentsRepo.update(id, { ...(extra ? { extra_dirs: JSON.stringify([PROJECTS_DIR]) } : {}), ...(key ? { ssh_fingerprint: 'SHA256:x' } : {}) })
+  }
+  // both work in the folder; only Kai has the key
+  mkAgent('own-nara', 'Nara', true, false)
+  mkAgent('own-kai', 'Kai', true, true)
+  expect(gitOwner(real)?.id).toBe('own-kai')
+  // a pick wins over the automatic choice, and clearing it goes back
+  await setGitAs(repo, '', 'own-nara')
+  expect(gitOwner(real)?.id).toBe('own-nara')
+  await setGitAs(repo, '', '')
+  expect(gitOwner(real)?.id).toBe('own-kai')
+  await expect(setGitAs(repo, '', 'nobody')).rejects.toThrow('No such agent')
+  settingsRepo.delete(`gitAs:${real}`)
+})
