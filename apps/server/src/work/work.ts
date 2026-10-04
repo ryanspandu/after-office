@@ -19,6 +19,7 @@ import { trackTurnOrigin } from './origin'
 import { checkFor, runGate } from './gate'
 import { restoreApprovals } from './managerTasks'
 import { tickCrons } from './crons'
+import { reportJob, resumeReportJob } from './reportJobs'
 import { endBossMode } from './bossMode'
 import { publicAccess, watchPublicAccess } from './publicAccess'
 import { chatReport, putChatReport, type ChatContext } from './chatContext'
@@ -58,6 +59,7 @@ export function workState(): WorkState {
     publicAccess: publicAccess(),
     notes: noteSummaries(),
     statuses: taskStatuses(),
+    reportJob: reportJob(),
   }
 }
 
@@ -792,6 +794,8 @@ export function startWorkJobs() {
   // a folder's one note → notes of their own (once)
   moveFolderNotes()
   restoreApprovals()
+  // a Read / Unread / Delete on many reports cut short by a restart carries on
+  resumeReportJob()
   void import('./hires').then((m) => m.restoreHires())
   void import('./managerCrons').then((m) => m.restoreCronChanges())
   const safe = (fn: () => Promise<unknown>) => () => void fn().catch((e) => console.error('[work]', e))
@@ -810,6 +814,7 @@ export * from './origin'
 export * from './gate'
 export * from './managerTasks'
 export * from './reports'
+export * from './reportJobs'
 export * from './crons'
 export * from './bossMode'
 export * from './publicAccess'

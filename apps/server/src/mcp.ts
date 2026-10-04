@@ -14,7 +14,7 @@ import { logSystem, noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
 import { jobNamed } from './work/jobs'
 import { statusLabel } from './work/statuses'
-import { stopActiveTask, markTask, isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker, ownerTask } from './work/work'
+import { stopActiveTask, markTask, isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, retagReports, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker, ownerTask } from './work/work'
 import { listTags, tagIdsByName, tagNames } from './work/tags'
 import { cleanFolder } from './work/folders'
 import { agentDeleteNote, agentEditNote, agentNotes, agentReadNote, agentWriteNote, noteForAgent } from './work/notes'
@@ -431,7 +431,7 @@ function buildServer(managerId: string) {
   server.registerTool(
     'list_reports',
     {
-      description: 'Recent reports (task results and daily-job runs), newest first.',
+      description: 'Recent reports (task results and daily-job runs), newest first: id, the job and task they belong to, tags. tag_reports changes their tags.',
       inputSchema: {
         sinceHours: z.number().positive().max(24 * 30).optional(),
         tag: z.string().optional().describe('only reports with this tag (name)'),
@@ -450,8 +450,44 @@ function buildServer(managerId: string) {
         .latest(200)
         .filter((r) => r.finishedAt >= since && r.kind !== 'note' && (!tagId || !!r.tags?.includes(tagId)))
         .slice(0, limit ?? 15)
-        .map((r) => ({ kind: r.kind, title: r.title, agent: agentsRepo.get(r.agentId)?.name, ok: r.ok, finishedAt: iso(r.finishedAt), tags: tagNames(r.tags), text: r.text }))
+        .map((r) => ({ id: r.id, kind: r.kind, title: r.title, job: r.job?.title, taskId: r.kind === 'task' ? r.refId : undefined, agent: agentsRepo.get(r.agentId)?.name, ok: r.ok, finishedAt: iso(r.finishedAt), tags: tagNames(r.tags), text: r.text }))
       return reports.length ? json(reports) : text('No reports in that window.')
+    },
+  )
+
+  server.registerTool(
+    'tag_reports',
+    {
+      description:
+        "Add tags to, or take tags off, reports already filed. A task's tags are copied onto its reports when they're " +
+        'filed, so a tag given to a task later only reaches its new reports: use this for the old ones (e.g. every ' +
+        'report of a job). Pick them by id (list_reports), by job name (every report of that job), or by task id. ' +
+        "Tags by name (list_tags); you can't create tags.",
+      inputSchema: {
+        ids: z.array(z.string()).max(500).optional().describe('report ids'),
+        job: z.string().optional().describe('every report of the job with this name (as given in delegate_task)'),
+        taskIds: z.array(z.string()).max(100).optional().describe('every report of these tasks'),
+        add: z.array(z.string()).optional().describe('tag names to add'),
+        remove: z.array(z.string()).optional().describe('tag names to take off'),
+      },
+    },
+    async ({ ids, job, taskIds, add, remove }) => {
+      try {
+        if (!ids?.length && !job?.trim() && !taskIds?.length) return text('Say which reports: ids, job or taskIds.')
+        if (!add?.length && !remove?.length) return text('Say which tags to add or remove.')
+        const addIds = tagIdsByName(add) ?? []
+        const removeIds = tagIdsByName(remove) ?? []
+        const jobName = job?.trim().toLowerCase()
+        const picked = reportsRepo
+          .latest(1000)
+          .filter((r) => ids?.includes(r.id) || (!!jobName && r.job?.title.toLowerCase() === jobName) || (r.kind === 'task' && !!taskIds?.includes(r.refId)))
+          .map((r) => r.id)
+        if (!picked.length) return text('No report matches that (check list_reports for ids and job names).')
+        const changed = retagReports(picked, addIds, removeIds)
+        return text(`${picked.length} report${picked.length === 1 ? '' : 's'} matched; ${changed} changed${changed < picked.length ? ' (the rest already had those tags)' : ''}.`)
+      } catch (e) {
+        return fail(e)
+      }
     },
   )
 

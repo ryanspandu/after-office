@@ -4,6 +4,7 @@ import { AgentError } from '../agents/manager'
 import { agentFiles } from '../agents/files'
 import { mentionedPaths } from '@after-office/shared'
 import { publishWork } from './work'
+import { MAX_TAGS_PER_ITEM } from './tags'
 
 // Reports: the manager's notes to the owner, and marking reports read or tagged.
 
@@ -45,6 +46,26 @@ export function setReportTags(id: string, tags: string[] | undefined) {
   publishWork('reports')
 }
 
+/**
+ * Tags added to / taken off reports already filed (a task's tags are copied onto its reports when they're filed, so a
+ * tag given to the task later doesn't reach the old ones): one broadcast for all. Returns how many changed.
+ */
+export function retagReports(ids: string[], add: string[], remove: string[]) {
+  let n = 0
+  for (const id of ids) {
+    const r = reportsRepo.get(id)
+    if (!r) continue
+    const before = r.tags ?? []
+    const after = [...new Set([...before.filter((t) => !remove.includes(t)), ...add])].slice(0, MAX_TAGS_PER_ITEM)
+    if (after.length === before.length && after.every((t) => before.includes(t))) continue
+    const { tags: _, ...rest } = r
+    reportsRepo.put(after.length ? { ...rest, tags: after } : rest)
+    n++
+  }
+  if (n) publishWork('reports')
+  return n
+}
+
 export function markReport(id: string, read: boolean) {
   const r = reportsRepo.get(id)
   if (!r) throw new AgentError('No such report', 404)
@@ -55,7 +76,7 @@ export function markReport(id: string, read: boolean) {
 /** Several at once (Reports → pick → Read / Unread / Delete): one broadcast, not one per report. Unknown ids are
  *  skipped (another tab may have deleted them already). Returns how many were changed. */
 const MAX_BULK = 500
-const bulkIds = (ids: unknown): string[] => {
+export const bulkIds = (ids: unknown): string[] => {
   if (!Array.isArray(ids) || ids.length > MAX_BULK || ids.some((x) => typeof x !== 'string')) throw new AgentError(`ids: a list of at most ${MAX_BULK} report ids`, 400)
   return [...new Set(ids as string[])]
 }

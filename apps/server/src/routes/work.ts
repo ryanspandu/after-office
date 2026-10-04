@@ -17,7 +17,7 @@ import { listPreviews, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
 import { createNote, deleteNote, reorderNotes, updateNote } from '../work/notes'
 import { cleanFolder } from '../work/folders'
-import { taskFolder, addComment, deliver, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, markReports, removeReports, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
+import { taskFolder, addComment, deliver, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, startReportJob, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
 import { requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
@@ -198,13 +198,10 @@ workRoutes.post('/reports/read-all', (c) => {
   markAllReportsRead()
   return c.json({ ok: true })
 })
-workRoutes.post('/reports/bulk/read', async (c) => {
-  const b = await c.req.json<{ ids?: unknown; read?: boolean }>().catch(() => ({}) as { ids?: unknown; read?: boolean })
-  return c.json({ ok: true, changed: markReports(b.ids, b.read !== false) })
-})
-workRoutes.post('/reports/bulk/delete', async (c) => {
-  const b = await c.req.json<{ ids?: unknown }>().catch(() => ({}) as { ids?: unknown })
-  return c.json({ ok: true, removed: removeReports(b.ids) })
+// Read / Unread / Delete on many: run by the server in steps, shown on every device (WorkState.reportJob)
+workRoutes.post('/reports/bulk', async (c) => {
+  const b = await c.req.json<{ kind?: unknown; ids?: unknown }>().catch(() => ({}) as { kind?: unknown; ids?: unknown })
+  return c.json({ ok: true, job: startReportJob(b.kind, b.ids) })
 })
 workRoutes.post('/reports/:id/read', async (c) => {
   const b = await c.req.json<{ read?: boolean }>().catch(() => ({}) as { read?: boolean })

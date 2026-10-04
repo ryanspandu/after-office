@@ -229,7 +229,7 @@ export function setRateLimits(r: RateLimits) {
 }
 
 /** Filled in by work.ts (avoids an import cycle: work → manager → registry). */
-let workProvider: () => WorkState = () => ({ tasks: [], projects: [], crons: [], timezone: 'UTC', queued: {}, reports: [], archivedTasks: 0, settings: DEFAULT_SETTINGS, automation: { channels: [], quotaPaused: null }, tags: [], bossMode: null, publicAccess: { supported: false, public: false }, notes: [], statuses: [] })
+let workProvider: () => WorkState = () => ({ tasks: [], projects: [], crons: [], timezone: 'UTC', queued: {}, reports: [], archivedTasks: 0, settings: DEFAULT_SETTINGS, automation: { channels: [], quotaPaused: null }, tags: [], bossMode: null, publicAccess: { supported: false, public: false }, notes: [], statuses: [], reportJob: null })
 export const setWorkProvider = (fn: () => WorkState) => void (workProvider = fn)
 
 export function snapshot(): OfficeEvent {

@@ -10,6 +10,8 @@ import { liveApi, useLive } from '../state/live'
 import { useOffice } from '../state/store'
 import { chime, useReplyAlerts } from '../state/replyAlerts'
 import { Modal } from './Modal'
+import { useClock, useNow } from '../state/clock'
+import { chatTime } from './when'
 
 // Office automation: push notifications to your phone, and the quota brake that holds automatic work (auto-start,
 // cron, the manager's new tasks) when the Claude plan is nearly used up. Channels hold secrets, so they are set in
@@ -59,20 +61,41 @@ function ParallelLimit({ value, onChange }: { value: number; onChange: (n: numbe
 }
 const MAX_PARALLEL = 10
 
+/** The plan used up (5-hour or weekly window): which one and when it's back, or null. 99% counts: the plan reports
+ *  whole percents and refuses work at its very end. */
+const USED_UP = 99
+function useUsedUp(): { label: string; resetsAt: number | null } | null {
+  const rl = useLive((s) => s.rateLimits)
+  const now = useNow(30_000).getTime()
+  if (!rl) return null
+  const live = (at: number | null) => !at || at > now
+  if ((rl.fiveHourPct ?? 0) >= USED_UP && live(rl.fiveHourResetsAt)) return { label: '5-hour plan limit used up', resetsAt: rl.fiveHourResetsAt }
+  if ((rl.sevenDayPct ?? 0) >= USED_UP && live(rl.sevenDayResetsAt)) return { label: 'Weekly plan limit used up', resetsAt: rl.sevenDayResetsAt }
+  return null
+}
+
 export function AutomationButton() {
   const live = useOffice((s) => s.source === 'live')
   const paused = useLive((s) => s.automation.quotaPaused)
   const setOpen = useAutomationModal((s) => s.setOpen)
+  const usedUp = useUsedUp()
+  const timezone = useClock((s) => s.timezone)
   if (!live) return null
+  // used up: red, and the bell shakes now and then (styles: .automation-btn--used-up)
+  const tipText = usedUp
+    ? `${usedUp.label}${usedUp.resetsAt ? ` · back at ${chatTime(usedUp.resetsAt, timezone)}` : ''}. Agents can't work until then.`
+    : paused
+      ? `Automatic work paused: ${paused}`
+      : 'Notifications & quota brake'
   return (
     <button
-      className={`icon-btn icon-btn--badge${paused ? ' automation-btn--paused' : ''}`}
-      data-tip={paused ? `Automatic work paused: ${paused}` : 'Notifications & quota brake'}
-      aria-label="Notifications and quota brake"
+      className={`icon-btn icon-btn--badge${usedUp ? ' automation-btn--used-up' : paused ? ' automation-btn--paused' : ''}`}
+      data-tip={tipText}
+      aria-label={usedUp ? `${usedUp.label}. Notifications and quota brake` : 'Notifications and quota brake'}
       onClick={() => setOpen(true)}
     >
-      {paused ? <LuBellRing /> : <LuBell />}
-      {paused && <span className="icon-btn__dot" />}
+      {usedUp || paused ? <LuBellRing /> : <LuBell />}
+      {paused && !usedUp && <span className="icon-btn__dot" />}
     </button>
   )
 }

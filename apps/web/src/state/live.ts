@@ -4,7 +4,7 @@ import { create } from 'zustand'
 import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OwnerNoteSummary, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, TaskStatusDef, WorkState, Workspace, GitCommit } from '@after-office/shared'
 import { api, useAuth } from './auth'
 import { mergeServer, useDashboard, ymd } from './dashboard'
-import { resumeReportBulk } from './reportBulk'
+import { applyReportJob } from './reportBulk'
 import { useOffice } from './store'
 import { useClock } from './clock'
 
@@ -56,6 +56,8 @@ function applyWork(work: Partial<WorkState>) {
   if (work.archivedTasks !== undefined) useLive.setState({ archivedTasks: work.archivedTasks })
   if (work.settings) useLive.setState({ settings: work.settings })
   if (work.automation) useLive.setState({ automation: work.automation })
+  // Read / Unread / Delete on many reports, as the server runs it
+  if ('reportJob' in work) applyReportJob(work.reportJob ?? null)
   if (work.bossMode !== undefined) useLive.setState({ bossMode: work.bossMode })
   if (work.publicAccess) useLive.setState({ publicAccess: work.publicAccess })
   if (work.notes) useLive.setState({ notes: work.notes })
@@ -221,8 +223,6 @@ export function useLiveSync() {
       src.onopen = () => {
         useLive.setState({ connected: true })
         loadUsage()
-        // a Read / Unread / Delete on many reports cut short by a reload: carry on with it
-        resumeReportBulk()
       }
       src.onerror = () => fail(src)
     }

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, useMemo } from 'react'
 import { useClock } from '../../state/clock'
-import { chatTime, dateTime } from '../when'
+import { chatTime, dateTime, localizeResets } from '../when'
 import { MicButton, ListeningBar, SpeakingChip } from '../Voice'
 import { useDictation } from '../../state/dictation'
 import { primeSpeech, talkedByVoice } from '../../state/speech'
@@ -603,7 +603,8 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
               <Fragment key={i.id}>
                 <div data-mid={i.id} className={`msg msg--agent${isNew(i.id)}${i.id === current ? ' msg--hit' : ''}`}>
                   <FileLinksProvider agentId={agent.id} files={files}>
-                    <Markdown text={i.text} />
+                    {/* a plan-limit notice's reset time in the office's timezone, not the server's */}
+                    <Markdown text={localizeResets(i.text, timezone, i.at)} />
                   </FileLinksProvider>
                   <Attachments agentId={agent.id} files={files} />
                 </div>

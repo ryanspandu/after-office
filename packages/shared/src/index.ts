@@ -291,6 +291,21 @@ export interface WorkState {
   notes: OwnerNoteSummary[]
   /** the task statuses, in the board's order: the four built-in ones (renamed, recoloured) and the owner's own */
   statuses: TaskStatusDef[]
+  /** Read / Unread / Delete on many reports, running on the server (every device shows it), or null */
+  reportJob: ReportJob | null
+}
+
+/** An action on many reports at once (Reports → pick → Read / Unread / Delete), run by the server in steps. */
+export interface ReportJob {
+  id: string
+  kind: 'read' | 'unread' | 'delete'
+  /** every report it's about, in the order it works through them */
+  ids: string[]
+  /** how many are done: the first `done` of ids */
+  done: number
+  /** deleted: the rows fold away for a moment before it ends */
+  removing: boolean
+  startedAt: number
 }
 
 /**
