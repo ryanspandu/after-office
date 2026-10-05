@@ -4,8 +4,9 @@ import { chatTime, dateTime, localizeResets } from '../when'
 import { MicButton, ListeningBar, SpeakingChip } from '../Voice'
 import { useDictation } from '../../state/dictation'
 import { primeSpeech, talkedByVoice } from '../../state/speech'
-import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuCircleStop, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
+import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuFoldVertical, LuSquare, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
 import { openUrl } from '../../state/url'
+import { confirm } from '../Confirm'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import type { ChatItem, LiveMode, WorkReport } from '@after-office/shared'
 import { useDashboard } from '../../state/dashboard'
@@ -90,11 +91,27 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       if (r?.task) setStoppedTask(r.task)
     })
   const [busy, setBusy] = useState('')
+  // /compact sent: until the context window shows the drop (or a while has passed), its share when it started
+  const [compacting, setCompacting] = useState<{ from: number; at: number } | null>(null)
+  const compact = async () => {
+    const used = agent.contextPct != null ? ` (${Math.round(agent.contextPct)}% used)` : ''
+    if (!(await confirm({ title: `Compact ${agent.name}'s conversation?`, message: `It's summarized to free the context window${used}. ${agent.name} keeps the gist of what was said, but the details of earlier messages are gone.`, confirmLabel: 'Compact', danger: false }))) return
+    await run('compact', async () => {
+      await liveApi.compact(agent.id, sk)
+      setCompacting({ from: agent.contextPct ?? 100, at: Date.now() })
+    })
+  }
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const followUps = useLive((s) => s.followUps).filter((f) => f.agentId === agent.id && (f.sessionKey ?? '') === session)
   const [detail, setDetail] = useState<Item | null>(null)
   const offline = agent.status === 'offline'
+  useEffect(() => {
+    if (!compacting) return
+    if (agent.contextPct != null && agent.contextPct < compacting.from - 2) return void setCompacting(null)
+    const t = setTimeout(() => setCompacting(null), Math.max(0, 150_000 - (Date.now() - compacting.at)))
+    return () => clearTimeout(t)
+  }, [compacting, agent.contextPct])
   // time of our last prompt: show the typing bubble right away, before the agent's first hook arrives
   const [sentAt, setSentAt] = useState<number | null>(null)
   // messages already on screen when the tab opened don't animate in
@@ -496,9 +513,16 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
             {Math.round(agent.contextPct)}%
           </span>
         )}
-        {active && !mobile && (
-          <button className="small" onClick={stop} data-tip="Press Esc in the session">
-            <LuCircleStop /> Stop
+        {agent.contextPct != null && !offline && (
+          <button
+            className="small ghost chat__compact"
+            onClick={() => void compact()}
+            disabled={active || !!busy || !!compacting}
+            aria-label="Compact the conversation"
+            data-tip={active ? 'Compact when it is idle (or stop it first)' : compacting ? 'Compacting…' : 'Compact: summarize the conversation to free the context window'}
+          >
+            {compacting || busy === 'compact' ? <LuLoader className="spin" /> : <LuFoldVertical />}
+            <span className="chat__compact-label">Compact</span>
           </button>
         )}
         {!mobile && findButton}
@@ -529,11 +553,6 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       {mobile ? (
         <>
           <div className={`chat__float${findOpen ? ' chat__float--find' : ''}`}>
-            {active && !findOpen && (
-              <button className="small" onClick={stop} aria-label="Stop the agent">
-                <LuCircleStop /> Stop
-              </button>
-            )}
             {findOpen ? (
               // searching: the search button has become the box, with a round ✕ beside it
               <>
@@ -643,6 +662,11 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       {offline && (session ? <div className="chat__notice">Starting the session…</div> : <OfflineBanner agent={agent} />)}
       {error && <div className="chat__error">{error}</div>}
       {!error && notice && agent.status === 'waiting' && <div className="chat__notice">{notice}</div>}
+      {compacting && (
+        <div className="chat__notice">
+          <LuLoader className="spin" /> Compacting {agent.name}'s conversation… the context window drops when it's done.
+        </div>
+      )}
       {joinedNote && <div className="chat__notice">Added to the answer in progress: {agent.name} answers both messages together.</div>}
       {stoppedTask && (
         <div className="chat__notice chat__notice--stopped">
@@ -722,9 +746,16 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
           disabled={offline}
         />
         {dict.supported && <MicButton dict={dict} disabled={offline} />}
-        <button className="icon-btn primary" onClick={() => (primeSpeech(), void send())} disabled={!canSend} data-tip={pending.uploading ? 'Waiting for the upload…' : 'Send'} aria-label="Send">
-          {sending ? <LuLoader className="spin" /> : <LuSend />}
-        </button>
+        {/* the agent is at work and nothing is typed: this button stops it (Esc in its session); typing something turns it back into Send (a follow-up joins the answer) */}
+        {active && !offline && !text.trim() && pending.ids.length === 0 ? (
+          <button className="icon-btn chat__stop" onClick={stop} disabled={busy === 'stop'} data-tip={`Stop ${agent.name} (Esc in the session)`} aria-label="Stop the agent">
+            {busy === 'stop' ? <LuLoader className="spin" /> : <LuSquare />}
+          </button>
+        ) : (
+          <button className="icon-btn primary" onClick={() => (primeSpeech(), void send())} disabled={!canSend} data-tip={pending.uploading ? 'Waiting for the upload…' : 'Send'} aria-label="Send">
+            {sending ? <LuLoader className="spin" /> : <LuSend />}
+          </button>
+        )}
       </div>
 
       {detail && (

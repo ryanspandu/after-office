@@ -101,6 +101,20 @@ agentRoutes.post('/agents/:id/prompt', async (c) => {
   return c.json({ ok: true, joined })
 })
 
+// Compact the conversation (Claude Code's /compact: it's summarized, which frees the context window). Only while the
+// agent is idle: a turn in progress would take the command as its next message, and a task would be cut into.
+agentRoutes.post('/agents/:id/compact', async (c) => {
+  const id = c.req.param('id')
+  const key = sessionKeyOf(c.req.query('session'))
+  const body = await c.req.json<{ focus?: unknown }>().catch(() => ({}) as { focus?: unknown })
+  const rt = key ? sideRuntimeOf(id, key) : runtimeOf(id)
+  if (rt.status === 'working' || rt.status === 'waiting') throw new AgentError('It is busy: compact when it is idle (or stop it first)', 409)
+  // what to keep in mind while summarizing (optional): one short line
+  const focus = typeof body.focus === 'string' ? body.focus.replace(/\s+/g, ' ').trim().slice(0, 300) : ''
+  await sendPrompt(id, focus ? `/compact ${focus}` : '/compact', key)
+  return c.json({ ok: true })
+})
+
 // a file attached in the chat (one per request: raw bytes, its name URL-encoded in X-File-Name). Only staged: it goes
 // into the agent's folder when the message is sent, and is deleted if it's removed or never sent
 agentRoutes.post('/agents/:id/uploads', requireSameOrigin, async (c) => {

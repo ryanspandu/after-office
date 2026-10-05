@@ -349,6 +349,8 @@ export const liveApi = {
   restartAgentServer: () => call('/api/agents-server/restart', {}) as Promise<{ restarted: number }>,
   revokeDir: (id: string, dir: string) => call(`/api/agents/${id}/dirs`, { dir }, 'DELETE'),
   interrupt: (id: string, session?: string) => call(`/api/agents/${id}/interrupt${session ? `?session=${session}` : ''}`, {}),
+  /** Claude Code's /compact: the conversation summarized, the context window freed (idle agents only) */
+  compact: (id: string, session?: string) => call(`/api/agents/${id}/compact${session ? `?session=${session}` : ''}`, {}),
   markChatRead: (id: string, session?: string) => call(`/api/agents/${id}/read${session ? `?session=${session}` : ''}`, {}),
   /** side sessions: more chats with the same agent, each its own Claude Code process */
   openSession: (id: string) => call(`/api/agents/${id}/sessions`, {}) as Promise<{ key: string }>,

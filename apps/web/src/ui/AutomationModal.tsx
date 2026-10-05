@@ -61,16 +61,27 @@ function ParallelLimit({ value, onChange }: { value: number; onChange: (n: numbe
 }
 const MAX_PARALLEL = 10
 
-/** The plan used up (5-hour or weekly window): which one and when it's back, or null. 99% counts: the plan reports
- *  whole percents and refuses work at its very end. */
+/** How close the plan is to running out (the 5-hour or the weekly window), or null while there's room: "used up" at
+ *  99% (the plan reports whole percents and refuses work at its very end), "near" from 5 points before the quota
+ *  brake's threshold, which holds automatic work from there. */
 const USED_UP = 99
-function useUsedUp(): { label: string; resetsAt: number | null } | null {
+const NEAR_BEFORE = 5
+function usePlanAlert(): { kind: 'used' | 'near'; label: string; resetsAt: number | null } | null {
   const rl = useLive((s) => s.rateLimits)
+  const quota = useLive((s) => s.settings?.quota)
   const now = useNow(30_000).getTime()
   if (!rl) return null
   const live = (at: number | null) => !at || at > now
-  if ((rl.fiveHourPct ?? 0) >= USED_UP && live(rl.fiveHourResetsAt)) return { label: '5-hour plan limit used up', resetsAt: rl.fiveHourResetsAt }
-  if ((rl.sevenDayPct ?? 0) >= USED_UP && live(rl.sevenDayResetsAt)) return { label: 'Weekly plan limit used up', resetsAt: rl.sevenDayResetsAt }
+  const windows = [
+    { name: '5-hour', pct: rl.fiveHourPct ?? 0, resetsAt: rl.fiveHourResetsAt },
+    { name: 'Weekly', pct: rl.sevenDayPct ?? 0, resetsAt: rl.sevenDayResetsAt },
+  ].filter((w) => live(w.resetsAt))
+  const used = windows.find((w) => w.pct >= USED_UP)
+  if (used) return { kind: 'used', label: `${used.name} plan limit used up`, resetsAt: used.resetsAt }
+  if (quota?.enabled) {
+    const near = windows.filter((w) => w.pct >= quota.threshold - NEAR_BEFORE).sort((a, b) => b.pct - a.pct)[0]
+    if (near) return { kind: 'near', label: `${near.name} plan limit at ${Math.round(near.pct)}% (the quota brake holds automatic work at ${quota.threshold}%)`, resetsAt: near.resetsAt }
+  }
   return null
 }
 
@@ -78,24 +89,27 @@ export function AutomationButton() {
   const live = useOffice((s) => s.source === 'live')
   const paused = useLive((s) => s.automation.quotaPaused)
   const setOpen = useAutomationModal((s) => s.setOpen)
-  const usedUp = useUsedUp()
+  const alert = usePlanAlert()
   const timezone = useClock((s) => s.timezone)
   if (!live) return null
-  // used up: red, and the bell shakes now and then (styles: .automation-btn--used-up)
-  const tipText = usedUp
-    ? `${usedUp.label}${usedUp.resetsAt ? ` · back at ${chatTime(usedUp.resetsAt, timezone)}` : ''}. Agents can't work until then.`
+  // the brake holding work, the plan used up, or close to either: red, with the bell shaking without a break
+  const alarm = !!paused || !!alert
+  const back = alert?.resetsAt ? ` · back at ${chatTime(alert.resetsAt, timezone)}` : ''
+  const tipText = alert?.kind === 'used'
+    ? `${alert.label}${back}. Agents can't work until then.`
     : paused
-      ? `Automatic work paused: ${paused}`
-      : 'Notifications & quota brake'
+      ? `Automatic work paused: ${paused}${back}`
+      : alert
+        ? `${alert.label}${back}`
+        : 'Notifications & quota brake'
   return (
     <button
-      className={`icon-btn icon-btn--badge${usedUp ? ' automation-btn--used-up' : paused ? ' automation-btn--paused' : ''}`}
+      className={`icon-btn icon-btn--badge${alarm ? ' automation-btn--alarm' : ''}`}
       data-tip={tipText}
-      aria-label={usedUp ? `${usedUp.label}. Notifications and quota brake` : 'Notifications and quota brake'}
+      aria-label={alarm ? `${alert?.label ?? `Automatic work paused: ${paused}`}. Notifications and quota brake` : 'Notifications and quota brake'}
       onClick={() => setOpen(true)}
     >
-      {usedUp || paused ? <LuBellRing /> : <LuBell />}
-      {paused && !usedUp && <span className="icon-btn__dot" />}
+      {alarm ? <LuBellRing /> : <LuBell />}
     </button>
   )
 }

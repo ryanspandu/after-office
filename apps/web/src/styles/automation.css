@@ -78,17 +78,17 @@
 .public-progress__steps li.is-done { color: #2f8f57; }
 .public-progress__dot { width: 6px; height: 6px; margin: 0 4px; border-radius: 50%; background: var(--line); flex-shrink: 0; }
 @media (prefers-reduced-motion: reduce) { .public-badge--busy, .public-progress__bar::after { animation: none; } }
-/* the plan used up (5-hour or weekly): a red bell that shakes every few seconds */
-.icon-btn.automation-btn--used-up { background: var(--danger); border-color: var(--danger); color: #fff; }
-.icon-btn.automation-btn--used-up:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 88%, #000); border-color: var(--danger); color: #fff; }
-.automation-btn--used-up svg { transform-origin: 50% 10%; animation: bell-shake 2.4s ease-in-out infinite; }
+/* the quota brake holding work, the plan used up, or close to either: a red bell that keeps shaking */
+.icon-btn.automation-btn--alarm { background: var(--danger); border-color: var(--danger); color: #fff; }
+.icon-btn.automation-btn--alarm:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 88%, #000); border-color: var(--danger); color: #fff; }
+.automation-btn--alarm svg { transform-origin: 50% 10%; animation: bell-shake 1.2s ease-in-out infinite; }
 @keyframes bell-shake {
-  0%, 62%, 100% { transform: rotate(0); }
-  66% { transform: rotate(16deg); }
-  71% { transform: rotate(-14deg); }
-  76% { transform: rotate(11deg); }
-  81% { transform: rotate(-8deg); }
-  86% { transform: rotate(4deg); }
-  90% { transform: rotate(0); }
+  0%, 100% { transform: rotate(0); }
+  10% { transform: rotate(16deg); }
+  22% { transform: rotate(-14deg); }
+  34% { transform: rotate(11deg); }
+  46% { transform: rotate(-8deg); }
+  58% { transform: rotate(4deg); }
+  68% { transform: rotate(0); }
 }
-@media (prefers-reduced-motion: reduce) { .automation-btn--used-up svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .automation-btn--alarm svg { animation: none; } }

@@ -358,3 +358,11 @@ span.stab { padding: 0 4px 0 10px; }
 .msg__report svg { font-size: 15px; }
 /* light mode: your messages in a soft orange (long text reads better dark on light than white on orange) */
 :root:not([data-theme='night']) .msg--user { background: #fde4cd; color: var(--text); }
+/* the send button while the agent works and nothing is typed: a stop square, in the danger colour */
+.icon-btn.chat__stop { background: var(--danger); border-color: var(--danger); color: #fff; }
+.icon-btn.chat__stop:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 88%, #000); border-color: var(--danger); color: #fff; }
+.icon-btn.chat__stop svg { fill: currentColor; }
+.chat__compact { flex-shrink: 0; }
+/* Compact: the icon with its word (on phones the bar is a panel with room: there it's a full-height row button) */
+.chat__compact { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; font-size: 12px; }
+.chat__bar--sheet .chat__compact { align-self: flex-start; height: 34px; padding: 0 12px; font-size: 13px; gap: 6px; }
