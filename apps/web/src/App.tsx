@@ -2,6 +2,7 @@ import { AutomationModal } from './ui/AutomationModal'
 import { ProfileModal } from './ui/ProfileModal'
 import { ConfirmLayer } from './ui/Confirm'
 import { BusyPill } from './ui/BusyPill'
+import { FileEditors } from './ui/FileEditor'
 import { UrlModals } from './ui/UrlModals'
 import { useEffect } from 'react'
 import { LuMessageSquareText, LuRefreshCw, LuTriangleAlert, LuX } from 'react-icons/lu'
@@ -104,6 +105,7 @@ export function App() {
       <AutomationModal />
       <ProfileModal />
       <UrlModals />
+      <FileEditors />
       <ConfirmLayer />
       <BusyPill />
       {update.ready && (

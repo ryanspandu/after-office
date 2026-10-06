@@ -42,7 +42,8 @@ import { canPreview, FilePreview, formatSize, saveUrl } from './Attachments'
 import { confirm } from './Confirm'
 import { ago } from './FollowUps'
 import { SearchBox } from './SearchBox'
-import { FileEditor, isTextFile } from './FileEditor'
+import { isTextFile } from './FileEditor'
+import { openFile as openFileWindow, useOpenFiles } from '../state/openFiles'
 import { ActionMenu, type MenuAction } from './ActionMenu'
 import { Modal } from './Modal'
 import { Select } from './Select'
@@ -111,10 +112,15 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
     [root],
   )
   // a text file open in the editor (its path)
-  const [editing, setEditing] = useState<string | null>(null)
-  // opened to change it (a new file, or Edit from its menu) rather than to read it (a click)
-  const [editMode, setEditMode] = useState(false)
-  const openFile = (p: string, edit: boolean) => (setEditMode(edit), setEditing(p))
+  // a text file opens in its own window (state/openFiles.ts: it can be minimized, and outlives this folder's); to
+  // change it (a new file, or Edit from its menu) rather than to read it (a click)
+  const openFile = (p: string, edit: boolean) => openFileWindow(root, p, edit)
+  // one of this folder's files saved there: the list (sizes, times, git marks) again
+  const savedHere = useOpenFiles((st) => (st.saved?.root === root ? st.saved.at : 0))
+  useEffect(() => {
+    if (savedHere) void load(here.current, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedHere])
   // hidden files (.env, .gitignore, .claude…) shown too: remembered in this browser
   const [hidden, setHidden] = useState(() => {
     try {
@@ -515,7 +521,6 @@ export function FileBrowser({ root, onTrashed, fill = false }: { root: string; o
           ]}
         />
       )}
-      {editing && <FileEditor key={editing} root={root} path={editing} edit={editMode} onClose={() => setEditing(null)} onSaved={() => void load(here.current, true)} />}
       {preview && <FilePreview file={{ path: `${root}/${preview.path}`, size: preview.size }} url={fileUrl(root, preview.path)} onClose={() => setPreview(null)} />}
     </div>
   )

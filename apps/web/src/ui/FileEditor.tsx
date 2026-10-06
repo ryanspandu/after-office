@@ -1,11 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { LuCheck, LuEye, LuLoader, LuLock, LuPencil, LuSave } from 'react-icons/lu'
+import { LuCheck, LuEye, LuLoader, LuLock, LuMinus, LuPencil, LuSave } from 'react-icons/lu'
 import { api } from '../state/auth'
 import { useDaylight } from '../state/clock'
 import { confirm } from './Confirm'
 import { Markdown } from './FollowUps'
 import { useModalMaximize } from './Maximize'
 import { Modal } from './Modal'
+import { useMinimized } from '../state/minimized'
+import { closeFile, fileSaved, minimizeFile, useOpenFiles } from '../state/openFiles'
 
 // A text file of a folder opened in an editor (the Files browser): VS Code's look, its language's colours, saved in
 // place (⌘S). It opens for reading (Markdown as a page, code read only); Edit turns it into the editor. A save over
@@ -35,7 +37,25 @@ interface Loaded {
   editable: boolean
 }
 
-export function FileEditor({ root, path, onClose, onSaved, edit = false }: { root: string; path: string; onClose: () => void; onSaved?: () => void; edit?: boolean }) {
+export function FileEditor({
+  root,
+  path,
+  onClose,
+  onSaved,
+  edit = false,
+  onMinimize,
+  hidden,
+}: {
+  root: string
+  path: string
+  onClose: () => void
+  onSaved?: () => void
+  edit?: boolean
+  /** put it aside as a chip (it stays open, hidden, with what's typed) */
+  onMinimize?: () => void
+  /** minimized */
+  hidden?: boolean
+}) {
   const name = path.split('/').pop() ?? path
   const dark = useDaylight() < 0.5
   const max = useModalMaximize(980, 'after-office:file-editor-full')
@@ -102,7 +122,9 @@ export function FileEditor({ root, path, onClose, onSaved, edit = false }: { roo
     <Modal
       open
       onClose={() => void close()}
-      onBackdrop={() => void close()}
+      // a click beside it puts it aside when it can be (nothing is lost); else it asks, as closing does
+      onBackdrop={onMinimize ?? (() => void close())}
+      hidden={hidden}
       title={name}
       description={path}
       {...max.modalProps}
@@ -129,7 +151,8 @@ export function FileEditor({ root, path, onClose, onSaved, edit = false }: { roo
             // back to reading, what was typed since the last save thrown away
             <button
               className="small"
-              onClick={() => {
+              onClick={async () => {
+                if (dirty && !(await confirm({ title: 'Discard your changes?', message: `What you changed in ${name} since it was last saved is thrown away.`, confirmLabel: 'Discard changes' }))) return
                 setText(file.text)
                 setPreview(false)
                 setEditing(false)
@@ -143,6 +166,11 @@ export function FileEditor({ root, path, onClose, onSaved, edit = false }: { roo
           {file?.editable && editing && (
             <button className="small primary" onClick={() => void save()} disabled={!dirty || saving} data-tip="Save (⌘S / Ctrl+S)">
               {savedAt && !dirty ? <LuCheck /> : <LuSave />} Save
+            </button>
+          )}
+          {onMinimize && (
+            <button className="icon-btn small ghost" onClick={onMinimize} data-tip="Minimize (it stays open, with your changes)" aria-label="Minimize">
+              <LuMinus />
             </button>
           )}
           {max.modalProps.actions}
@@ -174,5 +202,27 @@ export function FileEditor({ root, path, onClose, onSaved, edit = false }: { roo
         )}
       </div>
     </Modal>
+  )
+}
+
+/** Every open file's window (state/openFiles.ts): minimized ones stay mounted, hidden, so what's typed is kept. */
+export function FileEditors() {
+  const files = useOpenFiles((st) => st.files)
+  const minimized = useMinimized((st) => st.folders)
+  return (
+    <>
+      {files.map((f) => (
+        <FileEditor
+          key={f.key}
+          root={f.root}
+          path={f.path}
+          edit={f.edit}
+          hidden={minimized.some((m) => m.path === f.key)}
+          onMinimize={() => minimizeFile(f.key, f.path.split('/').pop() ?? f.path)}
+          onClose={() => closeFile(f.key)}
+          onSaved={() => fileSaved(f.root)}
+        />
+      ))}
+    </>
   )
 }

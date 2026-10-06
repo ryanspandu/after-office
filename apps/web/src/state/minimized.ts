@@ -16,7 +16,7 @@ export interface MinimizedFolder {
   /** a folder's path, or a note's id (kind 'note') */
   path: string
   /** unset: a folder window; 'note': one of the owner's notes (Reports → Notes); 'tasks' / 'reports': those windows */
-  kind?: 'note' | 'tasks' | 'reports' | 'report' | 'notes'
+  kind?: 'note' | 'tasks' | 'reports' | 'report' | 'notes' | 'file'
   /** the Tasks / Reports window: its view as it was left (the address bar's parameters: search, sort, page…) */
   params?: Record<string, string>
   /** a note's title when it was put aside (the list's own title wins when there is one) */
@@ -41,6 +41,8 @@ interface MinimizedStore {
   addNote: (id: string, label: string) => void
   /** one report's window put aside (its id, its title) */
   addReport: (id: string, label: string) => void
+  /** a text file's editor put aside (state/openFiles.ts key, its name) */
+  addFile: (key: string, label: string) => void
   /** the Tasks, Reports or Notes window put aside, with its view */
   addView: (kind: 'tasks' | 'reports' | 'notes', params: Record<string, string>) => void
   remove: (path: string) => void
@@ -73,6 +75,11 @@ export const useMinimized = create<MinimizedStore>((set, get) => {
     addReport: (id, label) => {
       const rest = get().folders.filter((f) => f.path !== `report:${id}`)
       set({ folders: [...rest, { path: `report:${id}`, kind: 'report', label }] })
+      save()
+    },
+    addFile: (key, label) => {
+      const rest = get().folders.filter((f) => f.path !== key)
+      set({ folders: [...rest, { path: key, kind: 'file', label }] })
       save()
     },
     addView: (kind, params) => {

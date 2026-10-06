@@ -4,12 +4,13 @@ import { horizontalListSortingStrategy, SortableContext, useSortable } from '@dn
 import { CSS } from '@dnd-kit/utilities'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { LuEllipsis, LuFileText, LuFolder, LuFolders, LuListTodo, LuNotebookPen, LuX } from 'react-icons/lu'
+import { LuEllipsis, LuFileCode, LuFileText, LuFolder, LuFolders, LuListTodo, LuNotebookPen, LuX } from 'react-icons/lu'
 import { useLive } from '../state/live'
 import { useMinimized, type MinimizedFolder } from '../state/minimized'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { usePresence } from '../state/usePresence'
 import { openUrl, useParam } from '../state/url'
+import { openFile, parseFileKey } from '../state/openFiles'
 
 const tilde = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, '~')
 /** How a minimized window shows: its name, what's under it in a list, its icon, and how it opens again. */
@@ -22,6 +23,17 @@ function useWindowLabels() {
           sub: 'Report',
           icon: <LuFileText />,
           open: () => (useMinimized.getState().remove(f.path), openUrl({ report: f.path.slice('report:'.length) })),
+        }
+      : f.kind === 'file'
+      ? {
+          name: f.label || 'File',
+          sub: tilde(parseFileKey(f.path)?.path ?? 'File'),
+          icon: <LuFileCode />,
+          // its window is still open (hidden) with what was typed; after a reload, the file opens again
+          open: () => {
+            const at = parseFileKey(f.path)
+            if (at) openFile(at.root, at.path)
+          },
         }
       : f.kind === 'notes'
       ? {

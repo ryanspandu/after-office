@@ -83,3 +83,6 @@ input.invalid { border-color: var(--danger); }
 .figure-row { display: flex; align-items: center; gap: 8px; }
 .parallel-limit { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--muted); cursor: default; }
 .parallel-limit input { width: 64px; padding: 4px 8px; border-radius: 8px; font-size: 13px; text-align: center; }
+/* a confirmation is always on top: also over the phone's full-screen terminal (z-index 1000) and other floating
+   layers it can be asked from (ui/Confirm.tsx) */
+.modal-backdrop:has(.confirm-modal) { z-index: 1200; }
