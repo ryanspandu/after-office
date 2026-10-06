@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import type { Context } from 'hono'
 import type { FollowUpDecision, LiveFollowUp, RateLimits } from '@after-office/shared'
 import { agentsRepo, sideSessionsRepo } from '../db'
-import { answerPermissionByKeys, answerPlan, AgentError, applyDeferredMode, readDialogOptions, sendPrompt, sessionKeyOf, takeDeferredMode } from './manager'
+import { answerPermissionByKeys, answerPlan, AgentError, applyDeferredMode, readDialogOptions, sendPrompt, sessionKeyOf, takeDeferredMode, KEEP_PLANNING } from './manager'
 import { addPending, clearPendingFor, currentRateLimits, getPending, patchPending, resolvePending, runtimeOf, setRateLimits, sideRuntimeOf, updateRuntime, updateSideRuntime } from './registry'
 import { applyHook, applyStatusline, type HookPayload, type Runtime, type StatuslinePayload } from './state'
 import { decideCheck, decideCron, decideDelegation, deliver, handleStop, noteFileWritten, onPromptSubmitted, onSidePromptSubmitted, onSideStopped } from '../work/work'
@@ -171,7 +171,12 @@ export async function decide(id: string, d: FollowUpDecision, who: { device: str
 
   if (f.kind === 'plan') {
     if (d.type !== 'plan' || !d.option) throw new AgentError('Plans need one of the dialog options')
-    await answerPlan(f.agentId, d.option, d.feedback, f.sessionKey)
+    try {
+      await answerPlan(f.agentId, d.option, d.feedback, f.sessionKey)
+    } catch (e) {
+      // keeping it as it is never fails: a dialog (or a session) that's gone leaves nothing to answer
+      if (d.option !== KEEP_PLANNING) throw e
+    }
     resolvePending(id)
     return
   }

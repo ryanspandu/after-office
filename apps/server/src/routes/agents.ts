@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs'
 import { active, cleanChatContext, contextBlock, expectChatReport, withContext, stopActiveTask } from '../work/work'
 import { decide } from '../agents/ingest'
 import { AgentError, changeFolder, compactSession, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeFolder, randomStyle, grantFolder, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
-import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime, runtimeOf, sideRuntimeOf } from '../agents/registry'
+import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime, runtimeOf, sideRuntimeOf, clearPendingFor } from '../agents/registry'
 import type { Runtime } from '../agents/state'
 import { readChat } from '../agents/transcripts'
 import { requireSameOrigin, terminalSocket } from '../agents/term'
@@ -269,6 +269,9 @@ agentRoutes.post('/agents/:id/read', (c) => {
 agentRoutes.post('/agents/:id/interrupt', async (c) => {
   const key = sessionKeyOf(c.req.query('session'))
   await interrupt(c.req.param('id'), key)
+  // Esc also closed any question / plan / permission dialog of that session: those leave For you now (Claude Code sends
+  // no Stop hook for an interrupted turn, so nothing else would clear them)
+  clearPendingFor(c.req.param('id'), undefined, key)
   // stopped partway through a task: it goes back to To do now (Resume picks it up), not when the next message comes
   const task = stopActiveTask(c.req.param('id'), { author: 'user' }, undefined, key)
   return c.json({ ok: true, ...(task ? { task: { id: task.id, title: task.title } } : {}) })

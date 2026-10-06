@@ -490,6 +490,12 @@ function FollowUpCard({
           <button className="primary" onClick={onOpen}>
             <LuClipboardList /> Review plan
           </button>
+          {/* no: the plan closes, nothing is done (a dialog that's gone already: it just leaves the list) */}
+          {item.live && (
+            <button className="ghost" onClick={() => onResolve({ type: 'plan-option', option: KEEP_PLANNING })} data-tip="Close it without doing anything: the agent stays in plan mode">
+              Keep planning
+            </button>
+          )}
         </div>
       ) : (
         <div className="fu__actions">
@@ -506,6 +512,9 @@ function FollowUpCard({
 }
 
 /** Full view of one item: the whole plan / context, and every answer Claude Code offers. */
+/** The server's "no" to a plan (agents/manager.ts KEEP_PLANNING): Esc on the dialog, the agent keeps planning. */
+const KEEP_PLANNING = 'keep-planning'
+
 export function FollowUpDetail({
   item,
   agentName,
@@ -648,16 +657,22 @@ export function FollowUpDetail({
         {error && <div className="row__error">{error}</div>}
 
         {!item.questions?.length && (
-        <footer className="modal__foot fu-detail__actions">
+        <footer className="modal__foot fu-detail__actions" onMouseDown={(e) => e.preventDefault()}>
+          {/* a tap here keeps the focus in the note: on a phone the footer is slimmer while you type (styles:
+              follow-ups.css), and the note losing focus first would grow it back under your finger */}
           {item.kind === 'plan' && item.live && (
             <>
+              {/* no: the dialog closes (Esc), the agent stays in plan mode and does nothing; also when it's gone already */}
+              <button className="ghost fu-keep" onClick={() => onResolve({ type: 'plan-option', option: KEEP_PLANNING })} data-tip="Close the plan without doing anything: the agent stays in plan mode">
+                Keep planning
+              </button>
               {!item.planOptions && <span className="muted grow">Reading the plan dialog…</span>}
               {item.planOptions?.map((label, i) => {
                 const feedback = /tell claude|change|feedback/i.test(label)
                 return (
                   <button
                     key={label}
-                    className={i === 0 ? 'primary' : ''}
+                    className={`${i === 0 ? 'primary' : ''}${feedback ? ' fu-feedback' : ''}`}
                     disabled={feedback && !note.trim()}
                     data-tip={feedback ? 'Sends your feedback so the agent revises the plan' : undefined}
                     onClick={() => onResolve({ type: 'plan-option', option: label, note: feedback ? note : undefined })}

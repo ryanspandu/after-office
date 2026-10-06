@@ -63,3 +63,10 @@ button.fu__msg:hover:not(:disabled) { text-decoration: underline; text-underline
 .task-me { display: inline-flex; }
 /* a card's buttons sit at its bottom, whatever the length of its text (cards in a row line up) */
 .fu .fu__actions, .fu .fu__reply, .fu .fu__options { margin-top: auto; }
+/* phones: while the note is being typed (the keyboard is up), the plan's footer is only the button that sends it, in one
+   slim row: the note and what's typed stay in view. The rest is back when the note loses focus. */
+@media (max-width: 768px) and (pointer: coarse) {
+  .fu-detail:has(textarea:focus) .fu-detail__actions:has(.fu-feedback) > :not(.fu-feedback) { display: none; }
+  .fu-detail:has(textarea:focus) .fu-detail__actions:has(.fu-feedback) { flex-wrap: nowrap; justify-content: flex-end; padding-top: 8px; padding-bottom: 8px; }
+  .fu-detail:has(textarea:focus) .fu-detail__actions .fu-feedback { flex: 0 0 auto; min-height: 36px; }
+}

@@ -1021,9 +1021,18 @@ export async function answerPermissionByKeys(id: string, choice: 'allow' | 'alwa
   await tmux.keys(session, pick.n)
 }
 
+/** "No, keep planning" (For you → the plan): the plan dialog closed with Esc, the agent stays in plan mode, nothing done. */
+export const KEEP_PLANNING = 'keep-planning'
+
 export async function answerPlan(id: string, optionLabel: string, feedback?: string, key = '') {
   const { session } = await requireLive(id, key)
-  const option = parseDialogOptions(await tmux.capture(session)).find((o) => o.label === optionLabel)
+  const options = parseDialogOptions(await tmux.capture(session))
+  if (optionLabel === KEEP_PLANNING) {
+    // the dialog still up: Esc cancels it (Claude Code stays in plan mode); already gone: nothing to do
+    if (options.length) await tmux.keys(session, 'Escape')
+    return
+  }
+  const option = options.find((o) => o.label === optionLabel)
   if (!option) throw new AgentError('The plan dialog is not on screen any more; open the Terminal tab to answer it', 409)
   await tmux.keys(session, option.n)
   if (feedback?.trim() && /tell claude|change|feedback/i.test(option.label)) {
