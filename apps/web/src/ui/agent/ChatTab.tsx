@@ -30,6 +30,24 @@ import { setUrl, useUrl } from '../../state/url'
 
 // Chat with one agent. Messages come from its Claude Code transcript; what you send is typed into its tmux session.
 
+/** Which of an agent's sessions its chat was last on (this browser): '' the main one. */
+const LAST_SESSION = (agentId: string) => `after-office:chat-session:${agentId}`
+function lastSession(agentId: string) {
+  try {
+    return localStorage.getItem(LAST_SESSION(agentId)) ?? ''
+  } catch {
+    return ''
+  }
+}
+function rememberSession(agentId: string, key: string) {
+  try {
+    if (key) localStorage.setItem(LAST_SESSION(agentId), key)
+    else localStorage.removeItem(LAST_SESSION(agentId))
+  } catch {
+    // private mode: it opens on Main next time, that's all
+  }
+}
+
 export const MODEL_OPTIONS = MODELS.map((m) => ({ value: m.value as string, label: m.label }))
 const MODE_OPTIONS: { value: LiveMode; label: string }[] = (['default', 'acceptEdits', 'plan', 'auto'] as LiveMode[]).map((m) => ({ value: m, label: MODE_LABEL[m] }))
 
@@ -43,13 +61,26 @@ export const modelAlias = (id?: string) => modelChoiceOf(id)
 export function ChatTab({ agent }: { agent: OfficeAgent }) {
   const params = useUrl((s) => s.params)
   const wanted = params.session ?? ''
+  // the chat opens on the session it was last left on (this browser), while that one is still open
+  const restored = useRef(false)
+  useEffect(() => {
+    if (restored.current || !agent.sessions) return
+    restored.current = true
+    if (wanted) return
+    const last = lastSession(agent.id)
+    if (last && agent.sessions.some((s) => s.key === last && s.open)) setUrl({ session: last })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.id, agent.sessions])
   const side = wanted ? agent.sessions?.find((s) => s.key === wanted && s.open) : undefined
   const session = side ? wanted : ''
   // a closed (or unknown) session in the address bar: back to the main chat
   useEffect(() => {
     if (wanted && agent.sessions && !side) setUrl({ session: null })
   }, [wanted, side, agent.sessions])
-  const pick = (key: string) => setUrl({ session: key || null })
+  const pick = (key: string) => {
+    rememberSession(agent.id, key)
+    setUrl({ session: key || null })
+  }
   // the chat shows the session's own state (status, mode, cost, context…), the agent's name and folder
   const view: OfficeAgent = side
     ? { ...agent, status: side.status, waitingFor: side.waitingFor, tool: side.tool, permissionMode: side.permissionMode, costUsd: side.costUsd, contextPct: side.contextPct, contextTokens: undefined, contextSize: undefined, compactingSince: side.compactingSince, lastMessage: side.lastMessage, unread: side.unread, error: undefined }

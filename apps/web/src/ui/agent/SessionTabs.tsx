@@ -12,6 +12,18 @@ import { ago } from '../FollowUps'
 
 export const sessionName = (s: Pick<SideSessionInfo, 'key' | 'title'>) => s.title?.trim() || `Session ${s.key.slice(1)}`
 
+/**
+ * The labels of an agent's sessions: a named one by its name; an unnamed one "Session n", n the lowest number (from 2:
+ * Main is the first) no other unnamed one has, oldest first. Keys keep counting up (a closed session keeps its key to be
+ * opened again), so numbering by key showed "Session 6" next to just one other open session.
+ */
+export function sessionNames(sessions: Pick<SideSessionInfo, 'key' | 'title' | 'createdAt'>[]) {
+  const names = new Map<string, string>()
+  let n = 1
+  for (const s of [...sessions].sort((a, b) => a.createdAt - b.createdAt)) names.set(s.key, s.title?.trim() || `Session ${++n}`)
+  return names
+}
+
 function Dot({ status, waitingFor }: { status: string; waitingFor?: string }) {
   const tone = status === 'waiting' || waitingFor ? 'waiting' : status === 'working' ? 'working' : status === 'offline' ? 'offline' : 'idle'
   return <i className={`stab__dot stab__dot--${tone}`} />
@@ -20,6 +32,9 @@ function Dot({ status, waitingFor }: { status: string; waitingFor?: string }) {
 export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; current: string; onPick: (key: string) => void }) {
   const open = (agent.sessions ?? []).filter((s) => s.open)
   const closed = (agent.sessions ?? []).filter((s) => !s.open)
+  // what each is called ("Session n" numbered among the unnamed ones, not by its key)
+  const names = sessionNames(agent.sessions ?? [])
+  const nameOf = (s: SideSessionInfo) => names.get(s.key) ?? sessionName(s)
   const [menu, setMenu] = useState(false)
   // where the menu opens: under the + button, kept inside the screen (near the right edge it opens to the left)
   const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null)
@@ -74,7 +89,7 @@ export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; cu
     })
   const close = async (s: SideSessionInfo) => {
     const ok = await confirm({
-      title: `Close ${sessionName(s)}?`,
+      title: `Close ${nameOf(s)}?`,
       message: s.status === 'working' ? 'It is working right now: that stops. Its process ends and frees its memory; the conversation stays, to open again.' : 'Its process ends and frees its memory. The conversation stays: open it again from + any time.',
       confirmLabel: 'Close',
     })
@@ -86,7 +101,8 @@ export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; cu
   const [editing, setEditing] = useState<string | null>(null)
   const rename = (s: SideSessionInfo, name: string | null) => {
     setEditing(null)
-    if (name === null || name.trim() === (s.title ?? '').trim()) return
+    // unchanged, or the default label kept as it was: nothing to save (it stays unnamed, its number can move)
+    if (name === null || name.trim() === (s.title ?? '').trim() || (!s.title && name.trim() === nameOf(s))) return
     void act(s.key, () => liveApi.renameSession(agent.id, s.key, name))
   }
   const mainStatus = agent.mainStatus ?? agent.status
@@ -100,7 +116,7 @@ export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; cu
         </button>
         {open.map((s) =>
           editing === s.key ? (
-            <NameInput key={s.key} value={sessionName(s)} onDone={(name) => rename(s, name)} />
+            <NameInput key={s.key} value={nameOf(s)} onDone={(name) => rename(s, name)} />
           ) : (
           <span key={s.key} className={`stab${current === s.key ? ' is-on' : ''}`} role="presentation">
             <button
@@ -112,10 +128,10 @@ export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; cu
               data-tip={current === s.key ? 'Rename' : s.title ? `${s.title} · session ${s.key.slice(1)}` : undefined}
             >
               <Dot status={s.status} waitingFor={s.waitingFor} />
-              <span className="truncate">{sessionName(s)}</span>
+              <span className="truncate">{nameOf(s)}</span>
               {!!s.unread && current !== s.key && <span className="stab__badge">{s.unread}</span>}
             </button>
-            <button className="stab__x" onClick={() => void close(s)} disabled={busy === s.key} aria-label={`Close ${sessionName(s)}`}>
+            <button className="stab__x" onClick={() => void close(s)} disabled={busy === s.key} aria-label={`Close ${nameOf(s)}`}>
               {busy === s.key ? <LuLoader className="spin" /> : <LuX />}
             </button>
           </span>
@@ -137,10 +153,10 @@ export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; cu
                 <span key={s.key} className="stab-menu__row">
                   <button role="menuitem" onClick={() => void reopen(s.key)} disabled={!!busy}>
                     <LuHistory />
-                    <span className="truncate">{sessionName(s)}</span>
+                    <span className="truncate">{nameOf(s)}</span>
                     <span className="muted stab-menu__when">{s.closedAt ? ago(Date.now() - s.closedAt) : ''}</span>
                   </button>
-                  <button className="icon-btn small ghost" aria-label={`Remove ${sessionName(s)} from the list`} data-tip="Remove from the list" onClick={() => void act(s.key, () => liveApi.forgetSession(agent.id, s.key))}>
+                  <button className="icon-btn small ghost" aria-label={`Remove ${nameOf(s)} from the list`} data-tip="Remove from the list" onClick={() => void act(s.key, () => liveApi.forgetSession(agent.id, s.key))}>
                     <LuTrash2 />
                   </button>
                 </span>
