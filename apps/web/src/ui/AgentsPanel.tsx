@@ -24,6 +24,7 @@ import type { AgentStatus, LiveMode } from '@after-office/shared'
 import { liveApi, useLive } from '../state/live'
 import { unreadOf, useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { ReportsPanel } from './Reports'
+import { useDashboard } from '../state/dashboard'
 import { confirmWith } from './Confirm'
 import { openUrl } from '../state/url'
 import { tip } from './Tooltip'
@@ -204,6 +205,10 @@ function AgentRow({
   onPin: () => void
 }) {
   const queued = useLive((s) => (live ? (s.queued[a.id] ?? 0) : 0))
+  // its last prompt is kept in memory only (gone after a server restart): else the task it's running
+  const running = useDashboard((s) =>
+    s.tasks.filter((t) => t.agentId === a.id && t.status === 'in_progress').sort((x, y) => (y.startedAt ?? 0) - (x.startedAt ?? 0))[0]?.title,
+  )
   const phone = useMediaQuery(MOBILE)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -320,7 +325,7 @@ function AgentRow({
         )}
         <div className="row__meta truncate">
           {a.tool && a.status !== 'idle' && <code>{a.tool}</code>}
-          {a.status === 'idle' ? (live ? a.lastMessage ?? idleText(a.spotId) : idleText(a.spotId)) : (a.task ?? '—')}
+          {a.status === 'idle' ? (live ? a.lastMessage ?? idleText(a.spotId) : idleText(a.spotId)) : (a.task ?? running ?? '—')}
         </div>
         {live && liveMeta && <div className="row__mono truncate">{liveMeta}</div>}
         {error && <div className="row__error">{error}</div>}
