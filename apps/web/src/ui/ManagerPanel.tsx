@@ -6,7 +6,7 @@ import { create } from 'zustand'
 import { divisionOf } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
-import { useOffice, type OfficeAgent, avatarStyle } from '../state/store'
+import { unreadOf, useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { ChatTab } from './agent/ChatTab'
 import { openUrl, setUrl, useParam } from '../state/url'
 import { MaximizeButton, useMaximize } from './Maximize'
@@ -82,7 +82,7 @@ function Panel({ manager, onClose: close }: { manager: OfficeAgent; onClose: () 
         <nav className="drawer__tabs seg">
           <button className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}>
             <LuMessageSquare /> Chat
-            {!!manager.unread && tab !== 'chat' && <span className="seg__count">{manager.unread}</span>}
+            {unreadOf(manager) > 0 && tab !== 'chat' && <span className="seg__count">{unreadOf(manager)}</span>}
           </button>
           <button className={tab === 'team' ? 'active' : ''} onClick={() => setTab('team')}>
             <LuUsers /> Team

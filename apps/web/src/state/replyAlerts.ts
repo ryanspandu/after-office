@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { useManagerPanel } from '../ui/ManagerPanel'
-import { useOffice } from './store'
+import { unreadOf, useOffice } from './store'
 import { brandTitle } from './branding'
 
 // Tells you when an agent answers, also while its chat is open (where the unread badge clears itself right away):
@@ -13,7 +13,8 @@ const SOUND_KEY = 'ao-reply-sound'
 export const useReplyAlerts = create<{
   sound: boolean
   setSound: (on: boolean) => void
-  toast: { agentId: string; name: string; at: number } | null
+  /** `session`: the side session that answered (unset: the main one) */
+  toast: { agentId: string; name: string; at: number; session?: string } | null
   dismiss: () => void
 }>((set) => ({
   sound: (() => {
@@ -75,6 +76,7 @@ export function chatOnScreen(agentId: string) {
 export function useReplyAlertWatcher() {
   useEffect(() => {
     let seen: Map<string, number> | null = null
+    let seenSides: Map<string, Record<string, number>> | null = null
     let hiddenReplies = 0
     let hideTimer: ReturnType<typeof setTimeout> | undefined
     const setTitle = () => (document.title = hiddenReplies ? `(${hiddenReplies}) ${brandTitle()}` : brandTitle())
@@ -84,25 +86,31 @@ export function useReplyAlertWatcher() {
         seen = null
         return
       }
-      const now = new Map(s.agents.map((a) => [a.id, a.unread ?? 0]))
+      // every chat of an agent counts: its main session and the side sessions
+      const now = new Map(s.agents.map((a) => [a.id, unreadOf(a)]))
+      // …and which one it was: a side session whose count went up
+      const sides = new Map(s.agents.map((a) => [a.id, Object.fromEntries((a.sessions ?? []).map((x) => [x.key, x.unread ?? 0]))]))
       // the first snapshot (and agents appearing later) are the starting point, not news
       if (seen) {
         for (const a of s.agents) {
           const before = seen.get(a.id)
-          if (before === undefined || (a.unread ?? 0) <= before) continue
+          if (before === undefined || unreadOf(a) <= before) continue
           if (useReplyAlerts.getState().sound) chime()
           if (document.visibilityState !== 'visible') {
             hiddenReplies++
             setTitle()
           }
           if (!chatOnScreen(a.id)) {
-            useReplyAlerts.setState({ toast: { agentId: a.id, name: a.name, at: Date.now() } })
+            const was = seenSides?.get(a.id) ?? {}
+            const session = (a.sessions ?? []).find((x) => x.open && (x.unread ?? 0) > (was[x.key] ?? 0))?.key
+            useReplyAlerts.setState({ toast: { agentId: a.id, name: a.name, at: Date.now(), ...(session ? { session } : {}) } })
             clearTimeout(hideTimer)
             hideTimer = setTimeout(() => useReplyAlerts.getState().dismiss(), TOAST_MS)
           }
         }
       }
       seen = now
+      seenSides = sides
     })
     const onVisible = () => {
       if (document.visibilityState !== 'visible' || !hiddenReplies) return

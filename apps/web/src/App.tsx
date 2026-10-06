@@ -14,6 +14,7 @@ import { useCronRunner } from './state/cronRunner'
 import { useDashboard } from './state/dashboard'
 import { useLiveSync } from './state/live'
 import { useReplyAlerts, useReplyAlertWatcher } from './state/replyAlerts'
+import { setUrl } from './state/url'
 import { useOffice } from './state/store'
 import { useMetricsSim, useMockSim } from './state/mockSim'
 import { MOBILE, useMediaQuery } from './state/useMediaQuery'
@@ -138,6 +139,8 @@ export function App() {
               const office = useOffice.getState()
               if (office.agents.find((a) => a.id === replied.agentId)?.kind === 'manager') useManagerPanel.getState().setOpen(true)
               else office.openProfile(replied.agentId)
+              // the chat on the session that answered (a side one), not the main one
+              if (replied.session) setUrl({ session: replied.session })
               useReplyAlerts.getState().dismiss()
             }}
           >

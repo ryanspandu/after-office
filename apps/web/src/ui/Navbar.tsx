@@ -9,7 +9,7 @@ import { LuServer, LuMonitorDown, LuShare, LuSmartphone, LuBell, LuLockKeyhole, 
 import { useAuth } from '../state/auth'
 import { TIMEZONES, useClock, useNow, zonedParts, type ThemeMode } from '../state/clock'
 import { formatTokens, rangeBounds, useDashboard } from '../state/dashboard'
-import { useOffice } from '../state/store'
+import { unreadOf, useOffice } from '../state/store'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { DateRangePicker } from './DateRangePicker'
 import { Select } from './Select'
@@ -367,9 +367,9 @@ function ManagerButton() {
   const setOpen = useManagerPanel((s) => s.setOpen)
   if (!manager) return null
   return (
-    <button className="manager-btn" onClick={() => setOpen(true)} {...tip(manager.unread ? `${manager.unread} new from the manager` : 'Talk to the manager')}>
+    <button className="manager-btn" onClick={() => setOpen(true)} {...tip(unreadOf(manager) ? `${unreadOf(manager)} new from the manager` : 'Talk to the manager')}>
       <LuCrown /> Manager
-      {!!manager.unread && <span className="icon-btn__count">{manager.unread > 9 ? '9+' : manager.unread}</span>}
+      {unreadOf(manager) > 0 && <span className="icon-btn__count">{unreadOf(manager) > 9 ? '9+' : unreadOf(manager)}</span>}
     </button>
   )
 }

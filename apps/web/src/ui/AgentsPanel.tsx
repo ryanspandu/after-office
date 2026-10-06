@@ -22,7 +22,7 @@ import {
 } from 'react-icons/lu'
 import type { AgentStatus, LiveMode } from '@after-office/shared'
 import { liveApi, useLive } from '../state/live'
-import { useOffice, type OfficeAgent, avatarStyle } from '../state/store'
+import { unreadOf, useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { ReportsPanel } from './Reports'
 import { confirmWith } from './Confirm'
 import { openUrl } from '../state/url'
@@ -282,7 +282,7 @@ function AgentRow({
             {
               key: 'chat',
               icon: live ? <LuMessageSquareText /> : <LuSlidersHorizontal />,
-              label: live ? (a.unread ? `Open chat · ${a.unread} new` : 'Open chat') : 'Open profile',
+              label: live ? (unreadOf(a) ? `Open chat · ${unreadOf(a)} new` : 'Open chat') : 'Open profile',
               run: onProfile,
             },
             ...(live ? [{ key: 'restart', icon: <LuRotateCw />, label: 'Restart session', hint: 'keeps the conversation', run: () => act('restart', () => liveApi.restart(a.id)) }] : []),
@@ -305,9 +305,9 @@ function AgentRow({
             </span>
           )}
           <span className="muted role">{a.role || a.profile.role}</span>
-          {live && !!a.unread && (
-            <span className="row__unread" {...tip(`${a.unread} new ${a.unread === 1 ? 'reply' : 'replies'}`)}>
-              <LuMessageSquareText /> {a.unread > 9 ? '9+' : a.unread}
+          {live && unreadOf(a) > 0 && (
+            <span className="row__unread" {...tip(`${unreadOf(a)} new ${unreadOf(a) === 1 ? 'reply' : 'replies'}`)}>
+              <LuMessageSquareText /> {unreadOf(a) > 9 ? '9+' : unreadOf(a)}
             </span>
           )}
           <span className={`status status--${a.status}`}>{a.status === 'waiting' && a.waitingFor ? waitingLabel(a.waitingFor) : STATUS_META[a.status].label}</span>
@@ -315,7 +315,7 @@ function AgentRow({
         {phone && (
           <button type="button" className="icon-btn small agent__chat" onClick={onProfile} aria-label={live ? `Chat with ${a.name}` : `${a.name}'s profile`}>
             {live ? <LuMessageSquareText /> : <LuSlidersHorizontal />}
-            {live && !!a.unread && <span className="agent__chat-count">{a.unread > 9 ? '9+' : a.unread}</span>}
+            {live && unreadOf(a) > 0 && <span className="agent__chat-count">{unreadOf(a) > 9 ? '9+' : unreadOf(a)}</span>}
           </button>
         )}
         <div className="row__meta truncate">

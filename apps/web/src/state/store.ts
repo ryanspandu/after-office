@@ -38,6 +38,10 @@ export interface Look {
   seed: number
 }
 
+/** New replies across all of an agent's chats: its main session and the side sessions that are open (each counts its
+ *  own): the badges, the reply sound and toast. */
+export const unreadOf = (a: Pick<AgentInfo, 'unread' | 'sessions'>) => (a.unread ?? 0) + (a.sessions ?? []).reduce((n, s) => n + (s.open ? (s.unread ?? 0) : 0), 0)
+
 export interface OfficeAgent extends AgentInfo {
   desk: number
   look: Look
