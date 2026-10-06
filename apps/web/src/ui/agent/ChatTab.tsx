@@ -9,7 +9,7 @@ import { openUrl } from '../../state/url'
 import { ComposerBox, type ComposerHandle } from './ComposerBox'
 import { confirm } from '../Confirm'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
-import type { ChatItem, LiveMode, WorkReport } from '@after-office/shared'
+import type { ChatItem, LiveMode, SideSessionInfo, WorkReport } from '@after-office/shared'
 import { useDashboard } from '../../state/dashboard'
 import { mentionedPaths, modelChoiceOf, MODELS } from '@after-office/shared'
 import { api } from '../../state/auth'
@@ -71,7 +71,13 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
     if (last && agent.sessions.some((s) => s.key === last && s.open)) setUrl({ session: last })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.id, agent.sessions])
-  const side = wanted ? agent.sessions?.find((s) => s.key === wanted && s.open) : undefined
+  // the session last seen open: an update that comes without it for a moment doesn't flip the chat to Main (which
+  // would mark Main's replies read while the owner is on another session)
+  const lastSide = useRef<SideSessionInfo | undefined>(undefined)
+  const found = wanted ? agent.sessions?.find((s) => s.key === wanted && s.open) : undefined
+  if (found) lastSide.current = found
+  const gone = !!wanted && !!agent.sessions?.some((s) => s.key === wanted && !s.open)
+  const side = found ?? (wanted && !gone && lastSide.current?.key === wanted ? lastSide.current : undefined)
   const session = side ? wanted : ''
   // a closed (or unknown) session in the address bar: back to the main chat
   useEffect(() => {
@@ -181,8 +187,11 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   }, [load, active, waitingForReply])
 
   // the chat is on screen: its replies are seen (clears the badge on the agent's chat button)
+  // (after a moment on screen: a chat only passed through, or shown for a frame, doesn't count as read)
   useEffect(() => {
-    if (agent.unread && document.visibilityState === 'visible') void liveApi.markChatRead(agent.id, sk).catch(() => {})
+    if (!agent.unread) return
+    const t = setTimeout(() => document.visibilityState === 'visible' && void liveApi.markChatRead(agent.id, sk).catch(() => {}), 800)
+    return () => clearTimeout(t)
   }, [agent.id, agent.unread, sk])
   useEffect(() => {
     const unread = () => {
