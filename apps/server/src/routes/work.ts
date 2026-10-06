@@ -13,10 +13,12 @@ import { publish } from '../agents/registry'
 import { updateSettings } from '../work/settings'
 import { cleanCustomStatus, saveStatuses } from '../work/statuses'
 import { cleanTagIds, deleteTag, putTag } from '../work/tags'
-import { listPreviews, stopPreview } from '../work/previews'
+import { listPreviews, stopPort, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
 import { createNote, deleteNote, reorderNotes, updateNote } from '../work/notes'
 import { cleanFolder } from '../work/folders'
+import { toolsReport } from '../system/tools'
+import { endTerminal, runningReport } from '../system/running'
 import { taskFolder, addComment, deliver, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, startReportJob, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
@@ -346,6 +348,18 @@ workRoutes.get('/workspaces/search', (c) => c.json(searchFolders((c.req.query('q
 // file manager: read-only, inside a folder the Projects tab shows
 workRoutes.get('/workspaces/files', (c) => c.json(listFolder(c.req.query('root') ?? '', c.req.query('path') ?? '', c.req.query('hidden') === '1')))
 // the git repo of the folder on screen: branch, what's not committed, which entries that touches
+// ── the Server window: tools the agents' user has (and their logins), what's running ──
+// It can stop processes and lead to a shell: the same lock as the terminals (the authenticator code, for this browser
+// session, for a while after the last use: agents/termLock.ts)
+workRoutes.use('/system/*', requireUnlockedTerminal)
+workRoutes.get('/system/tools', async (c) => c.json(await toolsReport(c.req.query('fresh') === '1')))
+workRoutes.get('/system/running', async (c) => c.json(await runningReport()))
+workRoutes.post('/system/services/:port/stop', async (c) => c.json(await stopPort(Number(c.req.param('port')))))
+workRoutes.delete('/system/terminals/:name', async (c) => {
+  const name = c.req.param('name')
+  if (!/^ao--sh-[0-9a-f]{12}$/.test(name)) throw new AgentError('Not a terminal', 400)
+  return c.json(await endTerminal(name))
+})
 workRoutes.get('/workspaces/git', async (c) => c.json(await folderGit(c.req.query('root') ?? '', c.req.query('path') ?? '')))
 workRoutes.get('/workspaces/git/branches', async (c) => c.json(await gitBranches(c.req.query('root') ?? '', c.req.query('path') ?? '')))
 // the Files browser's git bar: Discard all, Commit, Push (the whole repo of the folder on screen)

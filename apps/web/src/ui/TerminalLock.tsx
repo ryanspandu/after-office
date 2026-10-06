@@ -24,7 +24,18 @@ export function useTerminalLock() {
 }
 
 /** The code form, then the terminal. `children` gets `onRefused`: the connection was turned away (the lock ran out). */
-export function TerminalLock({ hint, children }: { hint: string; children: (onRefused: () => void) => ReactNode }) {
+export function TerminalLock({
+  hint,
+  children,
+  title = 'Terminal locked',
+  action = 'Open terminal',
+}: {
+  hint: string
+  children: (onRefused: () => void) => ReactNode
+  /** what's locked (the Server window uses the same lock) */
+  title?: string
+  action?: string
+}) {
   const lock = useTerminalLock()
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -53,12 +64,12 @@ export function TerminalLock({ hint, children }: { hint: string; children: (onRe
   return (
     <div className="fterm__empty tlock">
       <LuLockKeyhole className="fterm__icon" />
-      <div className="fterm__title">Terminal locked</div>
+      <div className="fterm__title">{title}</div>
       <p className="muted fterm__hint">{hint} Enter the code from your authenticator app to open it.</p>
       <CodeInput value={code} onChange={setCode} onComplete={(v) => void submit(v)} autoFocus disabled={busy} />
       {error && <div className="row__error">{error}</div>}
       <button className="primary" onClick={() => void submit()} disabled={busy || code.length < 6}>
-        {busy ? <LuLoader className="spin" /> : <LuSquareTerminal />} Open terminal
+        {busy ? <LuLoader className="spin" /> : <LuSquareTerminal />} {action}
       </button>
     </div>
   )

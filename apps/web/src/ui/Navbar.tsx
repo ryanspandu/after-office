@@ -5,7 +5,7 @@ import { OwnerAvatar } from './EditProfile'
 import { useShallow } from 'zustand/react/shallow'
 import { createPortal } from 'react-dom'
 import { usePresence } from '../state/usePresence'
-import { LuMonitorDown, LuShare, LuSmartphone, LuBell, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuSun, LuSunMoon, LuLayoutDashboard, LuX, LuChevronDown, LuSearch, LuCheck } from 'react-icons/lu'
+import { LuServer, LuMonitorDown, LuShare, LuSmartphone, LuBell, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuSun, LuSunMoon, LuLayoutDashboard, LuX, LuChevronDown, LuSearch, LuCheck } from 'react-icons/lu'
 import { useAuth } from '../state/auth'
 import { TIMEZONES, useClock, useNow, zonedParts, type ThemeMode } from '../state/clock'
 import { formatTokens, rangeBounds, useDashboard } from '../state/dashboard'
@@ -19,6 +19,7 @@ import { BossModeBadge } from './BossMode'
 import { PublicAccessBadge } from './PublicAccess'
 import { AutomationButton, useAutomationModal } from './AutomationModal'
 import { useLive } from '../state/live'
+import { openUrl } from '../state/url'
 import { useManager, useManagerPanel } from './ManagerPanel'
 import { canOfferInstall, installApp, useInstall } from '../pwa/install'
 import { useProfileModal } from './ProfileModal'
@@ -75,8 +76,9 @@ export function Navbar() {
       </div>
 
       <div className="nav-metrics">
-        <Meter icon={<LuCpu />} label="CPU" value={measured ? `${metrics.cpu.toFixed(0)}%` : '–'} pct={metrics.cpu} />
-        <Meter icon={<LuMemoryStick />} label="RAM" value={measured ? `${metrics.memUsedGb.toFixed(1)} / ${metrics.memTotalGb} GB` : '–'} pct={memPct} />
+        {/* the server's load: a click opens the Server window (what runs on it, the tools) */}
+        <Meter icon={<LuCpu />} label="CPU" value={measured ? `${metrics.cpu.toFixed(0)}%` : '–'} pct={metrics.cpu} onOpen={live ? () => openUrl({ server: 'overview' }) : undefined} />
+        <Meter icon={<LuMemoryStick />} label="RAM" value={measured ? `${metrics.memUsedGb.toFixed(1)} / ${metrics.memTotalGb} GB` : '–'} pct={memPct} onOpen={live ? () => openUrl({ server: 'overview' }) : undefined} />
         <div className="metric" data-tip={`${busy} busy · ${online} online · ${agents.length - online} offline`}>
           <span className="metric__icon">
             <LuBot />
@@ -114,8 +116,11 @@ export function Navbar() {
           {/* the office's timezone: a small arrow by the clock (the name in its tooltip); the list opens in a popup */}
           {!mobile && <TimezonePop value={timezone} onChange={setTimezone} />}
         </div>
-        <BossModeBadge compact={mobile} />
-        <PublicAccessBadge compact={mobile} />
+        {/* phones: the bell right by the clock (red and shaking when the plan runs out), not in the menu */}
+        {mobile && <AutomationButton />}
+        {/* phones: on the 3D stage instead (App.tsx .stage-badges), so the navbar keeps one line */}
+        {!mobile && <BossModeBadge />}
+        {!mobile && <PublicAccessBadge />}
         {mobile ? (
           <NavMenu>
             <div className="nav-menu__section">
@@ -132,9 +137,15 @@ export function Navbar() {
                 ))}
               </div>
             </div>
+            {/* also by the clock (the bell); here as well, like the Server */}
             {live && (
               <button className="nav-menu__item" onClick={() => useAutomationModal.getState().setOpen(true)}>
                 <LuBell /> Notifications & quota brake{paused ? ' (paused)' : ''}
+              </button>
+            )}
+            {live && (
+              <button className="nav-menu__item" onClick={() => openUrl({ server: 'overview' })}>
+                <LuServer /> Server: running, tools & logins
               </button>
             )}
             <InstallMenuItem />
@@ -231,13 +242,32 @@ function InstallMenuItem() {
   )
 }
 
-function Meter({ icon, label, value, pct }: { icon: ReactNode; label: string; value: string; pct: number }) {
+function Meter({ icon, label, value, pct, onOpen }: { icon: ReactNode; label: string; value: string; pct: number; onOpen?: () => void }) {
   const level = pct > 85 ? 'hot' : pct > 60 ? 'warm' : 'ok'
+  // clickable (the server's CPU / RAM): opens the Server window, the tip on the metric itself
+  const open = onOpen
+    ? {
+        role: 'button',
+        tabIndex: 0,
+        onClick: onOpen,
+        onKeyDown: (e: React.KeyboardEvent) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen()),
+        ...tip('Server: what runs on it, the tools and their logins'),
+      }
+    : {}
   return (
-    <div className="metric">
+    <div className={`metric${onOpen ? ' metric--link' : ''}`} {...open}>
       <span className="metric__icon">{icon}</span>
       <div>
-        <span className="metric__label">{label}</span>
+        {/* opens something (the Server window): the same little arrow as Plan usage */}
+        <span className="metric__label">
+          {label}
+          {onOpen && (
+            <>
+              {' '}
+              <LuChevronDown className="metric__chev" />
+            </>
+          )}
+        </span>
         <span className="metric__value">{value}</span>
         <span className={`meter meter--${level}`}>
           <span style={{ width: `${Math.min(100, pct)}%` }} />

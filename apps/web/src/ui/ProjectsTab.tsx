@@ -5,7 +5,7 @@ import { FolderReports } from './Reports'
 import { confirm } from './Confirm'
 import { api } from '../state/auth'
 import { FileBrowser } from './FileBrowser'
-import { openUrl, setUrl } from '../state/url'
+import { openUrl, setUrl, getParam } from '../state/url'
 import type { GitCommit, Workspace, WorkspaceFolder } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
@@ -370,6 +370,9 @@ export function ProjectFolderModal({
   // the panel on the right: the files, or one of the folder's other sections (the sidebar)
   // back from a chip after a reload: on the section it was left on
   const [section, setSection] = useState<Section>(() => {
+    // asked for one (?fsec=terminal: the Server window's "Log in" opens the terminal)
+    const asked = getParam('fsec')
+    if (SECTIONS.includes(asked as Section)) return asked as Section
     const was = useMinimized.getState().folders.find((m) => m.path === f.path)?.section
     return SECTIONS.includes(was as Section) ? (was as Section) : 'files'
   })

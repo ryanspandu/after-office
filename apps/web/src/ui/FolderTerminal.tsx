@@ -10,7 +10,8 @@ import { TerminalLock, useTerminalLock } from './TerminalLock'
 // attaching to the one running, needs the terminals unlocked with the authenticator code (ui/TerminalLock.tsx); it
 // keeps running (a dev server started in it stays up) until it's ended here.
 
-export function FolderTerminal({ root }: { root: string }) {
+/** `where`: what the folder is called before it's open ("the agents' home (~)"); unset: "this folder" */
+export function FolderTerminal({ root, where }: { root: string; where?: string }) {
   const [running, setRunning] = useState<boolean | null>(null)
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
@@ -62,7 +63,7 @@ export function FolderTerminal({ root }: { root: string }) {
     return (
       <div className="fterm__empty">
         <LuSquareTerminal className="fterm__icon" />
-        <div className="fterm__title">A terminal in this folder</div>
+        <div className="fterm__title">A terminal in {where ?? 'this folder'}</div>
         <p className="muted fterm__hint">
           A shell on the server, with the agents’ rights (not root). It keeps running when you close this, until you end it.
           {lock.open ? '' : ' Enter the code from your authenticator app to open it.'}

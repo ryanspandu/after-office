@@ -85,6 +85,16 @@ export async function listPreviews(c: Context): Promise<Preview[]> {
  */
 export async function stopPreview(port: number): Promise<{ stopped: boolean }> {
   if (!previewPorts().includes(port)) throw new AgentError('Not a preview port', 400)
+  return stopPort(port)
+}
+
+/**
+ * Stop whatever the agents' user runs on a TCP port (the Server window's Running tab: a dev server, a database an agent
+ * started). The same care as a preview: only processes of the agents' user, never the dashboard, never a system port.
+ */
+export async function stopPort(port: number): Promise<{ stopped: boolean }> {
+  const dashboard = Number(process.env.OFFICE_PORT ?? process.env.PORT ?? 8787)
+  if (!Number.isInteger(port) || port < 1024 || port > 65535 || port === dashboard) throw new AgentError('That port cannot be stopped from here', 400)
   if (!(await listening(port))) return { stopped: true }
   const pids = (await listenerPids(port)).filter((pid) => pid !== process.pid && pid !== process.ppid)
   if (!pids.length) throw new AgentError(`Nothing the agents run is listening on ${port}: it may belong to another user`, 409)

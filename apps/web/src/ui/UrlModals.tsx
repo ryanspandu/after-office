@@ -1,4 +1,5 @@
 import { StatusesModal } from './StatusesModal'
+import { ServerModal, SERVER_TABS } from './ServerModal'
 import { useEffect, useRef, useState } from 'react'
 import type { OfficeTask, TaskStatus } from '@after-office/shared'
 import { useDashboard } from '../state/dashboard'
@@ -50,6 +51,8 @@ export function UrlModals() {
       )}
       {p.archive && <ArchiveModal onClose={clear(['archive'])} />}
       {p.statuses && <StatusesModal onClose={clear(['statuses'])} />}
+      {/* the server: ?server=overview|running|tools */}
+      {p.server && <ServerModal tab={SERVER_TABS.includes(p.server as never) ? (p.server as (typeof SERVER_TABS)[number]) : 'overview'} onClose={clear(['server'])} />}
       {p.reports && (
         <ReportsModal
           onClose={clear(REPORTS_VIEW)}

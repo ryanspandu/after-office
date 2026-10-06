@@ -28,6 +28,8 @@ import { CronPanel, LeftSidebar, TaskPanel } from './ui/LeftSidebar'
 import { ManagerPanel, useManager, useManagerPanel } from './ui/ManagerPanel'
 import { Navbar } from './ui/Navbar'
 import { RenderSwitch } from './ui/RenderSwitch'
+import { BossModeBadge } from './ui/BossMode'
+import { PublicAccessBadge } from './ui/PublicAccess'
 import { AppReload } from './ui/AppReload'
 import { MobileDock } from './ui/MobileDock'
 
@@ -63,6 +65,13 @@ export function App() {
       <LabelLayer />
       <RenderSwitch />
       <AppReload />
+      {/* phones: Boss mode and Public access float at the stage's top left (in the navbar they'd push it onto more lines) */}
+      {mobile && (
+        <div className="stage-badges">
+          <BossModeBadge compact />
+          <PublicAccessBadge compact />
+        </div>
+      )}
     </main>
   )
 

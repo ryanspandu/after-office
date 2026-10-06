@@ -5,6 +5,28 @@ import type { OfficeAgent } from '../../state/store'
 import { confirm } from '../Confirm'
 import { Select } from '../Select'
 import { tip } from '../Tooltip'
+import { setUrl, useParam } from '../../state/url'
+
+/** The command-line tool a token signs in (the Server window → Tools lists them too). */
+const SIGNS_IN: Record<string, string> = {
+  EXPO_TOKEN: 'eas',
+  RAILWAY_TOKEN: 'railway',
+  RAILWAY_API_TOKEN: 'railway',
+  SUPABASE_ACCESS_TOKEN: 'supabase',
+  VERCEL_TOKEN: 'vercel',
+  GH_TOKEN: 'gh',
+  GITHUB_TOKEN: 'gh',
+  GITLAB_TOKEN: 'glab',
+  CLOUDFLARE_API_TOKEN: 'wrangler',
+  NETLIFY_AUTH_TOKEN: 'netlify',
+  NPM_TOKEN: 'npm',
+  FLY_API_TOKEN: 'fly',
+  RENDER_API_KEY: 'render',
+  SENTRY_AUTH_TOKEN: 'sentry-cli',
+  FIREBASE_TOKEN: 'firebase',
+  SHOPIFY_CLI_PARTNERS_TOKEN: 'shopify',
+  STRIPE_API_KEY: 'stripe',
+}
 
 // Overview → Secrets: tokens for the services this agent's projects use (Expo, Railway, Supabase…), given to its
 // sessions as environment variables that those tools read on their own. Pick the service, paste the token, done.
@@ -45,6 +67,14 @@ export function SecretsSection({ agent }: { agent: OfficeAgent }) {
   const [error, setError] = useState('')
   const load = useCallback(() => void liveApi.secrets(agent.id).then(setList), [agent.id])
   useEffect(load, [load])
+  // sent here from the Server window's "Token" (?secret=EXPO_TOKEN): that one, ready to paste
+  const asked = useParam('secret')
+  useEffect(() => {
+    if (!asked) return
+    start(asked)
+    setUrl({ secret: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asked])
 
   const preset = PRESETS.find((p) => p.id === adding?.preset)
   const start = (name = '') => {
@@ -87,6 +117,7 @@ export function SecretsSection({ agent }: { agent: OfficeAgent }) {
             <li key={s.name} className="secrets__row">
               <code className="secrets__name">{s.name}</code>
               <span className="muted secrets__value">•••• {s.last4}</span>
+              {SIGNS_IN[s.name] && <span className="muted secrets__tools">signs in {SIGNS_IN[s.name]}</span>}
               <span className="grow" />
               <button className="icon-btn small ghost" onClick={() => start(s.name)} {...tip('Replace the value')} aria-label={`Replace ${s.name}`}>
                 <LuPencil />
