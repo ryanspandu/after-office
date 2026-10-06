@@ -11,7 +11,8 @@ import { EFFORT_OPTIONS } from './effort'
 import { liveApi, useLive, useWorkReady } from '../state/live'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
-import { useOffice } from '../state/store'
+import { useOffice, type OfficeAgent } from '../state/store'
+import { sessionNames } from './agent/SessionTabs'
 import { Field, Modal } from './Modal'
 import { DockSheet } from './DockSheet'
 import { Select } from './Select'
@@ -67,8 +68,11 @@ export function toolLabel(tool: string) {
   return `${server} · ${m[2]}`
 }
 
-/** "Marcus · session 2" for a prompt asked in one of its side sessions. */
-const withSession = (name: string, key?: string) => (key ? `${name} · session ${key.slice(1)}` : name)
+/** "Marcus · orenjus" for a prompt asked in one of its side sessions: the name its tab shows. */
+const withSession = (agent: OfficeAgent | undefined, key?: string) => {
+  const name = agent?.name ?? 'Unknown'
+  return key ? `${name} · ${sessionNames(agent?.sessions ?? []).get(key) ?? `session ${key.slice(1)}`}` : name
+}
 
 export function fromLive(f: LiveFollowUp): Item {
   const input = f.input as Record<string, unknown>
@@ -263,7 +267,7 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
     <FollowUpCard
       key={item.id}
       item={item}
-      agentName={withSession(agentOf(item.agentId)?.name ?? 'Unknown', item.sessionKey)}
+      agentName={withSession(agentOf(item.agentId), item.sessionKey)}
       agentColor={agentOf(item.agentId)?.look.shirt ?? '#aaa'}
       age={ago(now - item.createdAt)}
       onResolve={(d) => resolve(item, d)}
@@ -320,7 +324,7 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
       {detail && (
         <FollowUpDetail
           item={detail}
-          agentName={withSession(agentOf(detail.agentId)?.name ?? 'Unknown', detail.sessionKey)}
+          agentName={withSession(agentOf(detail.agentId), detail.sessionKey)}
           agentColor={agentOf(detail.agentId)?.look.shirt ?? '#aaa'}
           age={ago(now - detail.createdAt)}
           onResolve={(d) => resolve(detail, d)}

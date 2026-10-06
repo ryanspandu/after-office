@@ -6,10 +6,12 @@ import { FileBrowser } from './FileBrowser'
 import type { AgentEffort, AgentSkill, LiveMode, AccountSkill } from '@after-office/shared'
 import { EFFORT_OPTIONS } from './effort'
 import { api } from '../state/auth'
+import { useDashboard } from '../state/dashboard'
 import { liveApi } from '../state/live'
 import { useOffice, type OfficeAgent, avatarStyle, makeLook } from '../state/store'
 import { ChatTab, MODEL_OPTIONS, modelAlias } from './agent/ChatTab'
 import { TerminalTab } from './agent/TerminalTab'
+import { sessionNames } from './agent/SessionTabs'
 import { TerminalLock } from './TerminalLock'
 import { MODE_LABEL } from './AgentsPanel'
 import { FolderPicker } from './FolderPicker'
@@ -64,6 +66,10 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
     setTimeout(close, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220)
   }, [close])
   const live = useOffice((s) => s.source === 'live')
+  // what it works on now: its running task (Claude Code's own session title is made once, at the session's start)
+  const doing = useDashboard((s) =>
+    s.tasks.filter((t) => t.agentId === agent.id && t.status === 'in_progress').sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))[0]?.title,
+  )
   // the side session open in the Chat tab: the Terminal tab shows that one too
   const sessionParam = useUrl((s) => s.params.session)
   const termSession = sessionParam && agent.sessions?.some((s) => s.key === sessionParam && s.open) ? sessionParam : undefined
@@ -175,7 +181,7 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
             </h3>
             <p className="muted">
               {agent.role || agent.profile.role || 'No role'} · <span className="mono">{agent.tmuxSession}</span>
-              {agent.title && <> · {agent.title}</>}
+              {termSession ? <> · {sessionNames(agent.sessions ?? []).get(termSession)}</> : doing && <> · {doing}</>}
             </p>
           </div>
           {live && <MaximizeButton full={max.full} onToggle={max.toggle} />}

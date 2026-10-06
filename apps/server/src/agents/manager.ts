@@ -873,7 +873,12 @@ export async function interrupt(id: string, key = '') {
     await Bun.sleep(400)
     if (/interrupted/i.test(await tmux.capture(session).catch(() => ''))) break
   }
-  const idle = (rt: Runtime) => (rt.status === 'working' ? { ...rt, status: 'idle' as const, tool: undefined, lastEventAt: Date.now() } : rt)
+  settleAfterEsc(id, key)
+}
+
+/** Esc (Stop, "keep planning") fires no Stop hook: the turn and any question/plan it waited on are over, so idle. */
+function settleAfterEsc(id: string, key = '') {
+  const idle = (rt: Runtime) => (rt.status === 'working' || rt.status === 'waiting' ? { ...rt, status: 'idle' as const, waitingFor: undefined, tool: undefined, lastEventAt: Date.now() } : rt)
   if (key) updateSideRuntime(id, key, idle)
   else updateRuntime(id, idle)
 }
@@ -1030,6 +1035,7 @@ export async function answerPlan(id: string, optionLabel: string, feedback?: str
   if (optionLabel === KEEP_PLANNING) {
     // the dialog still up: Esc cancels it (Claude Code stays in plan mode); already gone: nothing to do
     if (options.length) await tmux.keys(session, 'Escape')
+    settleAfterEsc(id, key)
     return
   }
   const option = options.find((o) => o.label === optionLabel)
