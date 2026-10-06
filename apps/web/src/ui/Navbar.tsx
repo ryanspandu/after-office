@@ -5,7 +5,7 @@ import { OwnerAvatar } from './EditProfile'
 import { useShallow } from 'zustand/react/shallow'
 import { createPortal } from 'react-dom'
 import { usePresence } from '../state/usePresence'
-import { LuServer, LuMonitorDown, LuShare, LuSmartphone, LuBell, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuSun, LuSunMoon, LuLayoutDashboard, LuX, LuChevronDown, LuSearch, LuCheck } from 'react-icons/lu'
+import { LuServer, LuMonitorDown, LuShare, LuSmartphone, LuBell, LuLockKeyhole, LuBot, LuCoins, LuCpu, LuLogOut, LuMaximize2, LuCrown, LuMemoryStick, LuMenu, LuMinimize2, LuMoon, LuSun, LuSunMoon, LuLayoutDashboard, LuX, LuChevronDown, LuSearch, LuCheck } from 'react-icons/lu'
 import { useAuth } from '../state/auth'
 import { TIMEZONES, useClock, useNow, zonedParts, type ThemeMode } from '../state/clock'
 import { formatTokens, rangeBounds, useDashboard } from '../state/dashboard'
@@ -18,6 +18,8 @@ import { UsageMeter } from './UsagePopover'
 import { BossModeBadge } from './BossMode'
 import { PublicAccessBadge } from './PublicAccess'
 import { AutomationButton, useAutomationModal } from './AutomationModal'
+import { UnlockButton, useUnlocked } from './UnlockButton'
+import { lockNow } from './TerminalLock'
 import { useLive } from '../state/live'
 import { openUrl } from '../state/url'
 import { useManager, useManagerPanel } from './ManagerPanel'
@@ -56,6 +58,8 @@ export function Navbar() {
   const mobile = useMediaQuery(MOBILE)
   const live = useOffice((s) => s.source === 'live')
   const paused = useLive((s) => s.automation.quotaPaused)
+  // the 2FA unlock of the terminals and the Server window: a padlock by the bell while it's on
+  const unlocked = useUnlocked()
   const tzSelect = (
     <Select
       ariaLabel="Timezone"
@@ -116,7 +120,8 @@ export function Navbar() {
           {/* the office's timezone: a small arrow by the clock (the name in its tooltip); the list opens in a popup */}
           {!mobile && <TimezonePop value={timezone} onChange={setTimezone} />}
         </div>
-        {/* phones: the bell right by the clock (red and shaking when the plan runs out), not in the menu */}
+        {/* phones: the padlock (2FA unlocked) and the bell right by the clock */}
+        {mobile && <UnlockButton />}
         {mobile && <AutomationButton />}
         {/* phones: on the 3D stage instead (App.tsx .stage-badges), so the navbar keeps one line */}
         {!mobile && <BossModeBadge />}
@@ -137,6 +142,11 @@ export function Navbar() {
                 ))}
               </div>
             </div>
+            {unlocked > 0 && (
+              <button className="nav-menu__item" onClick={() => void lockNow()}>
+                <LuLockKeyhole /> Lock terminals & Server (2FA)
+              </button>
+            )}
             {/* also by the clock (the bell); here as well, like the Server */}
             {live && (
               <button className="nav-menu__item" onClick={() => useAutomationModal.getState().setOpen(true)}>
@@ -164,6 +174,8 @@ export function Navbar() {
         ) : (
           <>
             <InstallButton />
+            {/* the 2FA unlock (terminals, Server): a padlock while it's on, a click locks again */}
+            <UnlockButton />
             <AutomationButton />
             <ManagerButton />
             <ManagerVoiceButton />

@@ -28,6 +28,12 @@ export function unlockTerminals(c: Context) {
   return until
 }
 
+/** Lock them again now (the navbar's padlock): the code is asked for next time. Terminals still running keep running. */
+export function lockTerminals(c: Context) {
+  const key = sessionOf(c)
+  if (key) unlocked.delete(key)
+}
+
 /** A terminal connection: only for a session that unlocked them; opening one keeps them open a while longer. */
 export const requireUnlockedTerminal: MiddlewareHandler = async (c, next) => {
   if (!terminalsOpenUntil(c)) return c.json({ error: 'Enter the code from your authenticator app to open a terminal', locked: true }, 403)

@@ -22,7 +22,7 @@ import { endTerminal, runningReport } from '../system/running'
 import { taskFolder, addComment, deliver, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, startReportJob, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
-import { requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
+import { lockTerminals, requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
 import { endShell, openShell, shellRunning, shellTarget } from '../work/shells'
 import { emptyTrash, listTrash, purgeTrash, restoreTrash, trashEntries } from '../work/trash'
 
@@ -419,6 +419,11 @@ workRoutes.delete('/trash', (c) => c.json(emptyTrash(c.req.query('under') || und
 // terminals (an agent's, a folder's shell) open with the authenticator code typed just now, for this browser session
 // and a while after (agents/termLock.ts)
 workRoutes.get('/terminal', (c) => c.json({ until: terminalsOpenUntil(c) }))
+// locked again on purpose (the navbar's padlock)
+workRoutes.post('/terminal/lock', (c) => {
+  lockTerminals(c)
+  return c.json({ until: 0 })
+})
 workRoutes.post('/terminal/unlock', async (c) => {
   const body = await c.req.json<{ code?: unknown }>().catch(() => null)
   const refused = requireFreshCode(c, body?.code)

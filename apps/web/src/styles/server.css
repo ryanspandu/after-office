@@ -66,3 +66,5 @@
 /* the Terminal tab: the shell gets the window's height */
 .server-terminal { display: flex; flex-direction: column; min-height: 460px; height: min(60vh, 640px); }
 .server-terminal > * { flex: 1; min-height: 0; }
+/* the navbar's padlock: the terminals / Server unlocked with 2FA on this device */
+.icon-btn.unlock-btn { color: var(--working); }
