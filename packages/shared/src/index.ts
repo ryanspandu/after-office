@@ -460,6 +460,9 @@ export interface OfficeTask {
   autoStartedAt?: number
   /** Server-owned: the manager agent that created this task (its report is forwarded to the manager). */
   delegatedBy?: string
+  /** the manager's side session it was delegated from (s2, s3…): what comes back about it (its report, its check,
+   *  a rejection) goes to that session while it's open, else to the main one */
+  managerSession?: string
   /** Live: task ids this one waits for. It starts on its own once all of them are finished (review or done). */
   blockedBy?: string[]
   /** tag ids (the owner's labels, see Tag) */

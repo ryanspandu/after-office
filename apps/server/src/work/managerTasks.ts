@@ -5,7 +5,7 @@ import { cleanFolder } from './folders'
 import { AgentError } from '../agents/manager'
 import { addPending, getPending, publish, resolvePending, runtimeOf } from '../agents/registry'
 import { bossMode, countBoss, officeSettings } from './settings'
-import { addComment, deliver, isReadingAgentOutput, isReportedNow, makesCycle, markTask, publishWork, quotaPause, startTask, tickTasks, waitingOn } from './work'
+import { addComment, deliver, deliverToManager, isReadingAgentOutput, isReportedNow, makesCycle, markTask, publishWork, quotaPause, startTask, tickTasks, waitingOn } from './work'
 import { managerOrigin } from './origin'
 import { requestCheckApproval } from './gate'
 import { notifyUser } from './reports'
@@ -30,6 +30,8 @@ export interface DelegateInput {
   tags?: string[]
   /** if the agent is busy, run it in a parallel session (when the owner allows it) */
   parallel?: boolean
+  /** the manager's side session that asked (s2…; '' the main one): what comes back about the task goes there */
+  managerSession?: string
   /** the bigger piece of work it's a step of (a name; the same name is the same job) */
   job?: string
 }
@@ -56,6 +58,7 @@ export async function delegateTask(managerId: string, input: DelegateInput) {
     mode: input.mode,
     delegatedBy: managerId,
     origin: managerOrigin(managerId),
+    ...(input.managerSession ? { managerSession: input.managerSession } : {}),
     ...(input.tags?.length ? { tags: input.tags } : {}),
     ...(input.parallel ? { parallel: true } : {}),
   }
@@ -97,7 +100,7 @@ export async function delegateTask(managerId: string, input: DelegateInput) {
  * The manager hands the owner a task of their own: something only they can do (an approval, a login, a file to
  * upload, a decision). It's tracked like the rest; tasks can wait for it (`after`), and it shows under "For you".
  */
-export function ownerTask(managerId: string, input: { title: string; description?: string; deadline?: number; priority?: OfficeTask['priority']; folder?: string | null; tags?: string[]; job?: string; after?: string[] }) {
+export function ownerTask(managerId: string, input: { title: string; description?: string; deadline?: number; priority?: OfficeTask['priority']; folder?: string | null; tags?: string[]; job?: string; after?: string[]; managerSession?: string }) {
   const after = [...new Set(input.after ?? [])]
   for (const id of after) if (!tasksRepo.get(id)) throw new AgentError(`No task ${id} to wait for; see list_tasks`, 404)
   const task: OfficeTask = {
@@ -112,6 +115,7 @@ export function ownerTask(managerId: string, input: { title: string; description
     status: 'todo',
     delegatedBy: managerId,
     origin: managerOrigin(managerId),
+    ...(input.managerSession ? { managerSession: input.managerSession } : {}),
     createdAt: Date.now(),
     ...(input.tags?.length ? { tags: input.tags } : {}),
     ...(after.length ? { blockedBy: after } : {}),
@@ -190,7 +194,7 @@ export async function decideDelegation(f: LiveFollowUp, d: FollowUpDecision) {
   if (managerId && agentsRepo.get(managerId)) {
     const who = task.agentId ? (agentsRepo.get(task.agentId)?.name ?? 'the agent') : 'nobody'
     const note = d.note?.trim()
-    await deliver(managerId, `[After Office] The owner rejected your task "${task.title}" for ${who}${note ? `. Their note: ${note}` : '.'} It was not started and has been removed.`)
+    await deliverToManager(managerId, `[After Office] The owner rejected your task "${task.title}" for ${who}${note ? `. Their note: ${note}` : '.'} It was not started and has been removed.`, task.managerSession)
   }
 }
 

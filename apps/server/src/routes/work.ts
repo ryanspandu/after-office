@@ -19,7 +19,7 @@ import { createNote, deleteNote, reorderNotes, updateNote } from '../work/notes'
 import { cleanFolder } from '../work/folders'
 import { toolsReport } from '../system/tools'
 import { endTerminal, runningReport } from '../system/running'
-import { taskFolder, addComment, deliver, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, startReportJob, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
+import { taskFolder, addComment, deliver, deliverToManager, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, startReportJob, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
 import { lockTerminals, requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
@@ -144,7 +144,7 @@ workRoutes.put('/tasks/:id', async (c) => {
   if (next.forOwner && prev && prev.status !== 'done' && next.status === 'done') {
     addComment({ taskId: id, author: 'user', text: 'Done.' })
     const manager = next.delegatedBy ? agentsRepo.get(next.delegatedBy) : null
-    if (manager) void deliver(manager.id, `[After Office] The owner finished their task "${next.title}" (task id ${id}).`).catch(() => {})
+    if (manager) void deliverToManager(manager.id, `[After Office] The owner finished their task "${next.title}" (task id ${id}).`, next.managerSession).catch(() => {})
   }
   publishWork('tasks')
   void tickTasks() // "start as soon as the agent is free" shouldn't wait for the next tick

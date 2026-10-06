@@ -3,7 +3,7 @@ import { agentsRepo, tasksRepo } from '../db'
 import { addPending, resolvePending } from '../agents/registry'
 import { runCheck } from './checks'
 import { notify } from '../notify'
-import { addComment, deliver, forwardToManager, managerFollowsUp, markTask, publishWork, taskFolder } from './work'
+import { addComment, deliver, deliverToManager, forwardToManager, managerFollowsUp, markTask, publishWork, taskFolder } from './work'
 
 // The quality gate: a task's check command runs when its agent reports; a failed check goes back for a fix round (or
 // to review). A check the manager proposes waits for the owner's approval.
@@ -87,6 +87,7 @@ export async function decideCheck(f: LiveFollowUp, d: FollowUpDecision) {
   const note = (d.type === 'allow' || d.type === 'deny' ? d.note : '')?.trim()
   if (manager && (!approved || note)) {
     const what = approved ? 'approved' : 'rejected'
-    await deliver(manager.id, `[After Office] The owner ${what} the quality check \`${cmd}\` for "${t.title}"${note ? `. Their note: ${note}` : '.'}`)
+    // to the session the task came from, while it's open
+    await deliverToManager(manager.id, `[After Office] The owner ${what} the quality check \`${cmd}\` for "${t.title}"${note ? `. Their note: ${note}` : '.'}`, t.managerSession)
   }
 }

@@ -6,7 +6,7 @@ import { DEFAULT_MODEL, divisionOf, MODEL_CHOICES, RULE_PACKS, type OfficeTask, 
 import { agentsRepo, commentsRepo, connectorsOf, cronsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
 import { knownConnectors, listConnectors } from './agents/connectors'
 import { diffSince } from './work/git'
-import { AgentError, interrupt, restartAgent } from './agents/manager'
+import { AgentError, interrupt, restartAgent, sessionKeyOf } from './agents/manager'
 import { restartWhenIdle } from './agents/reconciler'
 import { requestHire } from './work/hires'
 import { bossMode, countBoss } from './work/settings'
@@ -100,7 +100,7 @@ function resolveAgent(ref: string, managerId: string) {
   return row
 }
 
-function buildServer(managerId: string) {
+function buildServer(managerId: string, session = '') {
   const me = agentsRepo.get(managerId)
   const server = new McpServer(
     { name: 'after-office', version: '1.0.0' },
@@ -208,6 +208,7 @@ function buildServer(managerId: string) {
           description,
           priority,
           mode,
+          managerSession: session,
           deadline: deadlineHours ? Date.now() + deadlineHours * 3_600_000 : undefined,
         })
         const delivery =
@@ -247,7 +248,7 @@ function buildServer(managerId: string) {
         noteManagerMessage(target.id, managerId)
         const result = await deliver(target.id, `[From the manager] ${body}`)
         countBoss('messages')
-        if (target.id !== managerId) expectReply(target.id, managerId)
+        if (target.id !== managerId) expectReply(target.id, managerId, session)
         return text(result === 'sent' ? `Sent to ${target.name}.` : `${target.name} is busy; queued.`)
       } catch (e) {
         return fail(e)
@@ -799,7 +800,7 @@ function buildServer(managerId: string) {
     },
     async ({ title, description, priority, deadlineHours, folder, after, tags, job }) => {
       try {
-        const t = ownerTask(managerId, { title, description, priority, folder, after, job, tags: tagIdsByName(tags), deadline: deadlineHours ? Date.now() + deadlineHours * 3_600_000 : undefined })
+        const t = ownerTask(managerId, { title, description, priority, folder, after, job, tags: tagIdsByName(tags), deadline: deadlineHours ? Date.now() + deadlineHours * 3_600_000 : undefined, managerSession: session })
         return json({ taskId: t.id, for: 'the owner', status: t.status, ...(t.job ? { job: t.job.title } : {}) })
       } catch (e) {
         return fail(e)
@@ -952,7 +953,9 @@ export async function handleMcp(c: Context) {
   const id = c.req.header('x-ao-agent')
   const row = id ? agentsRepo.get(id) : null
   if (!row) return c.json({ error: 'Unknown agent' }, 401)
-  const server = row.kind === 'manager' ? buildServer(row.id) : buildWorkerServer(row.id)
+  // which of its sessions is calling (its main one, or a side one the owner opened): work started from a side session
+  // reports back there
+  const server = row.kind === 'manager' ? buildServer(row.id, sessionKeyOf(c.req.header('x-ao-session'))) : buildWorkerServer(row.id)
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
   await server.connect(transport)
   try {

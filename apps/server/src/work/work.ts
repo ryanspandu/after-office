@@ -1,7 +1,7 @@
 import { closeSync, existsSync, fstatSync, openSync, readSync, realpathSync } from 'node:fs'
 import { sep } from 'node:path'
 import type { CronJob, LiveMode, OfficeTask, TaskComment, TaskStatus, WorkReport, WorkState } from '@after-office/shared'
-import { agentsRepo, commentsRepo, cronsRepo, queueRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
+import { agentsRepo, commentsRepo, cronsRepo, queueRepo, reportsRepo, settingsRepo, sideSessionsRepo, tasksRepo, triggersRepo } from '../db'
 import { AgentError, grantFolder, sendPrompt, setMode } from '../agents/manager'
 import { currentRateLimits, publish, runtimeOf, setWorkProvider, updateRuntime } from '../agents/registry'
 import { agentFiles } from '../agents/files'
@@ -105,9 +105,28 @@ interface Active extends WorkRef {
 }
 export const active = new Map<string, Active>()
 
-/** Agents the manager messaged (message_agent): their next answer goes back to the manager. */
-const replyTo = new Map<string, string>()
-export const expectReply = (agentId: string, managerId: string) => void replyTo.set(agentId, managerId)
+/** Agents the manager messaged (message_agent): their next answer goes back to the manager (to the session it asked from). */
+const replyTo = new Map<string, { managerId: string; session: string }>()
+export const expectReply = (agentId: string, managerId: string, session = '') => void replyTo.set(agentId, { managerId, session })
+
+/**
+ * Something for the manager about work it started: to the side session it started it from (the owner started that work
+ * there) while that session is open, else, or if that fails, as usual (the main session, queued while it's busy).
+ */
+export async function deliverToManager(managerId: string, text: string, session?: string | null) {
+  if (session) {
+    const side = sideSessionsRepo.get(managerId, session)
+    if (side && !side.closed_at) {
+      try {
+        await sendPrompt(managerId, text, session)
+        return 'sent' as const
+      } catch (e) {
+        console.warn(`[manager] ${session} could not take it, the main session gets it:`, e instanceof Error ? e.message : e)
+      }
+    }
+  }
+  return deliver(managerId, text)
+}
 
 /**
  * The owner's chat message with a folder or tags (to an agent other than the manager): its answer is kept as a report
@@ -253,7 +272,8 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
     return
   }
   active.delete(agentId)
-  const manager = replyTo.get(agentId)
+  const asked = replyTo.get(agentId)
+  const manager = asked?.managerId
   replyTo.delete(agentId)
   // the answer to the owner's chat message with a folder / tags: kept in Reports
   const chat = !a && fileChatTurn(agentId, '', finalMessage, failed)
@@ -271,7 +291,7 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
     if (ref) fileReport(agentId, ref, finalMessage, !failed)
   }
   // an answer to the manager's message (not a task's report, which reaches it anyway)
-  if (manager && !(ref?.taskId && tasksRepo.get(ref.taskId)?.delegatedBy === manager)) forwardReply(agentId, manager, finalMessage)
+  if (manager && !(ref?.taskId && tasksRepo.get(ref.taskId)?.delegatedBy === manager)) forwardReply(agentId, manager, finalMessage, asked?.session)
   void (async () => {
     // a finished task may be what others were waiting for
     if (t) await tickTasks().catch((e) => console.error('[task]', e))
@@ -433,7 +453,7 @@ export function forwardToManager(report: WorkReport, checkNote?: string) {
     'REPORT>>>',
     ...(checkNote ? ['', checkNote] : []),
   ].join('\n')
-  void deliver(managerId, text).catch((e) => console.error('[manager] could not forward a report:', e.message))
+  void deliverToManager(managerId, text, task?.managerSession).catch((e) => console.error('[manager] could not forward a report:', e.message))
 }
 
 /** Background subagents still running as of the agent's latest turn end, read from the end of its transcript. */
@@ -483,7 +503,7 @@ function lastTurnPending(file: string, since: number): number | null {
 }
 
 /** The agent's answer to a message from the manager, fenced like a report. */
-function forwardReply(agentId: string, managerId: string, answer?: string) {
+function forwardReply(agentId: string, managerId: string, answer?: string, session = '') {
   if (!answer?.trim() || !agentsRepo.get(managerId)) return
   const who = agentsRepo.get(agentId)?.name ?? 'an agent'
   const text = [
@@ -493,7 +513,7 @@ function forwardReply(agentId: string, managerId: string, answer?: string) {
     answer.trim().slice(0, 20_000).replaceAll('REPORT>>>', 'REPORT >>>'),
     'REPORT>>>',
   ].join('\n')
-  void deliver(managerId, text).catch((e) => console.error('[manager] could not forward a reply:', e.message))
+  void deliverToManager(managerId, text, session).catch((e) => console.error('[manager] could not forward a reply:', e.message))
 }
 
 // ── where a task happens ──
