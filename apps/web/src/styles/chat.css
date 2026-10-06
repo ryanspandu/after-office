@@ -366,3 +366,22 @@ span.stab { padding: 0 4px 0 10px; }
 /* Compact: the icon with its word (on phones the bar is a panel with room: there it's a full-height row button) */
 .chat__compact { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; font-size: 12px; }
 .chat__bar--sheet .chat__compact { align-self: flex-start; height: 34px; padding: 0 12px; font-size: 13px; gap: 6px; }
+
+/* ── phones: the message box like Claude's app: one card, the text across its whole width, the buttons on a row
+   under it (+ on the left; mic and send on the right). The keyboard then leaves the text all the room there is. ── */
+.chat--mobile .chat__composer {
+  display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 2px 6px;
+  padding: 6px 8px 8px; border: 1px solid var(--line); border-radius: 22px; background: var(--card-2);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.chat--mobile .chat__composer:focus-within { border-color: var(--hl); box-shadow: 0 0 0 3px var(--hl-soft); }
+.chat--mobile .chat__composer textarea {
+  grid-column: 1 / -1; grid-row: 1; width: 100%; min-height: 40px; max-height: 40vh;
+  padding: 8px 6px 4px; border: none; border-radius: 0; background: transparent; font-size: 16px; box-shadow: none;
+}
+.chat--mobile .chat__composer textarea:focus { outline: none; border: none; }
+.chat--mobile .chat__composer .composer-menu { grid-column: 1; grid-row: 2; }
+.chat--mobile .chat__composer .mic-btn { grid-column: 3; grid-row: 2; }
+.chat--mobile .chat__composer > .icon-btn:last-child { grid-column: 4; grid-row: 2; border-radius: 999px; }
+.chat--mobile .chat__composer .icon-btn { width: 38px; height: 38px; }
+.chat--drop.chat--mobile .chat__composer { border-color: var(--hl); }
