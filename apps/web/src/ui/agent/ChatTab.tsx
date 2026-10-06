@@ -699,6 +699,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
           draftKey={`${agent.id}:${session}`}
           placeholder={offline ? (session ? 'The session is starting…' : 'The agent is offline') : compacting ? `${agent.name} is compacting the conversation… you can write, and send when it's done` : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
           disabled={offline}
+          enterSends={!mobile}
           onSubmit={() => void send()}
           onFiles={attach}
           onHasText={setHasText}

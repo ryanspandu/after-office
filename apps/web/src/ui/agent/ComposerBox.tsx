@@ -37,13 +37,14 @@ export const ComposerBox = forwardRef<ComposerHandle, {
   draftKey: string
   placeholder: string
   disabled?: boolean
-  /** Enter (without Shift) */
+  /** Enter (without Shift) sends: not on phones, where Enter is a new line and the send button sends */
+  enterSends?: boolean
   onSubmit: () => void
   /** pictures or files pasted into the box */
   onFiles: (files: File[]) => void
   /** whether there's anything typed: the one thing the chat needs to know on each keystroke (it only renders when it flips) */
   onHasText: (has: boolean) => void
-}>(function ComposerBox({ draftKey, placeholder, disabled, onSubmit, onFiles, onHasText }, ref) {
+}>(function ComposerBox({ draftKey, placeholder, disabled, enterSends = true, onSubmit, onFiles, onHasText }, ref) {
   const [value, setValue] = useState(() => readDraft(draftKey))
   const el = useRef<HTMLTextAreaElement>(null)
   const latest = useRef(value)
@@ -127,7 +128,9 @@ export const ComposerBox = forwardRef<ComposerHandle, {
       value={value}
       onChange={(e) => change(e.target.value)}
       onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        // a touch keyboard's Enter is a new line (a tablet with a touch screen too): only a real keyboard's sends
+        const touch = typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches
+        if (enterSends && !touch && e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
           e.preventDefault()
           onSubmit()
         }
