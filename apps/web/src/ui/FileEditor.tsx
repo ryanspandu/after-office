@@ -126,6 +126,21 @@ export function FileEditor({ root, path, onClose, onSaved, edit = false }: { roo
             </button>
           )}
           {file?.editable && editing && (
+            // back to reading, what was typed since the last save thrown away
+            <button
+              className="small"
+              onClick={() => {
+                setText(file.text)
+                setPreview(false)
+                setEditing(false)
+              }}
+              disabled={saving}
+              data-tip={dirty ? 'Throw away your changes and stop editing' : 'Stop editing'}
+            >
+              Cancel
+            </button>
+          )}
+          {file?.editable && editing && (
             <button className="small primary" onClick={() => void save()} disabled={!dirty || saving} data-tip="Save (⌘S / Ctrl+S)">
               {savedAt && !dirty ? <LuCheck /> : <LuSave />} Save
             </button>
