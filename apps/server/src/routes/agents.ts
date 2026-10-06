@@ -8,7 +8,7 @@ import { agentsRepo, sideSessionsRepo, usageRepo, tasksRepo } from '../db'
 import { existsSync } from 'node:fs'
 import { active, cleanChatContext, contextBlock, expectChatReport, withContext, stopActiveTask } from '../work/work'
 import { decide } from '../agents/ingest'
-import { AgentError, changeFolder, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeFolder, randomStyle, grantFolder, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
+import { AgentError, changeFolder, compactSession, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeFolder, randomStyle, grantFolder, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
 import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime, runtimeOf, sideRuntimeOf } from '../agents/registry'
 import type { Runtime } from '../agents/state'
 import { readChat } from '../agents/transcripts'
@@ -107,11 +107,9 @@ agentRoutes.post('/agents/:id/compact', async (c) => {
   const id = c.req.param('id')
   const key = sessionKeyOf(c.req.query('session'))
   const body = await c.req.json<{ focus?: unknown }>().catch(() => ({}) as { focus?: unknown })
-  const rt = key ? sideRuntimeOf(id, key) : runtimeOf(id)
-  if (rt.status === 'working' || rt.status === 'waiting') throw new AgentError('It is busy: compact when it is idle (or stop it first)', 409)
   // what to keep in mind while summarizing (optional): one short line
   const focus = typeof body.focus === 'string' ? body.focus.replace(/\s+/g, ' ').trim().slice(0, 300) : ''
-  await sendPrompt(id, focus ? `/compact ${focus}` : '/compact', key)
+  await compactSession(id, key, focus)
   return c.json({ ok: true })
 })
 

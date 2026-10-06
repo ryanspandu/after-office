@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, useMemo } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode, useMemo } from 'react'
 import { useClock } from '../../state/clock'
 import { chatTime, dateTime, localizeResets } from '../when'
 import { MicButton, ListeningBar, SpeakingChip } from '../Voice'
@@ -6,6 +6,7 @@ import { useDictation } from '../../state/dictation'
 import { primeSpeech, talkedByVoice } from '../../state/speech'
 import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuFoldVertical, LuSquare, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
 import { openUrl } from '../../state/url'
+import { ComposerBox, type ComposerHandle } from './ComposerBox'
 import { confirm } from '../Confirm'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import type { ChatItem, LiveMode, WorkReport } from '@after-office/shared'
@@ -51,7 +52,7 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
   const pick = (key: string) => setUrl({ session: key || null })
   // the chat shows the session's own state (status, mode, cost, context…), the agent's name and folder
   const view: OfficeAgent = side
-    ? { ...agent, status: side.status, waitingFor: side.waitingFor, tool: side.tool, permissionMode: side.permissionMode, costUsd: side.costUsd, contextPct: side.contextPct, contextTokens: undefined, contextSize: undefined, lastMessage: side.lastMessage, unread: side.unread, error: undefined }
+    ? { ...agent, status: side.status, waitingFor: side.waitingFor, tool: side.tool, permissionMode: side.permissionMode, costUsd: side.costUsd, contextPct: side.contextPct, contextTokens: undefined, contextSize: undefined, compactingSince: side.compactingSince, lastMessage: side.lastMessage, unread: side.unread, error: undefined }
     : { ...agent, status: agent.mainStatus ?? agent.status }
   return <ChatView key={`${agent.id}:${session}`} agent={view} session={session} header={<SessionTabs agent={agent} current={session} onPick={pick} />} />
 }
@@ -64,21 +65,21 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   const sk = session || undefined
   const [items, setItems] = useState<ChatItem[]>([])
   const [loaded, setLoaded] = useState(false)
-  const [text, setText] = useState('')
-  // talking instead of typing: what was said lands in the message box, to check (or fix) and send
+  // the message box holds its own text (ComposerBox: typing renders only it, and keeps a draft); here only whether
+  // there is any
+  const composer = useRef<ComposerHandle>(null)
+  const [hasText, setHasText] = useState(false)
   // talking instead of typing: what was said lands in the message box to check and send, or goes out right away
   // (held to talk, or hands-free)
-  const textRef = useRef('')
-  textRef.current = text
   // a message (partly) said rather than typed: its answer is read out (state/speech.ts)
   const spoken = useRef(false)
   const dict = useDictation(({ text: said, send: now }) => {
-    const cur = textRef.current
+    const cur = composer.current?.get() ?? ''
     const body = cur.trim() ? `${cur.trimEnd()} ${said}` : said
     spoken.current = true
     if (now) return void sendRef.current?.(body)
-    setText(body)
-    requestAnimationFrame(() => box.current?.focus())
+    composer.current?.set(body)
+    requestAnimationFrame(() => composer.current?.focus())
   })
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -91,14 +92,13 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       if (r?.task) setStoppedTask(r.task)
     })
   const [busy, setBusy] = useState('')
-  // /compact sent: until the context window shows the drop (or a while has passed), its share when it started
-  const [compacting, setCompacting] = useState<{ from: number; at: number } | null>(null)
+  // /compact running (the server says so: it shows on every device and survives a reload): nothing can be sent meanwhile
+  const compacting = !!agent.compactingSince
   const compact = async () => {
     const used = agent.contextPct != null ? ` (${Math.round(agent.contextPct)}% used)` : ''
     if (!(await confirm({ title: `Compact ${agent.name}'s conversation?`, message: `It's summarized to free the context window${used}. ${agent.name} keeps the gist of what was said, but the details of earlier messages are gone.`, confirmLabel: 'Compact', danger: false }))) return
     await run('compact', async () => {
       await liveApi.compact(agent.id, sk)
-      setCompacting({ from: agent.contextPct ?? 100, at: Date.now() })
     })
   }
   const scroller = useRef<HTMLDivElement>(null)
@@ -106,12 +106,6 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   const followUps = useLive((s) => s.followUps).filter((f) => f.agentId === agent.id && (f.sessionKey ?? '') === session)
   const [detail, setDetail] = useState<Item | null>(null)
   const offline = agent.status === 'offline'
-  useEffect(() => {
-    if (!compacting) return
-    if (agent.contextPct != null && agent.contextPct < compacting.from - 2) return void setCompacting(null)
-    const t = setTimeout(() => setCompacting(null), Math.max(0, 150_000 - (Date.now() - compacting.at)))
-    return () => clearTimeout(t)
-  }, [compacting, agent.contextPct])
   // time of our last prompt: show the typing bubble right away, before the agent's first hook arrives
   const [sentAt, setSentAt] = useState<number | null>(null)
   // messages already on screen when the tab opened don't animate in
@@ -235,39 +229,17 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   // phones: the row only while opened (the + button shows a dot when something is picked); elsewhere also while set
   const ctxShown = contextOpen || (context.active && !mobile)
   const fileInput = useRef<HTMLInputElement>(null)
-  // the message box grows with what's typed, up to its max-height (CSS), then scrolls
-  const box = useRef<HTMLTextAreaElement>(null)
   // opening the chat puts the cursor in the message box (not on phones: that would pop the keyboard up over it)
   useEffect(() => {
-    if (!mobile && !offline) box.current?.focus({ preventScroll: true })
+    if (!mobile && !offline) composer.current?.focus({ preventScroll: true })
   }, [agent.id, mobile, offline])
-  useLayoutEffect(() => {
-    const el = box.current
-    if (!el) return
-    const fit = () => {
-      el.style.height = 'auto'
-      el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`
-      // a scrollbar only once it's at its max-height and there's more
-      el.style.overflowY = el.scrollHeight > el.clientHeight + 1 ? 'auto' : 'hidden'
-    }
-    fit()
-    // measured while the panel was still opening (narrow): measure again once its width settles
-    let width = el.clientWidth
-    const ro = new ResizeObserver(() => {
-      if (el.clientWidth === width) return
-      width = el.clientWidth
-      fit()
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [text])
   const [dragging, setDragging] = useState(false)
   const attach = (files: File[]) => {
     if (!files.length || offline) return
     const problem = pending.add(files)
     setError(problem ?? '')
   }
-  const canSend = !offline && !sending && !pending.uploading && (!!text.trim() || pending.ids.length > 0)
+  const canSend = !offline && !compacting && !sending && !pending.uploading && (hasText || pending.ids.length > 0)
 
   // the message just sent, shown right away (below the chat, above the typing bubble) until the transcript has it
   const sendRef = useRef<((said?: string) => Promise<void>) | null>(null)
@@ -285,14 +257,14 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   const lastSent = useRef(0)
   const [joinedNote, setJoinedNote] = useState(false)
   const send = async (said?: string) => {
-    const body = (said ?? text).trim()
-    if (offline || sending || pending.uploading || (!body && !pending.ids.length)) return
+    const body = (said ?? composer.current?.get() ?? '').trim()
+    if (offline || compacting || sending || pending.uploading || (!body && !pending.ids.length)) return
     setSending(true)
     setError('')
     const at = Date.now()
     setOutgoing({ text: body, files: pending.items.filter((p) => p.state === 'done'), at })
     // the box empties right away (typing a long message into the agent takes a moment); back if it couldn't be sent
-    setText('')
+    composer.current?.set('')
     stick.current = true
     try {
       const r = await liveApi.prompt(agent.id, body, pending.ids, context.value, sk, at - lastSent.current < 60_000)
@@ -310,7 +282,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       setTimeout(load, 600)
     } catch (e) {
       setOutgoing(null)
-      setText((cur) => (cur.trim() ? cur : body))
+      if (!(composer.current?.get() ?? '').trim()) composer.current?.set(body)
       setError(e instanceof Error ? e.message : 'Could not send')
     } finally {
       setSending(false)
@@ -318,13 +290,6 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   }
   sendRef.current = send
 
-
-  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault()
-      send()
-    }
-  }
 
   // attachments: under each reply, the files written since the previous reply (Write/Edit) and the files it names
   const attachmentPaths = useMemo(() => {
@@ -729,25 +694,18 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
             </button>
           </>
         )}
-        <textarea
-          ref={box}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKey}
-          onPaste={(e) => {
-            // pasted pictures / files become attachments; pasted text stays text
-            const files = [...e.clipboardData.files]
-            if (!files.length) return
-            e.preventDefault()
-            attach(files)
-          }}
-          rows={1}
-          placeholder={offline ? (session ? 'The session is starting…' : 'The agent is offline') : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
+        <ComposerBox
+          ref={composer}
+          draftKey={`${agent.id}:${session}`}
+          placeholder={offline ? (session ? 'The session is starting…' : 'The agent is offline') : compacting ? `${agent.name} is compacting the conversation… you can write, and send when it's done` : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
           disabled={offline}
+          onSubmit={() => void send()}
+          onFiles={attach}
+          onHasText={setHasText}
         />
         {dict.supported && <MicButton dict={dict} disabled={offline} />}
         {/* the agent is at work and nothing is typed: this button stops it (Esc in its session); typing something turns it back into Send (a follow-up joins the answer) */}
-        {active && !offline && !text.trim() && pending.ids.length === 0 ? (
+        {active && !offline && !compacting && !hasText && pending.ids.length === 0 ? (
           <button className="icon-btn chat__stop" onClick={stop} disabled={busy === 'stop'} data-tip={`Stop ${agent.name} (Esc in the session)`} aria-label="Stop the agent">
             {busy === 'stop' ? <LuLoader className="spin" /> : <LuSquare />}
           </button>

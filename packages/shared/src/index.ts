@@ -110,6 +110,8 @@ export interface AgentInfo {
   contextSize?: number
   /** Replies the dashboard user hasn't seen in the Chat tab yet. */
   unread?: number
+  /** ms: its conversation is being compacted (/compact) since then: nothing can be sent to it until that's done */
+  compactingSince?: number
   /** Live: its side sessions (extra chats the owner opened, each its own Claude Code process), open and recently closed */
   sessions?: SideSessionInfo[]
 }
@@ -133,6 +135,8 @@ export interface SideSessionInfo {
   contextPct?: number | null
   lastMessage?: string
   unread?: number
+  /** ms: this session's conversation is being compacted since then */
+  compactingSince?: number
   createdAt: number
   closedAt?: number
 }

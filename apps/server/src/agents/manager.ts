@@ -767,7 +767,15 @@ async function requireLive(id: string, key = '') {
 /** Slash commands the dashboard may send. Anything else starting with "/" is refused (e.g. /model rewrites globals). */
 const ALLOWED_COMMANDS = ['/clear', '/compact', '/cost', '/context']
 
+const rtOf = (id: string, key: string) => (key ? sideRuntimeOf(id, key) : runtimeOf(id))
+
+/** What the dashboard sends into a session. Not while its conversation is being compacted. */
 export async function sendPrompt(id: string, text: string, key = '') {
+  if (rtOf(id, key).compactingSince) throw new AgentError('Compacting the conversation: this can be sent when it is done', 409)
+  await typeIntoSession(id, text, key)
+}
+
+async function typeIntoSession(id: string, text: string, key = '') {
   const { session } = await requireLive(id, key)
   const body = text.trim()
   if (!body) throw new AgentError('Message is empty')
@@ -782,6 +790,69 @@ export async function sendPrompt(id: string, text: string, key = '') {
     const input = inputBoxText(await tmux.capture(session).catch(() => ''))
     if (!input || !(input.includes(probe) || /\[Pasted text/i.test(input))) return
     await tmux.keys(session, 'Enter')
+  }
+}
+
+// ── compacting (/compact) ──
+
+const COMPACT_MAX_MS = 6 * 60_000
+/** How often the screen is looked at, and how long to wait for it to show anything (tests make these short). */
+export const compactTiming = { pollMs: 2000, noShowMs: 20_000 }
+
+function setCompacting(id: string, key: string, since: number | undefined) {
+  const set = (rt: Runtime): Runtime => ({ ...rt, compactingSince: since })
+  if (key) updateSideRuntime(id, key, set)
+  else updateRuntime(id, set)
+}
+
+/**
+ * Compact the conversation of a session (Claude Code's /compact: it's summarized, which frees the context window).
+ * Only while it's idle. From here until Claude Code is done, the session is marked (compactingSince: every dashboard
+ * shows it, a reload keeps it) and nothing is sent to it: chat messages are refused, tasks and queued prompts wait.
+ * Done = "Compacting conversation…" has left the screen (or the context window dropped).
+ */
+export async function compactSession(id: string, key = '', focus = '') {
+  const { session } = await requireLive(id, key)
+  const rt = rtOf(id, key)
+  if (rt.compactingSince) throw new AgentError('It is already being compacted', 409)
+  if (rt.status === 'working' || rt.status === 'waiting') throw new AgentError('It is busy: compact when it is idle (or stop it first)', 409)
+  const from = rt.contextPct ?? null
+  const start = Date.now()
+  setCompacting(id, key, start)
+  try {
+    await typeIntoSession(id, focus ? `/compact ${focus}` : '/compact', key)
+  } catch (e) {
+    setCompacting(id, key, undefined)
+    throw e
+  }
+  void watchCompaction(id, key, session, start, from)
+}
+
+async function watchCompaction(id: string, key: string, session: string, start: number, from: number | null) {
+  let seen = false
+  let quiet = 0
+  try {
+    while (Date.now() - start < COMPACT_MAX_MS) {
+      await Bun.sleep(compactTiming.pollMs)
+      if (rtOf(id, key).compactingSince !== start) return // cleared or replaced elsewhere
+      let screen: string
+      try {
+        screen = await tmux.capture(session)
+      } catch {
+        return // the session is gone
+      }
+      if (/Compacting conversation/i.test(screen)) {
+        seen = true
+        quiet = 0
+        continue
+      }
+      quiet++
+      const dropped = from != null && (rtOf(id, key).contextPct ?? 100) < from - 2
+      // it was on screen and has left, or the window shrank; or nothing ever showed (the command did nothing)
+      if ((seen && quiet >= 2) || (dropped && quiet >= 2) || (!seen && Date.now() - start > compactTiming.noShowMs)) return
+    }
+  } finally {
+    if (rtOf(id, key).compactingSince === start) setCompacting(id, key, undefined)
   }
 }
 

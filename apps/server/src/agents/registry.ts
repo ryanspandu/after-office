@@ -108,6 +108,7 @@ function sessionsOf(row: AgentRow): SideSessionInfo[] {
       ...(rt.contextPct != null ? { contextPct: rt.contextPct } : {}),
       ...(rt.lastMessage ? { lastMessage: rt.lastMessage } : {}),
       ...(rt.unread ? { unread: rt.unread } : {}),
+      ...(rt.compactingSince ? { compactingSince: rt.compactingSince } : {}),
       createdAt: s.created_at,
       ...(s.closed_at ? { closedAt: s.closed_at } : {}),
     }
@@ -152,6 +153,7 @@ export function toInfo(row: AgentRow, rt = runtimeOf(row.id)): AgentInfo {
     contextSize: rt.contextSize,
     error: rt.error,
     unread: rt.unread || undefined,
+    ...(rt.compactingSince ? { compactingSince: rt.compactingSince } : {}),
     updatedAt: rt.lastEventAt,
     ...(sessions.length ? { sessions } : {}),
   }

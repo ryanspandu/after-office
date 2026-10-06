@@ -190,7 +190,9 @@ const promptHead = (text: string) => text.trim().split('\n')[0].slice(0, 60)
 async function agentIsFree(agentId: string) {
   const row = agentsRepo.get(agentId)
   if (!row) return false
-  return runtimeOf(agentId).status === 'idle' && (await tmux.hasSession(row.tmux_session))
+  const rt = runtimeOf(agentId)
+  // not while its conversation is being compacted: what's sent then would be taken into the summary or lost
+  return rt.status === 'idle' && !rt.compactingSince && (await tmux.hasSession(row.tmux_session))
 }
 
 /** Send now if the agent is idle and nothing is queued ahead; otherwise queue it. */

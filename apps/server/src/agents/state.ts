@@ -22,6 +22,8 @@ export interface Runtime {
   error?: string
   /** Finished turns (replies) the dashboard user hasn't looked at in the Chat tab */
   unread?: number
+  /** ms: a /compact is running since then (agents/manager.ts compactSession) */
+  compactingSince?: number
   /** ms timestamp of the last hook/statusline activity */
   lastEventAt: number
 }
