@@ -17,10 +17,15 @@ export function useMediaQuery(query: string) {
 export const MOBILE = '(max-width: 768px)'
 
 /**
- * A tap on the dimmed area around a modal or drawer: closes it on a computer. On a phone it does nothing (a stray
- * touch shouldn't throw the sheet away): there, the close button or dragging the sheet down closes it.
+ * A tap on the dimmed area around a modal or drawer: closes it (or minimizes it, for the ones that can be). On a phone
+ * with the keyboard up, that first tap only puts the keyboard away (it's how people dismiss it), not the sheet.
  */
 export const onBackdropTap = (fn: () => void) => (e: { target: EventTarget; currentTarget: EventTarget }) => {
-  if (e.target !== e.currentTarget || window.matchMedia(MOBILE).matches) return
+  if (e.target !== e.currentTarget) return
+  const typing = document.activeElement
+  if (window.matchMedia(MOBILE).matches && (typing instanceof HTMLTextAreaElement || (typing instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit', 'range'].includes(typing.type)))) {
+    typing.blur()
+    return
+  }
   fn()
 }

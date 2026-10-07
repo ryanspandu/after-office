@@ -1,6 +1,7 @@
-// Phones: a field takes two taps before the keyboard comes up. The first tap (or a field focused on its own when a
-// window opens) only selects it: a select's options open, the caret is there, the screen stays as it was. Tapping it
-// again, once it's selected, brings the keyboard. Done with inputmode="none" while it's only selected.
+// Phones: a text field brings the keyboard on the first tap. A select you can search (react-select) takes two: the
+// first tap opens its options with no keyboard over them, a second one brings the keyboard to search. A field focused
+// on its own (a window's first field) doesn't bring the keyboard either until it's tapped. Done with inputmode="none"
+// while a field is only selected.
 
 const TEXT_TYPES = new Set(['', 'text', 'search', 'email', 'url', 'tel', 'password', 'number'])
 const COARSE = '(hover: none) and (pointer: coarse)'
@@ -32,17 +33,21 @@ function restore(el: Field) {
 
 export function tapToType() {
   if (typeof window === 'undefined' || !window.matchMedia(COARSE).matches) return
-  // before the tap focuses it: no keyboard for this focus
+  // fields the owner asked to type in (a tap on a text field, the second tap on a select): their keyboard stays until
+  // they leave the field
+  const typing = new WeakSet<Field>()
+  const inSelect = (el: Element) => !!el.closest('.rs__control')
+  // before the tap focuses it: a select's search field without a keyboard; any other text field with one, right away
   document.addEventListener(
     'pointerdown',
     (e) => {
       const el = textField(e.target)
-      if (el && document.activeElement !== el) quiet(el)
+      if (!el || document.activeElement === el) return
+      if (inSelect(el)) quiet(el)
+      else typing.add(el)
     },
     true,
   )
-  // fields the owner asked to type in (the second tap): their keyboard stays until they leave the field
-  const typing = new WeakSet<Field>()
   let toggling = false
   // focused some other way (a window's first field): no keyboard either
   document.addEventListener(
