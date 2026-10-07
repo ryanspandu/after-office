@@ -5,7 +5,7 @@ import { cleanFolder } from './folders'
 import { AgentError } from '../agents/manager'
 import { addPending, getPending, publish, resolvePending, runtimeOf } from '../agents/registry'
 import { bossMode, countBoss, officeSettings } from './settings'
-import { addComment, deliver, deliverToManager, isReadingAgentOutput, isReportedNow, makesCycle, markTask, publishWork, quotaPause, startTask, tickTasks, waitingOn } from './work'
+import { addComment, deliver, deliverToManager, isReadingAgentOutput, isReportedNow, endParallelSession, mainBusy, makesCycle, markTask, parallelBlocker, PARALLEL_NOTE, startParallel, publishWork, quotaPause, startTask, tickTasks, waitingOn } from './work'
 import { managerOrigin } from './origin'
 import { requestCheckApproval } from './gate'
 import { notifyUser } from './reports'
@@ -231,6 +231,8 @@ export interface ManagerTaskPatch {
   check?: string
   /** tag ids (replaces the list; [] = none) */
   tags?: string[]
+  /** run it in a parallel session if its agent is busy (a task already queued behind that work starts in one now) */
+  parallel?: boolean
 }
 
 const managerName = (id: string) => agentsRepo.get(id)?.name ?? 'The manager'
@@ -293,6 +295,11 @@ export async function managerUpdateTask(managerId: string, taskId: string, patch
     next.autoStartedAt = undefined
     changed.push('agent')
   }
+  if (patch.parallel !== undefined && !!patch.parallel !== !!t.parallel) {
+    if (patch.parallel) next.parallel = true
+    else delete next.parallel
+    changed.push(patch.parallel ? 'parallel (on)' : 'parallel (off)')
+  }
   if (patch.blockedBy !== undefined) {
     const ids = [...new Set(patch.blockedBy)].filter((id) => id !== taskId)
     for (const id of ids) if (!tasksRepo.get(id)) throw new AgentError(`No task ${id} to wait for`, 404)
@@ -326,6 +333,13 @@ export async function managerUpdateTask(managerId: string, taskId: string, patch
     resolvePending(approvalId(taskId))
     requestApproval(next)
   }
+  // made parallel while it waits in its busy agent's queue: out of the queue, into a session of its own now
+  if (patch.parallel && next.status === 'todo' && next.agentId && !next.awaitingApproval && !waitingOn(next).length && queueRepo.hasTask(taskId) && mainBusy(next.agentId) && !parallelBlocker(next, next.agentId)) {
+    queueRepo.removeTask(taskId)
+    publishWork('queued')
+    await startTask(taskId)
+    return tasksRepo.get(taskId) ?? next
+  }
   void tickTasks()
   return next
 }
@@ -335,6 +349,8 @@ export function managerDeleteTask(managerId: string, taskId: string) {
   if (!t) throw new AgentError(`No task ${taskId}; see list_tasks`, 404)
   if (t.status === 'in_progress') throw new AgentError(`"${t.title}" is in progress; wait for its report (or ask the owner to stop it)`, 409)
   tasksRepo.remove(taskId)
+  // its parallel session (still open after the task left in progress): nothing keeps working on a deleted task
+  if (t.sessionKey && t.agentId) void endParallelSession(t.agentId, t.sessionKey)
   commentsRepo.removeTask(taskId)
   queueRepo.removeTask(taskId)
   resolvePending(approvalId(taskId))
@@ -385,6 +401,14 @@ export async function reviseTask(taskId: string, feedback: string, by: { author:
     `\nFeedback:\n${note}`,
     '\nApply the feedback. When you are done, give a short summary of what you changed.',
   ].join('\n')
+  // a parallel task whose agent is busy: the round runs in a session of its own again, not behind that work
+  if (task.parallel && mainBusy(task.agentId) && !parallelBlocker(task, task.agentId)) {
+    markTask(taskId, { checkState: undefined, checkAttempts: undefined, stoppedAt: undefined })
+    addComment({ taskId, author: by.author, ...(by.agentId ? { agentId: by.agentId } : {}), kind: 'revision', text: note })
+    const agentId = task.agentId
+    await startParallel(task, agentId, `${prompt}\n${PARALLEL_NOTE}`, () => deliver(agentId, prompt, { taskId }))
+    return 'parallel' as const
+  }
   const result = await deliver(task.agentId, prompt, { taskId })
   markTask(taskId, {
     ...(result === 'sent' ? { status: 'in_progress' as const, startedAt: Date.now() } : { status: 'todo' as const }),

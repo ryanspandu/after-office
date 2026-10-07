@@ -360,7 +360,7 @@ export const liveApi = {
   renameSession: (id: string, key: string, name: string) => call(`/api/agents/${id}/sessions/${key}`, { name }, 'PUT'),
   reopenSession: (id: string, key: string) => call(`/api/agents/${id}/sessions/${key}/reopen`, {}) as Promise<{ key: string }>,
   forgetSession: (id: string, key: string) => call(`/api/agents/${id}/sessions/${key}/forget`, undefined, 'DELETE'),
-  reviseTask: (taskId: string, feedback: string) => call(`/api/tasks/${taskId}/revise`, { feedback }) as Promise<{ result: 'sent' | 'queued' }>,
+  reviseTask: (taskId: string, feedback: string) => call(`/api/tasks/${taskId}/revise`, { feedback }) as Promise<{ result: 'sent' | 'queued' | 'parallel' }>,
   /** a stopped task taken up again by its agent, where it stopped */
   resumeTask: (taskId: string) => call(`/api/tasks/${taskId}/resume`, {}) as Promise<{ result: 'sent' | 'queued' }>,
   startTask: (taskId: string, agentId?: string) => call(`/api/tasks/${taskId}/start`, { agentId }) as Promise<{ result: 'sent' | 'queued' | 'parallel' }>,

@@ -612,6 +612,7 @@ export const queueRepo = {
   countFor: (agentId: string) => db.query<{ n: number }, [string]>('SELECT COUNT(*) AS n FROM prompt_queue WHERE agent_id = ?').get(agentId)!.n,
   removeAgent: (agentId: string) => db.query('DELETE FROM prompt_queue WHERE agent_id = ?').run(agentId),
   removeTask: (taskId: string) => db.query('DELETE FROM prompt_queue WHERE task_id = ?').run(taskId),
+  hasTask: (taskId: string) => !!db.query<{ n: number }, [string]>('SELECT COUNT(*) AS n FROM prompt_queue WHERE task_id = ?').get(taskId)!.n,
 }
 
 export interface GitIdentityRow {

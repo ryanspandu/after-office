@@ -3,7 +3,7 @@ import { sep } from 'node:path'
 import type { CronJob, LiveMode, OfficeTask, TaskComment, TaskStatus, WorkReport, WorkState } from '@after-office/shared'
 import { agentsRepo, commentsRepo, cronsRepo, queueRepo, reportsRepo, settingsRepo, sideSessionsRepo, tasksRepo, triggersRepo } from '../db'
 import { AgentError, grantFolder, sendPrompt, setMode } from '../agents/manager'
-import { currentRateLimits, publish, runtimeOf, setWorkProvider, updateRuntime } from '../agents/registry'
+import { currentRateLimits, publish, runtimeOf, sideRuntimeOf, setWorkProvider, updateRuntime } from '../agents/registry'
 import { agentFiles } from '../agents/files'
 import { mentionedPaths } from '@after-office/shared'
 import { snapshot } from './git'
@@ -24,7 +24,7 @@ import { endBossMode } from './bossMode'
 import { publicAccess, watchPublicAccess } from './publicAccess'
 import { chatReport, putChatReport, type ChatContext } from './chatContext'
 import { moveProjectsToFolders } from './folders'
-import { mainBusy, noteParallelFile, onParallelStopped, PARALLEL_NOTE, parallelBlocker, startParallel, tidyParallel } from './parallel'
+import { clearApiRetries, CONTINUE_PROMPT, endParallelSession, isTransientApiError, mainBusy, noteParallelFile, onParallelStopped, PARALLEL_NOTE, parallelBlocker, retryAfterApiError, retrying, startParallel, tidyParallel } from './parallel'
 
 
 // Tasks, cron jobs and the prompt queue. Handing work to an agent is just typing a prompt into its session; if the
@@ -271,6 +271,15 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
     if (a.taskId && finalMessage?.trim()) addComment({ taskId: a.taskId, author: 'agent', agentId, kind: 'note', text: finalMessage })
     return
   }
+  // a connection drop / overloaded API cut the task's turn: it carries on in a while (queued behind nothing else)
+  const cut = a?.taskId ? tasksRepo.get(a.taskId) : null
+  if (failed && cut?.status === 'in_progress' && retryAfterApiError(cut, finalMessage, () => deliver(agentId, CONTINUE_PROMPT, { taskId: cut.id }))) {
+    active.delete(agentId)
+    void drainQueues()
+    return
+  }
+  if (a?.taskId && !failed) clearApiRetries(a.taskId)
+  if (!a) carryOnChat(agentId, '', finalMessage, failed)
   active.delete(agentId)
   const asked = replyTo.get(agentId)
   const manager = asked?.managerId
@@ -278,7 +287,7 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
   // the answer to the owner's chat message with a folder / tags: kept in Reports
   const chat = !a && fileChatTurn(agentId, '', finalMessage, failed)
   // after a server restart the in-memory link is gone: fall back to the agent's task in progress
-  const t = a?.taskId ? tasksRepo.get(a.taskId) : a || chat ? null : tasksRepo.active().find((x) => x.agentId === agentId && x.status === 'in_progress' && !x.sessionKey)
+  const t = a?.taskId ? tasksRepo.get(a.taskId) : a || chat ? null : tasksRepo.active().find((x) => x.agentId === agentId && x.status === 'in_progress' && !x.sessionKey && !retrying.has(x.id))
   const ref = a ?? (t ? { taskId: t.id, title: t.title, startedAt: t.startedAt ?? Date.now() } : null)
   const cmd = t && t.status === 'in_progress' && !failed ? checkFor(t) : undefined
   if (t && cmd) {
@@ -321,12 +330,34 @@ function fileChatTurn(agentId: string, key: string, finalMessage: string | undef
 export function onSideStopped(agentId: string, key: string, finalMessage?: string, failed = false) {
   // a parallel task's session: the task's report (parallel.ts)
   if (onParallelStopped(agentId, key, finalMessage, failed)) return
+  carryOnChat(agentId, key, finalMessage, failed)
   fileChatTurn(agentId, key, finalMessage, failed)
 }
+
+/** A chat turn (no task) cut by an API error that may pass: told to carry on once, a minute later, if nothing came since. */
+const CHAT_RETRY_MS = 60_000
+const chatRetried = new Set<string>()
+/** Prompts each session got: a new one after an API error means someone moved on. */
+const promptCount = new Map<string, number>()
+function carryOnChat(agentId: string, key: string, finalMessage: string | undefined, failed: boolean) {
+  const id = turnKey(agentId, key)
+  if (!failed) return void chatRetried.delete(id)
+  if (!isTransientApiError(finalMessage) || chatRetried.has(id)) return
+  chatRetried.add(id)
+  const seen = promptCount.get(id) ?? 0
+  setTimeout(() => {
+    const rt = key ? sideRuntimeOf(agentId, key) : runtimeOf(agentId)
+    // the owner (or anyone) wrote in the meantime, or it's doing something: that turn is theirs now
+    if (rt.status !== 'idle' || (promptCount.get(id) ?? 0) !== seen || (!key && (active.has(agentId) || queueRepo.countFor(agentId)))) return
+    void sendPrompt(agentId, CHAT_CONTINUE, key).catch((e) => console.warn('[chat] could not carry on after the API error:', e instanceof Error ? e.message : e))
+  }, CHAT_RETRY_MS)
+}
+const CHAT_CONTINUE = 'Your previous reply was cut off by an API error (connection lost), not by anyone. Carry on from where you stopped; don\'t repeat what is already done.'
 
 /** A prompt in a side session: only the chat-report bookkeeping (and where its tool calls came from). */
 export function onSidePromptSubmitted(agentId: string, key: string, prompt?: string) {
   trackTurnOrigin(agentId, prompt ?? '')
+  promptCount.set(turnKey(agentId, key), (promptCount.get(turnKey(agentId, key)) ?? 0) + 1)
   const c = chatTurns.get(turnKey(agentId, key))
   if (c && prompt) {
     if (promptHead(unwrapPaste(prompt)) === c.head) c.submitted = true
@@ -338,6 +369,7 @@ export function onSidePromptSubmitted(agentId: string, key: string, prompt?: str
  *  (interrupted) and the user moved on: file what we have so the next answer isn't taken as its report. */
 export function onPromptSubmitted(agentId: string, prompt?: string, midTurn = false) {
   trackTurnOrigin(agentId, prompt ?? '')
+  promptCount.set(agentId, (promptCount.get(agentId) ?? 0) + 1)
   // the manager's turn: started by an agent's output (a forwarded report or answer), or by anything else
   if (agentsRepo.get(agentId)?.kind === 'manager') {
     readingAgentOutput.set(agentId, !!prompt && prompt.includes('<<<REPORT'))
@@ -552,7 +584,8 @@ export function stopActiveTask(agentId: string, by: { author: 'user' | 'manager'
     // a side session's task (parallel.ts keeps no run of its own here)
     const t = tasksRepo.active().find((x) => x.agentId === agentId && x.sessionKey === key && x.status === 'in_progress')
     if (!t) return null
-    markTask(t.id, { status: 'todo', stoppedAt: Date.now() })
+    // Resume continues it in the main session: this one is let go (closed once idle a while, parallel.ts)
+    markTask(t.id, { status: 'todo', stoppedAt: Date.now(), sessionKey: undefined })
     note(t.id)
     return tasksRepo.get(t.id)
   }
@@ -778,13 +811,15 @@ function watchStuck(now: number) {
       continue
     }
     const row = agentsRepo.get(t.agentId)
-    const rt = runtimeOf(t.agentId)
+    // the session the task runs in: a parallel one's own, else the main one (the other session's state isn't its)
+    const rt = t.sessionKey ? sideRuntimeOf(t.agentId, t.sessionKey) : runtimeOf(t.agentId)
+    if (retrying.has(t.id)) continue
     if (!row || rt.status === 'offline') {
       const since = offlineSince.get(t.id) ?? now
       offlineSince.set(t.id, since)
       if (now - since < OFFLINE_GRACE_MS) continue
       offlineSince.delete(t.id)
-      markTask(t.id, { status: 'todo', autoStartedAt: undefined, checkState: undefined })
+      markTask(t.id, { status: 'todo', autoStartedAt: undefined, checkState: undefined, sessionKey: undefined })
       const who = row?.name ?? 'Its agent'
       addComment({ taskId: t.id, author: 'system', text: `${who} went offline while working on this. It is back in To do.` })
       void notify('stuck', `"${t.title}" is back in To do`, `${who} went offline while working on it.`)
@@ -799,7 +834,11 @@ function watchStuck(now: number) {
       void notify('stuck', `${row.name} may be stuck`, `No activity for ${mins} minutes on "${t.title}".`)
       continue
     }
-    if (rt.status === 'idle' && !active.has(t.agentId) && !queueRepo.countFor(t.agentId) && now - (t.startedAt ?? now) > LOST_REPORT_MS) {
+    const quiet = t.sessionKey
+      ? now - (rt.lastEventAt || 0) > LOST_REPORT_MS
+      : !active.has(t.agentId) && !queueRepo.countFor(t.agentId)
+    if (rt.status === 'idle' && quiet && now - (t.startedAt ?? now) > LOST_REPORT_MS) {
+      // a parallel task keeps its session: a report that comes late is still filed (parallel.ts)
       markTask(t.id, { status: 'review' })
       addComment({ taskId: t.id, author: 'system', text: `${row.name} is idle but no report came back for this task. Moved it to review; check the agent's chat.` })
     }

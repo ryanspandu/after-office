@@ -76,7 +76,7 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
       const { result } = await liveApi.reviseTask(task.id, feedback.trim())
       setFeedback('')
       setRevising(false)
-      setStartMsg({ ok: true, text: result === 'queued' ? 'Agent is busy: feedback queued.' : 'Feedback sent. The task is back in progress.' })
+      setStartMsg({ ok: true, text: result === 'queued' ? 'Agent is busy: feedback queued.' : result === 'parallel' ? 'Agent is busy: the round runs in a parallel session.' : 'Feedback sent. The task is back in progress.' })
     } catch (e) {
       setStartMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not send' })
     } finally {

@@ -19,7 +19,7 @@ import { createNote, deleteNote, reorderNotes, updateNote } from '../work/notes'
 import { cleanFolder } from '../work/folders'
 import { toolsReport } from '../system/tools'
 import { endTerminal, runningReport } from '../system/running'
-import { taskFolder, addComment, deliver, deliverToManager, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, startReportJob, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
+import { taskFolder, addComment, endParallelSession, deliver, deliverToManager, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, startReportJob, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
 import { lockTerminals, requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
@@ -157,7 +157,10 @@ workRoutes.put('/task-statuses', async (c) => {
   return c.json({ ok: true })
 })
 workRoutes.delete('/tasks/:id', (c) => {
+  const gone = tasksRepo.get(c.req.param('id'))
   tasksRepo.remove(c.req.param('id'))
+  // its parallel session: stopped and closed with it
+  if (gone?.sessionKey && gone.agentId) void endParallelSession(gone.agentId, gone.sessionKey)
   commentsRepo.removeTask(c.req.param('id'))
   publishWork('tasks')
   return c.json({ ok: true })

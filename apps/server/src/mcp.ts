@@ -219,7 +219,7 @@ function buildServer(managerId: string, session = '') {
             : out.result === 'queued'
               ? 'queued until the agent is free'
               : out.result === 'waiting'
-                ? `waits for: ${out.waitingFor.join(', ')}; starts on its own when they are finished`
+                ? `waits for: ${out.waitingFor.join(', ')}; starts on its own when they are finished${parallel ? ` (in a parallel session if ${target.name} is busy then)` : ` (queued behind ${target.name}'s other work if they are busy then; pass parallel: true to run it next to it)`}`
                 : out.result === 'approval'
                   ? "waiting for the owner's approval in the dashboard; if they reject it you get a message"
                   : `on hold: ${out.paused}; starts on its own when usage drops`
@@ -725,9 +725,13 @@ function buildServer(managerId: string, session = '') {
           .max(1000)
           .optional()
           .describe('quality check command for this task (runs in the agent\'s folder when it finishes); a new command waits for the owner\'s approval; "" clears it'),
+        parallel: z
+          .boolean()
+          .optional()
+          .describe('run it in a parallel session when its agent is busy (same rules as in delegate_task). A task already queued behind the agent\'s other work starts in one now; also used when it starts after the tasks it waits for, and for send_back_task'),
       },
     },
-    async ({ task, title, description, priority, deadlineHours, status, agent, folder, after, check, tags }) => {
+    async ({ task, title, description, priority, deadlineHours, status, agent, folder, after, check, tags, parallel }) => {
       try {
         const none = (v?: string) => v !== undefined && /^(none|null|)$/i.test(v.trim())
         const t = await managerUpdateTask(managerId, task, {
@@ -741,6 +745,7 @@ function buildServer(managerId: string, session = '') {
           blockedBy: after,
           check,
           tags: tags === undefined ? undefined : (tagIdsByName(tags) ?? []),
+          parallel,
         })
         return json(describeTask(t))
       } catch (e) {
@@ -775,7 +780,13 @@ function buildServer(managerId: string, session = '') {
     async ({ task, feedback }) => {
       try {
         const result = await managerReviseTask(managerId, task, feedback)
-        return text(result === 'sent' ? 'Sent back for another round.' : 'Queued: the agent is busy; it gets the feedback next.')
+        return text(
+          result === 'sent'
+            ? 'Sent back for another round.'
+            : result === 'parallel'
+              ? 'The agent is busy: the round runs now in a parallel session of theirs.'
+              : 'Queued: the agent is busy; it gets the feedback next (update_task parallel: true first runs such rounds next to their work).',
+        )
       } catch (e) {
         return fail(e)
       }

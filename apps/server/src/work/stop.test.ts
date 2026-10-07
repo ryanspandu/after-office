@@ -7,7 +7,7 @@ import { agentsRepo, commentsRepo, queueRepo, reportsRepo, tasksRepo, type Agent
 import { TMUX_SOCKET_ARGS } from '../agents/env'
 import { setRateLimits, updateRuntime } from '../agents/registry'
 import { updateSettings } from './settings'
-import { active, onPromptSubmitted, resumeTask, startTask, stopActiveTask } from './work'
+import { active, onAgentStopped, onPromptSubmitted, resumeTask, startTask, stopActiveTask } from './work'
 
 // Stopping an agent partway through a task (the owner's Stop, the manager's interrupt_agent / stop_task): the task goes
 // back to To do at once, marked stopped, with a note and a report; Resume gives it to the same agent again.
@@ -102,4 +102,23 @@ test('the manager stops it: back in To do with its reason, and no report back to
   expect(commentsRepo.forTask('st-1').some((c) => c.text.startsWith('Stopped by the manager (the owner changed the brief)'))).toBe(true)
   await Bun.sleep(300)
   expect(inbox()).toHaveLength(0)
+})
+
+test('a turn cut by a connection error: the task stays in progress, no "did not finish" report', async () => {
+  idle('st-w')
+  tasksRepo.put(task('st-2', { title: 'Fix the footer', delegatedBy: 'st-mgr' }))
+  await startTask('st-2')
+  await until(() => tasksRepo.get('st-2')!.status === 'in_progress')
+  inbox()
+  onAgentStopped('st-w', 'API Error: Connection lost mid-response. The response above may be incomplete.', true)
+  expect(tasksRepo.get('st-2')!.status).toBe('in_progress')
+  expect(reportsRepo.latest(50).some((r) => r.refId === 'st-2')).toBe(false)
+  expect(commentsRepo.forTask('st-2').some((c) => /API error .*Trying again/.test(c.text))).toBe(true)
+  // a limit isn't waited out here: that one fails as before
+  tasksRepo.put(task('st-3', { title: 'Fix the header' }))
+  idle('st-w')
+  await startTask('st-3')
+  await until(() => active.get('st-w')?.taskId === 'st-3')
+  onAgentStopped('st-w', 'Claude AI usage limit reached', true)
+  expect(tasksRepo.get('st-3')!.status).toBe('review')
 })

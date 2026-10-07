@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import type { OfficeTask } from '@after-office/shared'
 import { agentsRepo, queueRepo, sideSessionsRepo, tasksRepo } from '../db'
-import { closeSideSession, grantFolder, openSideSession, renameSideSession, sendPrompt } from '../agents/manager'
+import { closeSideSession, grantFolder, interrupt, openSideSession, renameSideSession, sendPrompt } from '../agents/manager'
 import { runtimeOf, sideRuntimeOf } from '../agents/registry'
 import { officeSettings } from './settings'
 import { active, addComment, fileReport, markTask, taskFolder, tickTasks, type WorkRef } from './work'
@@ -15,8 +15,12 @@ import { checkFor, runGate } from './gate'
 /** The tasks running in an agent's parallel sessions right now. */
 export const parallelTasks = (agentId: string) => tasksRepo.active().filter((t) => t.agentId === agentId && t.status === 'in_progress' && !!t.sessionKey)
 
-/** The task running in this side session, if it is one of the parallel ones. */
-export const taskInSession = (agentId: string, key: string) => parallelTasks(agentId).find((t) => t.sessionKey === key) ?? null
+/**
+ * The task of this side session, if it is one of the parallel ones: still running, or already moved to review without
+ * its report (a report that comes late is still its report).
+ */
+export const taskInSession = (agentId: string, key: string) =>
+  tasksRepo.active().find((t) => t.agentId === agentId && t.sessionKey === key && (t.status === 'in_progress' || t.status === 'review')) ?? null
 
 const overlaps = (a: string, b: string) => {
   const x = resolve(a)
@@ -89,6 +93,9 @@ export const PARALLEL_NOTE =
 export function onParallelStopped(agentId: string, key: string, finalMessage: string | undefined, failed: boolean) {
   const t = taskInSession(agentId, key)
   if (!t) return false
+  // a connection drop / overloaded API cut the turn: the same session carries on in a while, the task isn't over
+  if (failed && t.status === 'in_progress' && retryAfterApiError(t, finalMessage, () => sendPrompt(agentId, CONTINUE_PROMPT, key))) return true
+  clearApiRetries(t.id)
   const ref: WorkRef & { title: string; startedAt: number; files?: Set<string> } = { taskId: t.id, title: t.title, startedAt: t.startedAt ?? Date.now(), files: filesOf.get(sid(agentId, key)) }
   filesOf.delete(sid(agentId, key))
   markTask(t.id, { sessionKey: undefined })
@@ -99,7 +106,8 @@ export function onParallelStopped(agentId: string, key: string, finalMessage: st
     const report = fileReport(agentId, ref, finalMessage, true, { forward: false })
     void runGate(t.id, agentId, cmd, report).catch((e) => console.error('[check]', e))
   } else {
-    markTask(t.id, { status: 'review' })
+    if (t.status === 'in_progress') markTask(t.id, { status: 'review' })
+    else addComment({ taskId: t.id, author: 'system', text: 'Its report came in after all (late): see Reports.' })
     fileReport(agentId, ref, finalMessage, !failed)
   }
   // done: the session closes (its conversation stays listed, to read or open again)
@@ -118,8 +126,22 @@ export function noteParallelFile(agentId: string, key: string, path: string) {
   filesOf.set(sid(agentId, key), set)
 }
 
+/** Stop and close a task's parallel session (the task was deleted or taken back): nothing keeps working on it. */
+export async function endParallelSession(agentId: string, key: string) {
+  const side = sideSessionsRepo.get(agentId, key)
+  if (!side || side.closed_at) return
+  if (sideRuntimeOf(agentId, key).status !== 'idle') await interrupt(agentId, key).catch(() => {})
+  await closeSideSession(agentId, key).catch((e) => console.warn('[parallel] could not close', key, e.message))
+}
+
+/** The name a parallel session gets (startParallel): how the reaper tells them from the owner's own side sessions. */
+const TASK_SESSION = /^Task: /
+/** A task's session left open with no task on it (its task done, deleted, stopped): closed after this long idle. */
+export const ORPHAN_IDLE_MS = 15 * 60_000
+
 /** A parallel session that's gone (closed by hand, crashed): its task goes back to To do. */
 export function tidyParallel() {
+  reapOrphans()
   for (const t of tasksRepo.active()) {
     if (!t.sessionKey || !t.agentId) continue
     const side = sideSessionsRepo.get(t.agentId, t.sessionKey)
@@ -128,3 +150,67 @@ export function tidyParallel() {
     addComment({ taskId: t.id, author: 'system', text: 'Its parallel session closed before it finished. The task is back in To do.' })
   }
 }
+
+/** Task sessions with no task on them any more, idle a while: closed (each one is a Claude Code process). */
+function reapOrphans(now = Date.now()) {
+  const held = new Set(tasksRepo.active().filter((t) => t.sessionKey && t.agentId).map((t) => `${t.agentId}:${t.sessionKey}`))
+  for (const a of agentsRepo.all()) {
+    for (const side of sideSessionsRepo.forAgent(a.id)) {
+      if (side.closed_at || !TASK_SESSION.test(side.name ?? '') || held.has(`${a.id}:${side.key}`)) continue
+      const rt = sideRuntimeOf(a.id, side.key)
+      if (rt.status === 'working' || rt.status === 'waiting') continue
+      if (now - Math.max(rt.lastEventAt || 0, side.created_at) < ORPHAN_IDLE_MS) continue
+      console.log(`[parallel] closing ${a.name}'s ${side.key} (${side.name}): no task on it, idle`)
+      void closeSideSession(a.id, side.key).catch((e) => console.warn('[parallel] could not close', side.key, e.message))
+    }
+  }
+}
+
+// ── a turn cut by the API (connection lost, overloaded, 5xx): the task carries on instead of failing ──
+
+/** What the agent is told when its turn was cut by an API error. */
+export const CONTINUE_PROMPT =
+  'Your previous turn was cut off by an API error (connection lost / overloaded), not by anyone. Continue the task from where you stopped; don\'t start over. When you are done, give the short summary as asked.'
+/** Waits before each try again (then it counts as failed). */
+export const API_RETRY_MS = [60_000, 5 * 60_000]
+const API_TRANSIENT = /api error|connection|overloaded|server[_ ]error|internal server|bad gateway|service unavailable|timed? ?out|\b5\d\d\b|econnreset|socket|network/i
+/** Errors that waiting won't fix: the plan's limits, a full context, a bad request. */
+const API_FINAL = /usage limit|rate.?limit|limit reached|out of (?:extra )?usage|prompt is too long|context (?:window|length)|invalid|unauthori[sz]ed|forbidden|credit/i
+export const isTransientApiError = (msg?: string) => !!msg && API_TRANSIENT.test(msg) && !API_FINAL.test(msg)
+
+const apiRetries = new Map<string, number>()
+/** Tasks waiting to carry on after an API error: no other turn's end counts as theirs meanwhile. */
+export const retrying = new Set<string>()
+
+/**
+ * The turn of a running task ended on an API error that may pass: try again later (`resume`), up to API_RETRY_MS.length
+ * times, with a note on the task. False: not one of those (or out of tries), the failure is handled as usual.
+ */
+export function retryAfterApiError(t: OfficeTask, finalMessage: string | undefined, resume: () => Promise<unknown>) {
+  const n = apiRetries.get(t.id) ?? 0
+  if (!isTransientApiError(finalMessage) || n >= API_RETRY_MS.length) {
+    apiRetries.delete(t.id)
+    return false
+  }
+  apiRetries.set(t.id, n + 1)
+  retrying.add(t.id)
+  const wait = API_RETRY_MS[n]
+  const why = (finalMessage ?? '').split('\n')[0].slice(0, 160)
+  addComment({ taskId: t.id, author: 'system', text: `The turn was cut by an API error (${why}). Trying again in ${Math.round(wait / 60_000)} min (${n + 1}/${API_RETRY_MS.length}).` })
+  const timer = setTimeout(() => {
+    retrying.delete(t.id)
+    const now = tasksRepo.get(t.id)
+    // stopped, deleted or moved on meanwhile: nothing to carry on
+    if (!now || now.status !== 'in_progress') return
+    void resume().catch((e) => {
+      console.warn(`[task] ${t.title}: could not carry on after the API error: ${e instanceof Error ? e.message : e}`)
+      addComment({ taskId: t.id, author: 'system', text: 'Could not carry on after the API error: back in To do.' })
+      markTask(t.id, { status: 'todo', sessionKey: undefined })
+    })
+  }, wait)
+  // a pending try doesn't keep the process up (a restart drops it: the task then goes the usual stuck way)
+  timer.unref?.()
+  return true
+}
+/** A turn that ended normally: the next API error starts counting again. */
+export const clearApiRetries = (taskId: string) => apiRetries.delete(taskId)
