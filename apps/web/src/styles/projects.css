@@ -311,7 +311,7 @@
   display: grid; place-items: center; background: var(--hl); color: #fff; font-size: 10.5px; font-weight: 700; line-height: 1;
 }
 .popover.fmin-menu {
-  width: min(300px, calc(100vw - 24px)); max-height: 50vh; overflow-y: auto; padding: 6px; box-sizing: border-box;
+  width: min(300px, calc(100vw - 32px)); max-height: 50vh; overflow-y: auto; padding: 6px; box-sizing: border-box;
   display: flex; flex-direction: column; gap: 2px; transform-origin: bottom right;
 }
 .fmin-menu__title { padding: 6px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }

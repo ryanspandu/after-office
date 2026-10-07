@@ -483,6 +483,14 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   // phones: the model / mode / status bar folds away behind an info button, so the chat gets the whole height
   const bar = (
       <div className={`chat__bar${mobile ? ' chat__bar--sheet' : ''}`}>
+        {mobile && (
+          <div className="chat__sheet-head">
+            <span>Session</span>
+            <button className="icon-btn small ghost" onClick={() => setInfoOpen(false)} aria-label="Close">
+              <LuX />
+            </button>
+          </div>
+        )}
         {/* the model is the agent's (changing it restarts the main session); a side session starts with it */}
         {!session && (
           <Select
@@ -698,7 +706,8 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       <div className="chat__speaking">
         <SpeakingChip />
       </div>
-      <div className="chat__composer">
+      {/* typing: the model / mode panel makes way for the keyboard */}
+      <div className="chat__composer" onFocusCapture={() => infoOpen && setInfoOpen(false)}>
         <input
           ref={fileInput}
           type="file"

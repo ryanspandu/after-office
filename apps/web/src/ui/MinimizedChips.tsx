@@ -236,8 +236,10 @@ function MinimizedMenu({ folders, remove, more }: { folders: MinimizedFolder[]; 
   useLayoutEffect(() => {
     if (!open || !button.current) return
     const r = button.current.getBoundingClientRect()
-    setPos({ bottom: window.innerHeight - r.top + 8, right: Math.max(12, window.innerWidth - r.right) })
-  }, [open])
+    // right-aligned with the stage's edge (above the menu button), not hanging off the screen's left from this button
+    const edge = stage?.getBoundingClientRect().right ?? window.innerWidth
+    setPos({ bottom: window.innerHeight - r.top + 8, right: Math.max(16, window.innerWidth - edge + 12) })
+  }, [open, stage])
   useEffect(() => {
     if (!open) return
     const away = (e: PointerEvent) => !pop.current?.contains(e.target as Node) && !button.current?.contains(e.target as Node) && setOpen(false)

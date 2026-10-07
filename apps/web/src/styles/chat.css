@@ -365,6 +365,7 @@ span.stab { padding: 0 4px 0 10px; }
 .chat__compact { flex-shrink: 0; }
 /* Compact: the icon with its word (on phones the bar is a panel with room: there it's a full-height row button) */
 .chat__compact { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; font-size: 12px; }
+.chat__sheet-head { display: flex; align-items: center; justify-content: space-between; margin: -4px -6px 0 2px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .chat__bar--sheet .chat__compact { align-self: flex-start; height: 34px; padding: 0 12px; font-size: 13px; gap: 6px; }
 
 /* ── phones: the message box like Claude's app: one card, the text across its whole width, the buttons on a row
