@@ -8,7 +8,7 @@ import { agentsRepo, sideSessionsRepo, usageRepo, tasksRepo } from '../db'
 import { existsSync } from 'node:fs'
 import { active, cleanChatContext, contextBlock, expectChatReport, withContext, stopActiveTask } from '../work/work'
 import { decide } from '../agents/ingest'
-import { AgentError, changeFolder, compactSession, createAgent, deleteAgent, interrupt, restartAgent, sendPrompt, setMode, revokeFolder, randomStyle, grantFolder, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
+import { AgentError, changeFolder, compactSession, createAgent, deleteAgent, interrupt, restartAgent, sendChat, setMode, revokeFolder, randomStyle, grantFolder, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
 import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime, runtimeOf, sideRuntimeOf, clearPendingFor } from '../agents/registry'
 import type { Runtime } from '../agents/state'
 import { readChat } from '../agents/transcripts'
@@ -97,7 +97,8 @@ agentRoutes.post('/agents/:id/prompt', async (c) => {
   const onTask = key ? tasksRepo.active().some((t) => t.agentId === id && t.sessionKey === key && t.status === 'in_progress') : active.has(id)
   const joined = join === true && rt.status === 'working' && !onTask
   if (joined) await interrupt(id, key)
-  await sendPrompt(id, message, key)
+  // only "sent" once Claude Code took it: else the owner sees why, with their text back in the box
+  await sendChat(id, message, key)
   return c.json({ ok: true, joined })
 })
 

@@ -775,6 +775,33 @@ export async function sendPrompt(id: string, text: string, key = '') {
   await typeIntoSession(id, text, key)
 }
 
+/** How long a chat message may take to be taken (its UserPromptSubmit hook), and how often to look. */
+export const chatTiming = { confirmMs: 8000, pollMs: 250 }
+
+/**
+ * The owner's chat message: typed in like any prompt, and only "sent" once Claude Code took it. Typing into a screen
+ * that isn't at its message box (a menu, a dialog, a crashed CLI) loses the text silently: the owner gets an error
+ * (their text back in the box) instead of a message that never arrives.
+ */
+export async function sendChat(id: string, text: string, key = '') {
+  const before = rtOf(id, key).lastEventAt
+  await sendPrompt(id, text, key)
+  const until = Date.now() + chatTiming.confirmMs
+  while (Date.now() < until) {
+    const rt = rtOf(id, key)
+    if (rt.lastEventAt > before || rt.status === 'working') return
+    await Bun.sleep(chatTiming.pollMs)
+  }
+  // no hook (they can be late or lost): the screen says whether it went in
+  const { session } = await requireLive(id, key)
+  const screen = await tmux.capture(session).catch(() => '')
+  const probe = text.trim().split('\n')[0].slice(0, 24)
+  const box = inputBoxText(screen)
+  if (box && !box.includes(probe) && screen.includes(probe)) return
+  if (parseDialogOptions(screen).length) throw new AgentError('It has a question or menu open, so the message did not go in. Answer it first (For you), then send again.', 409)
+  throw new AgentError("The message did not reach it (its screen isn't at the message box). Try again in a moment; if it keeps happening, restart the agent.", 409)
+}
+
 async function typeIntoSession(id: string, text: string, key = '') {
   const { session } = await requireLive(id, key)
   const body = text.trim()
