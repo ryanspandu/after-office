@@ -22,7 +22,7 @@ const key = (agentId: string) => `agentSecrets:${agentId}`
 const MAX = 40
 const NAME = /^[A-Z][A-Z0-9_]{1,63}$/
 /** what the office itself sets or relies on: not overridable from here */
-const RESERVED = /^(AO_|CLAUDE|ANTHROPIC_|GIT_|SSH_|TMUX|PATH$|HOME$|USER$|SHELL$|LANG$|LC_|LD_|DYLD_|NODE_OPTIONS$|TERM$|PWD$)/
+const RESERVED = /^(AO_|RESIDENTIAL_PROXY_|CLAUDE|ANTHROPIC_|GIT_|SSH_|TMUX|PATH$|HOME$|USER$|SHELL$|LANG$|LC_|LD_|DYLD_|NODE_OPTIONS$|TERM$|PWD$)/
 
 const serverKey = () => {
   const s = process.env.SESSION_SECRET

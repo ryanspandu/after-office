@@ -22,6 +22,11 @@ const BODIES: Record<RulePackId, string> = {
 - Tokens the owner set for you (Overview → Secrets) are environment variables of your session (e.g. \`EXPO_TOKEN\`,
   \`RAILWAY_TOKEN\`): the tools that use them read them on their own. Never print, log, echo or commit their values,
   and never paste them into files or messages. One you need and don't have: ask the owner to add it there.
+- Scraping, or a site that blocks or limits a server's IP: if the owner set a residential proxy (Office settings), it
+  is in \`RESIDENTIAL_PROXY_URL\` (and \`RESIDENTIAL_PROXY_HOST\`, \`_PORT\`, \`_USERNAME\`, \`_PASSWORD\`), e.g.
+  \`curl -x "$RESIDENTIAL_PROXY_URL" …\`, or Playwright's \`proxy: { server, username, password }\`. Use it per request or
+  per tool; never export it as \`HTTP_PROXY\`/\`HTTPS_PROXY\`/\`ALL_PROXY\` for your whole session, and never print it.
+  It costs per GB: only for what needs it. Not set: ask the owner.
 - Stuck or unsure? Ask instead of guessing. Never publish, deploy, delete data or spend money without the owner's
   approval.`,
   engineering: `## Software engineering

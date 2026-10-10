@@ -23,6 +23,7 @@ import { taskFolder, addComment, endParallelSession, deliver, deliverToManager, 
 import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
 import { lockTerminals, requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
+import { proxyInfo, putProxy, removeProxy, testProxy } from '../agents/proxy'
 import { endShell, openShell, shellRunning, shellTarget } from '../work/shells'
 import { emptyTrash, listTrash, purgeTrash, restoreTrash, trashEntries } from '../work/trash'
 
@@ -677,6 +678,15 @@ workRoutes.post('/automation/test', async (c) => {
   if (!results.length) throw bad('No notification channel is set up on the server yet (see .env.example)')
   return c.json({ results })
 })
+
+// ── the residential proxy (Office settings): the agents' sessions get it as RESIDENTIAL_PROXY_URL (agents/proxy.ts) ──
+workRoutes.get('/proxy', (c) => c.json({ proxy: proxyInfo() }))
+workRoutes.put('/proxy', async (c) => c.json({ proxy: putProxy((await c.req.json().catch(() => ({}))) as Record<string, unknown>) }))
+workRoutes.delete('/proxy', (c) => {
+  removeProxy()
+  return c.json({ ok: true })
+})
+workRoutes.post('/proxy/test', async (c) => c.json(await testProxy()))
 
 // ── settings ──
 workRoutes.put('/settings', async (c) => {
