@@ -12,6 +12,7 @@ import { requestHire } from './work/hires'
 import { bossMode, countBoss } from './work/settings'
 import { logSystem, noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
+import { isAsleep, isWaking, wakeAgent } from './agents/sleep'
 import { jobNamed } from './work/jobs'
 import { statusLabel } from './work/statuses'
 import { stopActiveTask, markTask, isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, retagReports, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker, ownerTask } from './work/work'
@@ -117,7 +118,8 @@ function buildServer(managerId: string, session = '') {
     {
       description:
         'Everyone who works for you, grouped by division (their role): id, name, status (idle = free, working, waiting = ' +
-        'needs the owner, offline = cannot take work), model, folder, what they are doing, queued prompts.',
+        'needs the owner, asleep = stopped to save memory: give them work as usual, they wake up by themselves in ~15 s, ' +
+        'offline = cannot take work), model, folder, what they are doing, queued prompts.',
       inputSchema: {
         division: z.string().optional().describe('only this division (case-insensitive)'),
         onlyActive: z.boolean().optional().describe('leave out offline agents'),
@@ -134,8 +136,8 @@ function buildServer(managerId: string, session = '') {
             id: a.id,
             name: a.name,
             division: divisionOf(a.role),
-            status: rt.status,
-            available: rt.status !== 'offline',
+            status: isAsleep(a.id) ? 'asleep' : rt.status,
+            available: rt.status !== 'offline' || isAsleep(a.id),
             waitingFor: rt.waitingFor,
             model: rt.modelName ?? a.model,
             effort: a.effort ?? 'default',
@@ -217,7 +219,9 @@ function buildServer(managerId: string, session = '') {
             : out.result === 'parallel'
               ? 'the agent was busy: started now in a parallel session of theirs (it closes when the task is done)'
             : out.result === 'queued'
-              ? 'queued until the agent is free'
+              ? isWaking(target.id)
+                ? 'the agent was asleep: waking up now (about 15 s), then it starts'
+                : 'queued until the agent is free'
               : out.result === 'waiting'
                 ? `waits for: ${out.waitingFor.join(', ')}; starts on its own when they are finished${parallel ? ` (in a parallel session if ${target.name} is busy then)` : ` (queued behind ${target.name}'s other work if they are busy then; pass parallel: true to run it next to it)`}`
                 : out.result === 'approval'
@@ -351,6 +355,11 @@ function buildServer(managerId: string, session = '') {
         // injection guard (as for message_agent): right after an agent's report, no stopping an agent mid-work
         if (now && isReadingAgentOutput(managerId) && !bossMode())
           return fail(new Error("Right after an agent's report, restarting an agent mid-work is off. Leave out `now` (it restarts once idle), or tell the owner."))
+        if (isAsleep(target.id)) {
+          lastRestart.set(target.id, Date.now())
+          await wakeAgent(target.id, `the manager: ${reason}`)
+          return text(`${target.name} was asleep; waking up now (conversation kept).`)
+        }
         const status = runtimeOf(target.id).status
         if (status === 'offline') {
           lastRestart.set(target.id, Date.now())

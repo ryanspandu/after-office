@@ -4,6 +4,7 @@ import { agentsRepo, commentsRepo, queueRepo, tasksRepo } from '../db'
 import { cleanFolder } from './folders'
 import { AgentError } from '../agents/manager'
 import { addPending, getPending, publish, resolvePending, runtimeOf } from '../agents/registry'
+import { isAsleep } from '../agents/sleep'
 import { bossMode, countBoss, officeSettings } from './settings'
 import { addComment, deliver, deliverToManager, isReadingAgentOutput, isReportedNow, endParallelSession, mainBusy, makesCycle, markTask, parallelBlocker, PARALLEL_NOTE, startParallel, publishWork, quotaPause, startTask, tickTasks, waitingOn } from './work'
 import { managerOrigin } from './origin'
@@ -43,7 +44,7 @@ export async function delegateTask(managerId: string, input: DelegateInput) {
   const target = agentsRepo.get(input.agent)
   if (!target) throw new AgentError(`No agent with id ${input.agent}; call list_agents for ids`, 404)
   if (target.id === managerId) throw new AgentError('Delegate to another agent, not yourself')
-  if (runtimeOf(target.id).status === 'offline') throw new AgentError(`${target.name} is offline right now`, 409)
+  if (runtimeOf(target.id).status === 'offline' && !isAsleep(target.id)) throw new AgentError(`${target.name} is offline right now`, 409)
   if (queueRepo.countFor(target.id) >= MAX_QUEUED_PER_AGENT)
     throw new AgentError(`${target.name} already has ${MAX_QUEUED_PER_AGENT} prompts waiting; wait for reports first`, 409)
   const task: OfficeTask = {
@@ -205,7 +206,7 @@ export async function assignTask(managerId: string, taskId: string, agentId: str
   if (task.status !== 'todo') throw new AgentError(`"${task.title}" is already ${task.status}`, 409)
   const target = agentsRepo.get(agentId)
   if (!target || target.id === managerId) throw new AgentError('Pick another agent', 404)
-  if (runtimeOf(target.id).status === 'offline') throw new AgentError(`${target.name} is offline right now`, 409)
+  if (runtimeOf(target.id).status === 'offline' && !isAsleep(target.id)) throw new AgentError(`${target.name} is offline right now`, 409)
   markTask(taskId, { agentId: target.id, autoStart: true, autoStartedAt: undefined })
   addComment({ taskId, author: 'manager', agentId: managerId, text: `${agentsRepo.get(managerId)?.name ?? 'The manager'} gave this to ${target.name}.` })
   publish({ type: 'briefing', from: managerId, to: target.id, title: task.title })

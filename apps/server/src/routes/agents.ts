@@ -18,6 +18,7 @@ import { readProfile, writeProfile, type ProfileDoc } from '../agents/profile'
 import { accountSkill, accountSkillList } from '../agents/accountSkills'
 import { agentFile, agentFiles, fileResponse } from '../agents/files'
 import { tmux } from '../agents/tmux'
+import { isAsleep, sleepAgent, untilAwake, wakeAgent } from '../agents/sleep'
 import { restartAgentServer, restartWhenIdle } from '../agents/reconciler'
 import { listSecrets, putSecret, removeSecret } from '../agents/secrets'
 import { applyRules, cleanPacks, rulesIn } from '../agents/rules'
@@ -68,6 +69,11 @@ agentRoutes.post('/agents/:id/prompt', async (c) => {
   const { text, uploads, folder: folderIn, tags, join } = await c.req.json<{ text: string; uploads?: unknown; folder?: unknown; tags?: unknown; join?: unknown }>()
   // ?session=s2: one of its side sessions (unset: its main session)
   const key = sessionKeyOf(c.req.query('session'))
+  // asleep: it wakes up first (about 5–15 s) and the message goes in once it's at its prompt
+  if (!key && isAsleep(c.req.param('id'))) {
+    await wakeAgent(c.req.param('id'), 'the owner sent a message')
+    if (!(await untilAwake(c.req.param('id')))) throw new AgentError('It is still waking up: send it again in a moment', 409)
+  }
   // the folder and tags picked above the message box (optional): a block after the owner's words (work/chatContext.ts)
   const ctx = cleanChatContext(folderIn, tags)
   // attached files (staged by /uploads): moved into the agent's folder now, listed at the end of the message
@@ -166,6 +172,17 @@ agentRoutes.delete('/agents/:id/dirs', async (c) => {
   return c.json(toInfo(await revokeFolder(c.req.param('id'), b.dir)))
 })
 agentRoutes.post('/agents/:id/restart', async (c) => c.json(toInfo(await restartAgent(c.req.param('id')))))
+
+// Sleep: its sessions stop (memory comes back, conversations kept); work for it wakes it up again (agents/sleep.ts)
+agentRoutes.post('/agents/:id/sleep', async (c) => {
+  await sleepAgent(c.req.param('id'))
+  return c.json({ ok: true })
+})
+agentRoutes.post('/agents/:id/wake', async (c) => {
+  if (!agentsRepo.get(c.req.param('id'))) throw new AgentError('No such agent', 404)
+  await wakeAgent(c.req.param('id'), 'woken by the owner')
+  return c.json({ ok: true })
+})
 
 // its git identities and SSH keys (Overview → Git). Its session reads its own gitconfig on every git run, so a change
 // applies at once; a session started before it had one is restarted once it's idle (conversation kept).
@@ -279,7 +296,11 @@ agentRoutes.post('/agents/:id/interrupt', async (c) => {
 })
 
 // ── side sessions: more chats with the same agent, each its own Claude Code process (agents/manager.ts) ──
-agentRoutes.post('/agents/:id/sessions', async (c) => c.json({ key: await openSideSession(c.req.param('id')) }))
+agentRoutes.post('/agents/:id/sessions', async (c) => {
+  // asleep: a new session wakes it (it's back in use)
+  await wakeAgent(c.req.param('id'), 'the owner opened a new session')
+  return c.json({ key: await openSideSession(c.req.param('id')) })
+})
 // closing stops its process; the conversation stays, to open again
 agentRoutes.delete('/agents/:id/sessions/:key', async (c) => {
   await closeSideSession(c.req.param('id'), c.req.param('key'))
@@ -290,7 +311,10 @@ agentRoutes.put('/agents/:id/sessions/:key', async (c) => {
   renameSideSession(c.req.param('id'), c.req.param('key'), typeof b.name === 'string' ? b.name : '')
   return c.json({ ok: true })
 })
-agentRoutes.post('/agents/:id/sessions/:key/reopen', async (c) => c.json({ key: await reopenSideSession(c.req.param('id'), c.req.param('key')) }))
+agentRoutes.post('/agents/:id/sessions/:key/reopen', async (c) => {
+  await wakeAgent(c.req.param('id'), 'the owner opened a session again')
+  return c.json({ key: await reopenSideSession(c.req.param('id'), c.req.param('key')) })
+})
 agentRoutes.delete('/agents/:id/sessions/:key/forget', (c) => {
   forgetSideSession(c.req.param('id'), c.req.param('key'))
   return c.json({ ok: true })

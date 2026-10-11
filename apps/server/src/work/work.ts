@@ -10,6 +10,7 @@ import { snapshot } from './git'
 import { channelNames, notify } from '../notify'
 import { bossMode, bossModeState, officeSettings } from './settings'
 import { tmux } from '../agents/tmux'
+import { isAsleep, wakeAgent } from '../agents/sleep'
 import { transcriptPath, unwrapPaste } from '../agents/transcripts'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
 import { listTags } from './tags'
@@ -223,6 +224,8 @@ export async function deliver(agentId: string, text: string, opts: { clearFirst?
   }
   queueRepo.add({ id: crypto.randomUUID(), agent_id: agentId, text, clear_first: opts.clearFirst ? 1 : 0, task_id: opts.taskId ?? null, cron_id: opts.cronId ?? null })
   publishWork('queued')
+  // asleep: it wakes up (about 5–15 s) and the queue sends this once it's at its prompt
+  if (isAsleep(agentId)) void wakeAgent(agentId, opts.taskId ? 'a task came in' : opts.cronId ? 'a daily job came in' : 'a message came in')
   return 'queued' as const
 }
 

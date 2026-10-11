@@ -1,5 +1,6 @@
-/** What an agent is doing right now. Derived from Claude Code hooks (never from an LLM). */
-export type AgentStatus = 'working' | 'waiting' | 'idle' | 'meeting' | 'offline'
+/** What an agent is doing right now. Derived from Claude Code hooks (never from an LLM). `asleep`: put to sleep (its
+ *  session stopped to free memory, conversation kept); it wakes up by itself when work comes in. */
+export type AgentStatus = 'working' | 'waiting' | 'idle' | 'meeting' | 'offline' | 'asleep'
 
 /** Claude Code permission modes, as reported in hook payloads (`permission_mode`). */
 export type LiveMode = 'default' | 'acceptEdits' | 'plan' | 'auto' | 'bypassPermissions' | 'dontAsk'
@@ -82,6 +83,8 @@ export interface AgentInfo {
   /** pinned to the top of the agents list (on every device) */
   pinned?: boolean
   status: AgentStatus
+  /** put to sleep at (ms), while `status` is asleep */
+  asleepAt?: number
   /** Short description of the current task (last prompt / todo). */
   task?: string
   /** Last tool used, e.g. Edit, Bash, Read. */
@@ -549,6 +552,9 @@ export interface OfficeSettings {
   autoAssign: boolean
   /** extra sessions an agent may open for a parallel task while it's busy (0: off; tasks wait in its queue) */
   parallelSessions: number
+  /** minutes an agent may sit idle before it's put to sleep (its session stops, memory comes back; it wakes up by
+   *  itself when work comes in). 0: never. Not the manager. */
+  autoSleepMinutes: number
   /** the manager sums up the day in one note, at `time` (HH:MM, office timezone); skipped on a day with nothing */
   dailySummary: { enabled: boolean; time: string }
 }

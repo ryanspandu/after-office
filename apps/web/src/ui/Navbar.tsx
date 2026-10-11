@@ -49,7 +49,7 @@ export function Navbar() {
     return { input, output, total: input + output }
   }, [usage, from, to])
 
-  const online = agents.filter((a) => a.status !== 'offline').length
+  const online = agents.filter((a) => a.status !== 'offline' && a.status !== 'asleep').length
   const busy = agents.filter((a) => a.status === 'working' || a.status === 'waiting' || a.status === 'meeting').length
   // nothing measured yet (first moments in live mode): dashes, not a jump from 0
   const measured = metrics.memTotalGb > 0

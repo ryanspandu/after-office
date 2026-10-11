@@ -3,6 +3,7 @@ import type { OfficeTask } from '@after-office/shared'
 import { agentsRepo, queueRepo, sideSessionsRepo, tasksRepo } from '../db'
 import { closeSideSession, grantFolder, interrupt, openSideSession, renameSideSession, sendPrompt } from '../agents/manager'
 import { runtimeOf, sideRuntimeOf } from '../agents/registry'
+import { isAsleep } from '../agents/sleep'
 import { officeSettings } from './settings'
 import { active, addComment, fileReport, markTask, taskFolder, tickTasks, type WorkRef } from './work'
 import { checkFor, runGate } from './gate'
@@ -49,7 +50,7 @@ export function parallelBlocker(task: OfficeTask, agentId: string): string | nul
 }
 
 /** Is the agent's main session busy (working, or with prompts waiting)? */
-export const mainBusy = (agentId: string) => runtimeOf(agentId).status !== 'idle' || queueRepo.countFor(agentId) > 0
+export const mainBusy = (agentId: string) => !isAsleep(agentId) && (runtimeOf(agentId).status !== 'idle' || queueRepo.countFor(agentId) > 0)
 
 /** Wait for a new side session to be ready for a prompt (its SessionStart hook reported in). */
 async function ready(agentId: string, key: string, timeoutMs = 60_000) {

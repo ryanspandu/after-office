@@ -137,7 +137,9 @@ export function toInfo(row: AgentRow, rt = runtimeOf(row.id)): AgentInfo {
     cwd: row.cwd,
     ...(extraDirs.length ? { extraDirs } : {}),
     tmuxSession: row.tmux_session,
-    status: rt.status,
+    // put to sleep (agents/sleep.ts): its session is stopped on purpose, not lost
+    status: row.asleep_at ? 'asleep' : rt.status,
+    ...(row.asleep_at ? { asleepAt: row.asleep_at } : {}),
     waitingFor: rt.waitingFor,
     task: rt.task,
     tool: rt.tool,

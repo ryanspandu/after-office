@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { folderMenuHandler } from './FolderMenu'
 import { LuChevronRight, LuFile, LuFileImage, LuFileText, LuFolder, LuLink, LuLoader } from 'react-icons/lu'
 import type { FolderListing } from '@after-office/shared'
 import { api } from '../state/auth'
@@ -102,7 +103,8 @@ function TreeDir({ root, rel, name, depth, projectAt, pick, onOpenDir }: { root:
   const project = pick ? undefined : projectAt?.(`${root}/${rel}`)
   return (
     <li>
-      <div className="tree__row tree__dir" style={{ ['--depth' as string]: depth }}>
+      {/* right-click: open, rename, move to trash (not in the folder picker) */}
+      <div className="tree__row tree__dir" style={{ ['--depth' as string]: depth }} onContextMenu={pick ? undefined : folderMenuHandler(root, rel, name)}>
         <Chevron open={open} onClick={() => tree.toggle(key)} label={name} />
         <button className="tree__open" onClick={() => (project ? project.open() : onOpenDir ? onOpenDir(`${root}/${rel}`) : tree.toggle(key))}>
           <LuFolder className="tree__icon tree__icon--dir" />

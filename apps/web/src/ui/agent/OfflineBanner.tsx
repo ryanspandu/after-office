@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { LuPower, LuRotateCw, LuTriangleAlert } from 'react-icons/lu'
+import { LuMoon, LuPower, LuRotateCw, LuSun, LuTriangleAlert } from 'react-icons/lu'
 import { liveApi } from '../../state/live'
 import type { OfficeAgent } from '../../state/store'
 import { confirm } from '../Confirm'
@@ -67,6 +67,39 @@ export function OfflineBanner({ agent }: { agent: OfficeAgent }) {
             <LuRotateCw className={busy === 'all' ? 'spin' : ''} /> Restart all agents
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+/** Put to sleep (its session stopped to free memory): a message wakes it up, or the owner does here. */
+export function AsleepBanner({ agent }: { agent: OfficeAgent }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const wake = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await liveApi.wake(agent.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not wake it')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="offline-banner" role="status">
+      <span className="offline-banner__icon">
+        <LuMoon />
+      </span>
+      <div className="offline-banner__text">
+        <b>{agent.name} is asleep.</b> Its session is stopped to save memory; the conversation is kept. A message or a task wakes it up (about 15 s).
+        {error && <span className="danger-text"> {error}</span>}
+      </div>
+      <div className="offline-banner__actions">
+        <button className="small" disabled={busy} onClick={wake}>
+          <LuSun className={busy ? 'spin' : ''} /> Wake up
+        </button>
       </div>
     </div>
   )

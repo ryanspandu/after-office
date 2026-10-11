@@ -23,7 +23,7 @@ import { Attachments, useAgentFiles } from '../Attachments'
 import { FileLinksProvider } from '../fileLinks'
 import { OutgoingFiles, PendingTray, splitAttachments, usePendingFiles, type Pending } from './chatAttachments'
 import { tip } from '../Tooltip'
-import { OfflineBanner } from './OfflineBanner'
+import { AsleepBanner, OfflineBanner } from './OfflineBanner'
 import { ChatContextBar, ContextChips, splitContext, useChatContext } from './chatContext'
 import { SessionTabs } from './SessionTabs'
 import { setUrl, useUrl } from '../../state/url'
@@ -673,6 +673,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
       </div>
 
       {offline && (session ? <div className="chat__notice">Starting the session…</div> : <OfflineBanner agent={agent} />)}
+      {agent.status === 'asleep' && !session && <AsleepBanner agent={agent} />}
       {error && <div className="chat__error">{error}</div>}
       {!error && notice && agent.status === 'waiting' && <div className="chat__notice">{notice}</div>}
       {compacting && (
@@ -746,7 +747,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
         <ComposerBox
           ref={composer}
           draftKey={`${agent.id}:${session}`}
-          placeholder={offline ? (session ? 'The session is starting…' : 'The agent is offline') : compacting ? `${agent.name} is compacting the conversation… you can write, and send when it's done` : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
+          placeholder={offline ? (session ? 'The session is starting…' : 'The agent is offline') : compacting ? `${agent.name} is compacting the conversation… you can write, and send when it's done` : agent.status === 'asleep' ? `Message ${agent.name}… (it wakes up first, about 15 s)` : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
           disabled={offline}
           enterSends={!mobile}
           onSubmit={() => void send()}
@@ -820,6 +821,7 @@ function ComposerMenu({ disabled, contextActive, contextOpen, onAttach, onContex
 
 function statusText(a: OfficeAgent) {
   if (a.status === 'offline') return 'Offline'
+  if (a.status === 'asleep') return 'Asleep · a message wakes it up'
   if (a.status === 'waiting') return a.waitingFor === 'plan' ? 'Plan ready for review' : a.waitingFor === 'question' ? 'Asking you a question' : 'Waiting for permission'
   if (a.status === 'working') return a.tool ? `Working · ${a.tool}` : 'Working'
   return a.costUsd != null ? `Idle · $${a.costUsd.toFixed(2)} this session` : 'Idle'

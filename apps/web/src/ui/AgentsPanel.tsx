@@ -20,10 +20,12 @@ import {
   LuSearch,
   LuX,
   LuEllipsis,
+  LuMoon,
+  LuSun,
 } from 'react-icons/lu'
 import type { AgentStatus, LiveMode } from '@after-office/shared'
 import { liveApi, useLive } from '../state/live'
-import { unreadOf, useOffice, type OfficeAgent, avatarStyle } from '../state/store'
+import { isAway, unreadOf, useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { ReportsPanel } from './Reports'
 import { idleText, waitingLabel } from './agentActivity'
 import { useDashboard } from '../state/dashboard'
@@ -39,6 +41,7 @@ export const STATUS_META: Record<AgentStatus, { label: string; icon: ReactNode }
   idle: { label: 'Idle', icon: <LuCoffee /> },
   meeting: { label: 'Meeting', icon: <LuUsers /> },
   offline: { label: 'Offline', icon: <LuPowerOff /> },
+  asleep: { label: 'Asleep', icon: <LuMoon /> },
 }
 const STAT_STATUSES: AgentStatus[] = ['working', 'waiting', 'idle', 'meeting']
 
@@ -273,7 +276,7 @@ function AgentRow({
   // one click on the card opens its chat (its profile in the demo); the rest is in the ⋯ menu under the avatar.
   // Phones: a tap on the card does nothing (it's easy to hit while scrolling); the chat button under the status opens it.
   return (
-    <li data-flip={a.id} className={`row agent${selected ? ' row--selected' : ''}${a.status === 'offline' ? ' row--off' : ''}`} onClick={phone ? undefined : onProfile}>
+    <li data-flip={a.id} className={`row agent${selected ? ' row--selected' : ''}${isAway(a.status) ? ' row--off' : ''}`} onClick={phone ? undefined : onProfile}>
       <div className="agent__side">
         <span className="avatar" style={avatarStyle(a.look.shirt)} aria-hidden>
           {a.name[0]}
@@ -293,10 +296,18 @@ function AgentRow({
               run: onProfile,
             },
             // the camera goes to it in the office and follows it (a phone's Agents sheet makes way)
-            ...(a.status !== 'offline'
+            ...(!isAway(a.status)
               ? [{ key: 'map', icon: <LuLocateFixed />, label: 'Show on map', run: () => (useOffice.getState().select(a.id), setUrl({ sheet: null })) }]
               : []),
-            ...(live ? [{ key: 'restart', icon: <LuRotateCw />, label: 'Restart session', hint: 'keeps the conversation', run: () => act('restart', () => liveApi.restart(a.id)) }] : []),
+            ...(live && a.status === 'asleep'
+              ? [{ key: 'wake', icon: <LuSun />, label: 'Wake up', hint: 'ready in about 15 s', run: () => act('wake', () => liveApi.wake(a.id)) }]
+              : live
+                ? [{ key: 'restart', icon: <LuRotateCw />, label: 'Restart session', hint: 'keeps the conversation', run: () => act('restart', () => liveApi.restart(a.id)) }]
+                : []),
+            // its session stops so its memory comes back; work for it wakes it up again. Not the manager.
+            ...(live && a.kind !== 'manager' && !isAway(a.status)
+              ? [{ key: 'sleep', icon: <LuMoon />, label: 'Put to sleep', hint: 'frees its memory; work wakes it', run: () => act('sleep', () => liveApi.sleep(a.id)) }]
+              : []),
             { key: 'pin', icon: a.pinned ? <LuPinOff /> : <LuPin />, label: a.pinned ? 'Unpin' : 'Pin to the top', run: onPin },
             { key: 'remove', icon: <LuTrash2 />, label: 'Remove agent', danger: true, run: () => void removeAgent() },
           ]}
@@ -331,7 +342,13 @@ function AgentRow({
         )}
         <div className="row__meta truncate">
           {a.tool && a.status !== 'idle' && <code>{a.tool}</code>}
-          {a.status === 'idle' ? (live ? a.lastMessage ?? idleText(a.spotId) : idleText(a.spotId)) : (a.task ?? running ?? '—')}
+          {a.status === 'asleep'
+            ? 'Asleep to save memory · work for it wakes it up'
+            : a.status === 'idle'
+              ? live
+                ? (a.lastMessage ?? idleText(a.spotId))
+                : idleText(a.spotId)
+              : (a.task ?? running ?? '—')}
         </div>
         {live && liveMeta && <div className="row__mono truncate">{liveMeta}</div>}
         {error && <div className="row__error">{error}</div>}

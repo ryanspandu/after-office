@@ -59,6 +59,8 @@ export async function reconcile() {
   for (const row of agentsRepo.all()) {
     // being created: its session is on its way (starting it here too would make that fail)
     if (starting.has(row.id)) continue
+    // asleep (agents/sleep.ts): stopped on purpose until work wakes it
+    if (row.asleep_at) continue
     const rt = runtimeOf(row.id)
     if (alive.has(row.tmux_session)) {
       if (!tidied.has(row.tmux_session)) {
@@ -210,6 +212,10 @@ export function startBackgroundJobs() {
   setTimeout(safe(connectors), 15_000)
   setInterval(safe(connectors), 30 * 60_000)
   setInterval(safe(() => tickAll()), 30_000)
+  // agents idle for longer than Office settings allow go to sleep (their memory comes back)
+  const sleepy = () =>
+    Promise.all([import('./sleep'), import('../work/settings')]).then(([s, o]) => s.autoSleep(o.officeSettings().autoSleepMinutes))
+  setInterval(safe(sleepy), 60_000)
   // the office's hooks in every agent's folder: put back (and reported) if an agent changed them
   setInterval(safe(checkHooks), 60_000)
   // chat attachments never sent (page closed mid-message): cleared after a day

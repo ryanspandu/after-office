@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { MapControls, PerformanceMonitor } from '@react-three/drei'
 import { MathUtils, Spherical, Vector3 } from 'three'
 import { agentWorld, useView } from './focus'
-import { useOffice } from '../state/store'
+import { isAway, useOffice } from '../state/store'
 import { Agent } from './Agent'
 import { Cat } from './Cat'
 import { DayNight } from './DayNight'
@@ -15,7 +15,7 @@ import { MeetingRoom } from './furniture/MeetingRoom'
 import { Pantry } from './furniture/Pantry'
 import { Parking } from './Parking'
 import { Workstation } from './furniture/Workstation'
-import { openPlanCenter } from './layout'
+import { MEETING, openPlanCenter } from './layout'
 import { BossOffice } from './furniture/BossOffice'
 import { useQuality, useRenderConfig } from './quality'
 import { useLayout } from './useLayout'
@@ -111,7 +111,6 @@ export function Office() {
         minPolarAngle={MIN_POLAR}
         maxPolarAngle={MAX_POLAR}
         rotateSpeed={0.6}
-        target={center(layout)}
       />
       <FocusCamera />
       <NudgeCamera />
@@ -134,7 +133,7 @@ export function Office() {
       {/* one list keyed by id, so a removed agent keeps its component (and position) while it walks out. The
           generation changes when an agent comes back after leaving, so it mounts fresh instead of reusing the
           component that already walked away. */}
-      {[...agents.filter((a) => a.status !== 'offline' || a.lingering), ...departing].map((a) => (
+      {[...agents.filter((a) => !isAway(a.status) || a.lingering), ...departing].map((a) => (
         <Agent key={`${a.id}:${a.gen ?? 0}`} agent={a} leaving={departing.includes(a)} />
       ))}
     </Canvas>
@@ -150,16 +149,21 @@ function bounds(layout: Layout) {
   return { minX, maxX, minZ, maxZ }
 }
 
-/** Where the camera looks to start with: the open plan, where the agents work (the rest is a pan or a zoom away). */
-function center(layout: Layout): [number, number, number] {
+/**
+ * Where the camera looks to start with. A wide screen: the open plan, a little towards the back wall and the manager's
+ * office (the sign on the wall and the manager in view). A phone: the corner by the meeting room's glass, between the
+ * open plan's last desks and the TV lounge (the sign above; it stays put when the open plan grows to the left).
+ */
+function center(layout: Layout, wide = false): [number, number, number] {
   const [x, z] = openPlanCenter(layout)
-  return [x, 0, z + 0.5]
+  return wide ? [x - 2, 0, z - 1.5] : [MEETING.bounds.minX - 0.5, 0, -0.3]
 }
 
 /** How much of the office the start view shows across the stage, in metres: close, the people big enough to read. */
-const START_SPAN = { wide: 12, tall: 8 }
-/** The start view's angle from straight down (radians): low, looking across the room rather than down onto it. */
-const START_POLAR = 1.15
+const START_SPAN = { wide: 22, tall: 8 }
+/** The start view's angle from straight down (radians): looking across the room rather than down onto it; a little
+ *  higher on a wide screen (the whole floor in view), lower on a phone (close on the desks). */
+const START_POLAR = { wide: 1.02, tall: 1.15 }
 const START_DIST = 30
 
 /** Zoom so the whole scene fits and keep the camera on the isometric diagonal from its center. */
@@ -170,22 +174,24 @@ function FitCamera({ layout }: { layout: Layout }) {
   // Refit on a new layout or a real change of width (a rotated phone, a resized window), never on height alone: on a
   // phone the height changes all the time (the keyboard of a modal's field, the browser bar, a sheet) and refitting
   // then threw away the owner's pan and zoom. A stage hidden or collapsed for a moment (a few px) is ignored too.
-  const last = useRef<{ w: number; key: string; reset: number } | null>(null)
+  const last = useRef<{ w: number; key: string; reset: number; controls: boolean } | null>(null)
   // "back to the whole office" (the view button): the start view again, whatever was turned or zoomed
   const resetAt = useView((s) => s.resetAt)
   useEffect(() => {
     if (size.width < 80 || size.height < 80) return
     const key = `${b.minX},${b.maxX},${b.minZ},${b.maxZ}`
     const prev = last.current
-    if (prev && prev.key === key && Math.abs(prev.w - size.width) < 32 && prev.reset === resetAt) return
-    last.current = { w: size.width, key, reset: resetAt }
-    const [cx, , cz] = center(layout)
+    // (and once more when the controls arrive: fitted before them, they'd keep looking at the origin)
+    if (prev && prev.key === key && Math.abs(prev.w - size.width) < 32 && prev.reset === resetAt && prev.controls === !!controls) return
+    last.current = { w: size.width, key, reset: resetAt, controls: !!controls }
     // close in on the desks: about START_SPAN metres across (fewer on a phone held upright)
     const portrait = size.height > size.width * 1.2
+    const [cx, , cz] = center(layout, !portrait)
     camera.zoom = MathUtils.clamp(size.width / (portrait ? START_SPAN.tall : START_SPAN.wide), 20, 140)
     // on the diagonal, low: looking across the room
-    const flat = Math.sin(START_POLAR) * START_DIST * Math.SQRT1_2
-    camera.position.set(cx + flat, Math.cos(START_POLAR) * START_DIST, cz + flat)
+    const polar = portrait ? START_POLAR.tall : START_POLAR.wide
+    const flat = Math.sin(polar) * START_DIST * Math.SQRT1_2
+    camera.position.set(cx + flat, Math.cos(polar) * START_DIST, cz + flat)
     camera.lookAt(cx, 0, cz)
     camera.updateProjectionMatrix()
     // the controls look at their own target: move it with the camera, or the next frame turns the camera from its

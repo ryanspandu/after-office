@@ -25,7 +25,7 @@ export function sessionNames(sessions: Pick<SideSessionInfo, 'key' | 'title' | '
 }
 
 function Dot({ status, waitingFor }: { status: string; waitingFor?: string }) {
-  const tone = status === 'waiting' || waitingFor ? 'waiting' : status === 'working' ? 'working' : status === 'offline' ? 'offline' : 'idle'
+  const tone = status === 'waiting' || waitingFor ? 'waiting' : status === 'working' ? 'working' : status === 'offline' || status === 'asleep' ? 'offline' : 'idle'
   return <i className={`stab__dot stab__dot--${tone}`} />
 }
 

@@ -21,6 +21,7 @@ export function idleText(spotId: string) {
 /** One short line: the tool it's using or its task while it works, what it needs while it waits, its pastime when idle. */
 export function activityOf(a: Pick<OfficeAgent, 'status' | 'waitingFor' | 'tool' | 'task' | 'spotId'>): string {
   if (a.status === 'offline') return 'Offline'
+  if (a.status === 'asleep') return 'Asleep'
   if (a.status === 'waiting') return a.waitingFor ? waitingLabel(a.waitingFor) : 'Needs you'
   if (a.status === 'working' || a.status === 'meeting') {
     if (a.tool) return `Using ${a.tool.replace(/^mcp__[^_]+__/, '').replace(/_/g, ' ')}`

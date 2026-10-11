@@ -137,6 +137,8 @@ if (!hasColumn('agents', 'connectors_read_ask')) db.exec('ALTER TABLE agents ADD
 // per-agent git identity and SSH key (the key itself is a file in the agents' home; these are its public half)
 for (const col of ['git_name', 'git_email', 'ssh_public', 'ssh_fingerprint']) if (!hasColumn('agents', col)) db.exec(`ALTER TABLE agents ADD COLUMN ${col} TEXT`)
 if (!hasColumn('agents', 'pinned')) db.exec('ALTER TABLE agents ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
+// put to sleep (agents/sleep.ts): when; its session isn't started again until it's woken. NULL: awake
+if (!hasColumn('agents', 'asleep_at')) db.exec('ALTER TABLE agents ADD COLUMN asleep_at INTEGER')
 if (!hasColumn('agents', 'extra_dirs')) db.exec("ALTER TABLE agents ADD COLUMN extra_dirs TEXT NOT NULL DEFAULT '[]'")
 db.exec('CREATE INDEX IF NOT EXISTS tasks_updated ON tasks (updated_at)')
 // webhook tokens that can run a cron job (never part of the dashboard's work state)
@@ -213,6 +215,8 @@ export interface AgentRow {
   connectors_write?: string | null
   /** JSON array of the connectors whose reading also asks the owner first (Read off) */
   connectors_read_ask?: string | null
+  /** put to sleep at (ms): its session is stopped and stays so until it's woken (agents/sleep.ts); null: awake */
+  asleep_at?: number | null
   /** name and email its commits carry */
   git_name?: string | null
   git_email?: string | null
@@ -282,7 +286,7 @@ export const agentsRepo = {
         $style: a.style ?? null,
         $effort: a.effort ?? null,
       }),
-  update: (id: string, patch: Partial<Pick<AgentRow, 'model' | 'permission_mode' | 'session_id' | 'name' | 'role' | 'cwd' | 'extra_dirs' | 'figure' | 'connectors' | 'pinned' | 'style' | 'effort' | 'git_name' | 'git_email' | 'ssh_public' | 'ssh_fingerprint' | 'connectors_write' | 'connectors_read_ask'>>) => {
+  update: (id: string, patch: Partial<Pick<AgentRow, 'model' | 'permission_mode' | 'session_id' | 'name' | 'role' | 'cwd' | 'extra_dirs' | 'figure' | 'connectors' | 'pinned' | 'style' | 'effort' | 'git_name' | 'git_email' | 'ssh_public' | 'ssh_fingerprint' | 'connectors_write' | 'connectors_read_ask' | 'asleep_at'>>) => {
     const keys = Object.keys(patch) as (keyof typeof patch)[]
     if (!keys.length) return
     db.query(`UPDATE agents SET ${keys.map((k) => `${k} = $${k}`).join(', ')} WHERE id = $id`).run({

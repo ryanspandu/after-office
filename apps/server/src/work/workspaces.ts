@@ -607,9 +607,30 @@ export function entryIn(root: string, rel: string) {
   return { base, abs, st, rel: parts.join('/') }
 }
 
+/**
+ * An agent works in this folder (it's its own folder, or holds it): renaming or deleting it would pull the floor from
+ * under the agent's session. Refused with who it is.
+ */
+export function guardAgentFolders(abs: string, what: string) {
+  const real = (p: string) => {
+    try {
+      return realpathSync(p)
+    } catch {
+      return p
+    }
+  }
+  const target = real(abs)
+  const agent = agentsRepo.all().find((a) => {
+    const cwd = real(a.cwd)
+    return cwd === target || cwd.startsWith(target + sep)
+  })
+  if (agent) throw new AgentError(`${agent.name} works in ${basename(abs)}: it can't be ${what} (remove the agent, or give it another folder, first)`, 409)
+}
+
 /** Rename a file or folder in place (same folder, a plain new name, never over something that's there). */
 export function renameEntry(root: string, rel: string, name: string) {
   const { abs } = entryIn(root, rel)
+  guardAgentFolders(abs, 'renamed')
   const next = name.trim()
   if (!next || next.startsWith('.') || next.length > 200 || /[/\\\0]/.test(next)) throw new AgentError('Give it a plain name (no slashes, not starting with a dot)')
   const to = join(dirname(abs), next)

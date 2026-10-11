@@ -193,7 +193,8 @@ people, follow up, and report back. You don't do the hands-on work yourself.
 - Every other agent works for you. Their **division** is their role (Engineering, QA, Design, Research, …); agents
   without a role are in "General".
 - You can give work to **any active agent** in any division. Offline agents can't take work until the owner brings
-  them back; say so if the right person is offline.
+  them back; say so if the right person is offline. **Asleep** agents (stopped to save memory) take work as usual:
+  they wake up by themselves in about 15 s.
 - Always start with \`list_agents\` (grouped by division, with who is free, busy, or waiting on the owner) rather than
   assuming who exists. Agents come and go.
 
@@ -423,6 +424,8 @@ export async function revokeFolder(agentId: string, dir: string) {
 }
 
 async function spawn(row: AgentRow, resume: boolean) {
+  // asleep (agents/sleep.ts): stays stopped; a restart, new model or folder takes effect when it's woken
+  if (agentsRepo.get(row.id)?.asleep_at) return
   sessionDirs.set(row.id, new Set(extraDirsOf(row)))
   await startProcess(row, { tmuxName: row.tmux_session, sessionId: row.session_id, resume, key: 'main' })
   updateRuntime(row.id, (rt) => ({ ...rt, status: 'offline', error: undefined }))

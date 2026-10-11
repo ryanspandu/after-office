@@ -329,6 +329,9 @@ export const liveApi = {
   setEffort: (id: string, effort: AgentEffort | null) => call(`/api/agents/${id}/effort`, { effort }),
   changeFolder: (id: string, cwd: string) => call(`/api/agents/${id}/folder`, { cwd }) as Promise<AgentInfo>,
   restart: (id: string) => call(`/api/agents/${id}/restart`, {}),
+  /** stop its sessions (memory back, conversations kept); work for it wakes it again */
+  sleep: (id: string) => call(`/api/agents/${id}/sleep`, {}),
+  wake: (id: string) => call(`/api/agents/${id}/wake`, {}),
   /** who the agent's commits are by ('' clears) */
   setGit: (id: string, git: { name: string; email: string }) => call(`/api/agents/${id}/git`, git, 'PUT'),
   /** an SSH key for the agent's default identity, or for one of its extra identities (only the public half comes back) */
@@ -382,6 +385,7 @@ export const liveApi = {
     quota?: Partial<OfficeSettings['quota']>
     managerApproval?: boolean
     parallelSessions?: number
+    autoSleepMinutes?: number
     dailySummary?: Partial<OfficeSettings['dailySummary']>
     autoAssign?: boolean
   }) => call('/api/automation', patch, 'PUT'),

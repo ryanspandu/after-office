@@ -220,7 +220,7 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
                   key={termSession ?? ''}
                   agentId={agent.id}
                   session={termSession}
-                  offline={termSession ? false : (agent.mainStatus ?? agent.status) === 'offline'}
+                  offline={termSession ? false : ['offline', 'asleep'].includes(agent.mainStatus ?? agent.status)}
                   onRefused={onRefused}
                 />
               )}
@@ -302,7 +302,7 @@ function Overview({ agent, live, draft, set }: { agent: OfficeAgent; live: boole
   const [moving, setMoving] = useState(false)
   const [folder, setFolder] = useState('')
   const [error, setError] = useState('')
-  const offline = agent.status === 'offline'
+  const offline = agent.status === 'offline' || agent.status === 'asleep'
   const run = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(label)
     setError('')

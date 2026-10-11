@@ -12,12 +12,18 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
   managerApproval: false,
   autoAssign: false,
   parallelSessions: 0,
+  autoSleepMinutes: 120,
   dailySummary: { enabled: false, time: '17:00' },
 }
 
 /** Most parallel sessions per agent the owner can allow. */
 export const MAX_PARALLEL_SESSIONS = 10
 const cleanParallel = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(MAX_PARALLEL_SESSIONS, Math.max(0, Math.round(v))) : undefined)
+
+/** Longest idle time before an agent is put to sleep the owner can set (a week); the shortest is 5 minutes (0: never). */
+export const MAX_SLEEP_MINUTES = 7 * 24 * 60
+const cleanSleep = (v: unknown) =>
+  typeof v === 'number' && Number.isFinite(v) ? (v <= 0 ? 0 : Math.min(MAX_SLEEP_MINUTES, Math.max(5, Math.round(v)))) : undefined
 
 const KEY = 'office'
 
@@ -36,6 +42,7 @@ export function officeSettings(): OfficeSettings {
     managerApproval: saved.managerApproval ?? DEFAULT_SETTINGS.managerApproval,
     autoAssign: saved.autoAssign ?? DEFAULT_SETTINGS.autoAssign,
     parallelSessions: cleanParallel(saved.parallelSessions) ?? DEFAULT_SETTINGS.parallelSessions,
+    autoSleepMinutes: cleanSleep(saved.autoSleepMinutes) ?? DEFAULT_SETTINGS.autoSleepMinutes,
     dailySummary: { ...DEFAULT_SETTINGS.dailySummary, ...saved.dailySummary },
   }
 }
@@ -48,6 +55,7 @@ export function updateSettings(patch: {
   autoAssign?: unknown
   notifyDetail?: unknown
   parallelSessions?: unknown
+  autoSleepMinutes?: unknown
   dailySummary?: { enabled?: unknown; time?: unknown }
 }) {
   const cur = officeSettings()
@@ -64,6 +72,7 @@ export function updateSettings(patch: {
     managerApproval: typeof patch.managerApproval === 'boolean' ? patch.managerApproval : cur.managerApproval,
     autoAssign: typeof patch.autoAssign === 'boolean' ? patch.autoAssign : cur.autoAssign,
     parallelSessions: cleanParallel(patch.parallelSessions) ?? cur.parallelSessions,
+    autoSleepMinutes: cleanSleep(patch.autoSleepMinutes) ?? cur.autoSleepMinutes,
     dailySummary: {
       enabled: typeof patch.dailySummary?.enabled === 'boolean' ? patch.dailySummary.enabled : cur.dailySummary.enabled,
       time: typeof patch.dailySummary?.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(patch.dailySummary.time) ? patch.dailySummary.time : cur.dailySummary.time,

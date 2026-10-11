@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { matchesSearch } from './SearchBox'
+import { matchesSearch, SearchBox } from './SearchBox'
 import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen, LuCheck, LuX, LuListTodo, LuFileText, LuFile, LuRotateCcw, LuSquareTerminal, LuNotebookPen, LuMinus } from 'react-icons/lu'
 import { FolderReports } from './Reports'
 import { confirm } from './Confirm'
@@ -22,6 +22,7 @@ import { formatSize } from './Attachments'
 import { StatusPill } from './taskMeta'
 import { Previews } from './Previews'
 import { Chevron, FolderTree, TreeContext, type ProjectAt } from './FolderTree'
+import { FolderMenuLayer, folderMenuHandler } from './FolderMenu'
 import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -56,6 +57,8 @@ export function FoldersTab({ q = '' }: { q?: string }) {
   const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }))
   const agents = useOffice((s) => s.agents)
   const now = useNow(60_000).getTime()
+  // the office's trash (the trash button above the folders)
+  const [trashOpen, setTrashOpen] = useState(false)
   // a folder's details and the new-folder form open in the address bar (ui/UrlModals.tsx)
   const setOpen = (o: Open) => openUrl({ folder: o.folder.path })
   // folders whose agent was removed: shown by default, hideable (remembered in this browser)
@@ -153,6 +156,8 @@ export function FoldersTab({ q = '' }: { q?: string }) {
   return (
     <TreeContext.Provider value={tree}>
       <Previews />
+      <FolderMenuLayer />
+      {trashOpen && <TrashModal onClose={() => setTrashOpen(false)} />}
       <div className="seg ws-tabs" role="tablist">
         <button role="tab" aria-selected={view === 'projects'} className={view === 'projects' ? 'active' : ''} onClick={() => pickView('projects')}>
           Folders
@@ -171,6 +176,9 @@ export function FoldersTab({ q = '' }: { q?: string }) {
         <span className="grow" />
         <button className="icon-btn small" data-tip="New folder" aria-label="New folder" onClick={() => openUrl({ newfolder: '1' })}>
           <LuFolderPlus />
+        </button>
+        <button className="icon-btn small" data-tip="Trash: everything deleted from the folders (restore or delete for good)" aria-label="Trash" onClick={() => setTrashOpen(true)}>
+          <LuTrash2 />
         </button>
         {view === 'projects' && home && (
           <button className="icon-btn small" data-tip={`Open the office folder · ${home.path}`} aria-label="Open the office folder" onClick={() => setOpen({ folder: home, agentIds: home.agentIds })}>
@@ -206,7 +214,7 @@ export function FoldersTab({ q = '' }: { q?: string }) {
                       row={
                         <>
                           <Chevron open={unfolded.has(p.path)} onClick={() => toggleFold(p.path)} label={p.name} />
-                          <FolderRow folder={p} now={now} onOpen={() => setOpen({ folder: p, agentIds: home?.agentIds ?? [] })} />
+                          <FolderRow folder={p} now={now} within={home?.path} onOpen={() => setOpen({ folder: p, agentIds: home?.agentIds ?? [] })} />
                         </>
                       }
                     >
@@ -253,7 +261,7 @@ export function FoldersTab({ q = '' }: { q?: string }) {
                 <ul className="ws__projects">
                   {w.projects.map((p) => (
                     <li key={p.path}>
-                      <FolderRow folder={p} now={now} onOpen={() => setOpen({ folder: p, agentIds: w.agentIds })} />
+                      <FolderRow folder={p} now={now} within={w.path} onOpen={() => setOpen({ folder: p, agentIds: w.agentIds })} />
                     </li>
                   ))}
                 </ul>
@@ -267,10 +275,28 @@ export function FoldersTab({ q = '' }: { q?: string }) {
   )
 }
 
-/** One folder in a list: its name and its git state. */
-function FolderRow({ folder: p, now, onOpen }: { folder: WorkspaceFolder; now: number; onOpen: () => void }) {
+/** A folder's path inside the office folder it's listed in ('' when it is that folder). */
+const relTo = (root: string, abs: string) => (abs.startsWith(`${root}/`) ? abs.slice(root.length + 1) : '')
+
+/** Everything in the office's trash, from every folder: restore, delete for good, empty. */
+function TrashModal({ onClose }: { onClose: () => void }) {
+  const trash = useTrash('')
+  const now = useNow(30_000).getTime()
+  // the folder it came from, short: the home folder as ~ (like everywhere else)
+  const tilde = (p: string) => p.replace(/^(\/private)?\/(Users|home)\/[^/]+/, '~')
   return (
-    <button className="ws-row" onClick={onOpen}>
+    <Modal open onClose={onClose} title="Trash" description="Everything deleted from the office's folders. Kept until you delete it for good or empty the trash." width={620}>
+      <div className="modal__body">
+        <TrashPanel trash={trash} now={now} tilde={tilde} under="" />
+      </div>
+    </Modal>
+  )
+}
+
+/** One folder in a list: its name and its git state. */
+function FolderRow({ folder: p, now, onOpen, within }: { folder: WorkspaceFolder; now: number; onOpen: () => void; within?: string }) {
+  return (
+    <button className="ws-row" onClick={onOpen} onContextMenu={within ? folderMenuHandler(within, relTo(within, p.path), p.name) : undefined}>
       {p.git ? <LuFolderGit2 className="ws-row__icon" /> : <LuFolder className="ws-row__icon" />}
       <span className="ws-row__body">
         <span className="ws-row__name">
@@ -688,6 +714,9 @@ function useTrash(under: string) {
 /** The folder's trash: restore an item where it was, delete it for good, or empty it. */
 function TrashPanel({ trash, now, tilde, under }: { trash: ReturnType<typeof useTrash>; now: number; tilde: (p: string) => string; under: string }) {
   const [busy, setBusy] = useState<string | null>(null)
+  // the office-wide trash: find something by its name or where it came from
+  const [q, setQ] = useState('')
+  const shown = trash.items?.filter((i) => matchesSearch(q, i.name, i.original)) ?? null
   const [error, setError] = useState<string | null>(null)
   const act = async (id: string, fn: () => Promise<Response>) => {
     setBusy(id)
@@ -696,6 +725,8 @@ function TrashPanel({ trash, now, tilde, under }: { trash: ReturnType<typeof use
       const r = await fn()
       if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? 'Failed')
       trash.reload()
+      // a restored folder shows in the folder lists again
+      void useWorkspaces.getState().load(true)
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -708,13 +739,18 @@ function TrashPanel({ trash, now, tilde, under }: { trash: ReturnType<typeof use
   }
   const empty = async () => {
     const n = trash.items?.length ?? 0
-    if (!(await confirm({ title: `Empty the trash of this folder?`, message: `${n} item${n === 1 ? '' : 's'} deleted for good. This can’t be undone.`, confirmLabel: 'Empty trash' }))) return
+    if (!(await confirm({ title: under ? `Empty the trash of this folder?` : 'Empty the whole trash?', message: `${n} item${n === 1 ? '' : 's'} deleted for good. This can’t be undone.`, confirmLabel: 'Empty trash' }))) return
     await act('all', () => api(`/api/trash?${new URLSearchParams({ under })}`, { method: 'DELETE' }))
   }
   return (
     <div className="fd__panel">
       <div className="fd__trash-head">
-        <span className="field__hint">Deleted from this folder. Kept in ~/after-office/.trash (never inside the folder) until you empty it.</span>
+        {/* the office-wide trash window says this in its own description */}
+        {under ? (
+          <span className="field__hint">Deleted from this folder. Kept in ~/after-office/.trash (never inside the folder) until you empty it.</span>
+        ) : (
+          <SearchBox value={q} onChange={setQ} placeholder="Search the trash" className="fd__trash-search" />
+        )}
         <span className="grow" />
         {!!trash.items?.length && (
           <button className="small danger-text" onClick={() => void empty()} disabled={busy === 'all'}>
@@ -727,9 +763,11 @@ function TrashPanel({ trash, now, tilde, under }: { trash: ReturnType<typeof use
         <span className="muted">Loading…</span>
       ) : !trash.items.length ? (
         <span className="muted">The trash is empty.</span>
+      ) : !shown?.length ? (
+        <span className="muted">Nothing in the trash matches.</span>
       ) : (
         <ul className="fd__trash">
-          {trash.items.map((i) => (
+          {shown.map((i) => (
             <li key={i.id}>
               {i.dir ? <LuFolder className="fb__folder" /> : <LuFile className="muted" />}
               <span className="fd__trash-body">

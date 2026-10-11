@@ -2,7 +2,7 @@ import { useCallback, type ReactNode } from 'react'
 import { LuMonitorPlay, LuBookOpen, LuPenLine, LuCat, LuCircleAlert, LuCircleDot, LuClipboardCheck, LuCrown, LuCoffee, LuHeart, LuKeyboard, LuMessageCircle, LuSandwich, LuTv } from 'react-icons/lu'
 import { Vector3, type Camera } from 'three'
 import { useLive } from '../state/live'
-import { useOffice } from '../state/store'
+import { isAway, useOffice } from '../state/store'
 import { activityOf } from '../ui/agentActivity'
 
 // Name tags live in one plain DOM overlay above the canvas. Scene objects move them each frame via
@@ -104,7 +104,7 @@ function CatTag() {
 
 export function LabelLayer() {
   // departing agents keep their tag until they've driven off
-  const ids = useOffice((s) => [...s.agents.filter((a) => a.status !== 'offline'), ...s.departing].map((a) => a.id).join(','))
+  const ids = useOffice((s) => [...s.agents.filter((a) => !isAway(a.status)), ...s.departing].map((a) => a.id).join(','))
   return (
     <div className="labels">
       <CatTag />

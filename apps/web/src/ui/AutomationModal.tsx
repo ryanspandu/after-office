@@ -10,6 +10,7 @@ import { liveApi, useLive } from '../state/live'
 import { useOffice } from '../state/store'
 import { chime, useReplyAlerts } from '../state/replyAlerts'
 import { Modal } from './Modal'
+import { Select } from './Select'
 import { useClock, useNow } from '../state/clock'
 import { chatTime } from './when'
 
@@ -60,6 +61,70 @@ function ParallelLimit({ value, onChange }: { value: number; onChange: (n: numbe
   )
 }
 const MAX_PARALLEL = 10
+
+/** How long an agent may sit idle before it's put to sleep: a few common times, or any hours and minutes. */
+const SLEEP_PRESETS = [60, 120, 240, 480, 1440]
+const MAX_SLEEP_MINUTES = 7 * 24 * 60
+const sleepLabel = (min: number) => {
+  if (min === 1440) return '1 day'
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return [h ? `${h} hour${h === 1 ? '' : 's'}` : '', m ? `${m} min` : ''].filter(Boolean).join(' ')
+}
+
+function SleepAfter({ value, onChange }: { value: number; onChange: (minutes: number) => void }) {
+  const [custom, setCustom] = useState(!SLEEP_PRESETS.includes(value))
+  const [hours, setHours] = useState(String(Math.floor(value / 60)))
+  const [mins, setMins] = useState(String(value % 60))
+  const commit = () => {
+    const total = Math.round(Number(hours || 0)) * 60 + Math.round(Number(mins || 0))
+    if (Number.isFinite(total) && total >= 5 && total <= MAX_SLEEP_MINUTES) {
+      if (total !== value) onChange(total)
+    } else {
+      setHours(String(Math.floor(value / 60)))
+      setMins(String(value % 60))
+    }
+  }
+  const options = [...SLEEP_PRESETS.map((m) => ({ value: String(m), label: sleepLabel(m) })), { value: 'custom', label: 'Custom…' }]
+  const field = (v: string, set: (s: string) => void, max: number, label: string) => (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={0}
+      max={max}
+      value={v}
+      onChange={(e) => set(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+      aria-label={label}
+    />
+  )
+  return (
+    <span className="parallel-limit sleep-after" onClick={(e) => e.preventDefault()}>
+      After
+      <Select
+        size="sm"
+        value={custom ? 'custom' : String(value)}
+        options={options}
+        display={(o) => (o.value === 'custom' ? 'Custom' : o.label)}
+        onChange={(v) => {
+          if (v === 'custom') return setCustom(true)
+          setCustom(false)
+          setHours(String(Math.floor(Number(v) / 60)))
+          setMins(String(Number(v) % 60))
+          onChange(Number(v))
+        }}
+        ariaLabel="Idle time before sleep"
+      />
+      {custom && (
+        <>
+          {field(hours, setHours, MAX_SLEEP_MINUTES / 60, 'Hours')} h {field(mins, setMins, 59, 'Minutes')} min{' '}
+        </>
+      )}
+      idle
+    </span>
+  )
+}
 
 /** How close the plan is to running out (the 5-hour or the weekly window), or null while there's room: "used up" at
  *  99% (the plan reports whole percents and refuses work at its very end), "near" from 5 points before the quota
@@ -133,6 +198,7 @@ export function AutomationModal() {
     managerApproval?: boolean
     autoAssign?: boolean
     parallelSessions?: number
+    autoSleepMinutes?: number
     dailySummary?: Partial<OfficeSettings['dailySummary']>
     notifyDetail?: OfficeSettings['notifyDetail']
   }) => {
@@ -145,6 +211,7 @@ export function AutomationModal() {
         notifyDetail: patch.notifyDetail ?? settings.notifyDetail,
         autoAssign: patch.autoAssign ?? settings.autoAssign,
         parallelSessions: patch.parallelSessions ?? settings.parallelSessions,
+        autoSleepMinutes: patch.autoSleepMinutes ?? settings.autoSleepMinutes,
         dailySummary: { ...settings.dailySummary, ...patch.dailySummary },
       },
     })
@@ -314,6 +381,20 @@ export function AutomationModal() {
                 working in) instead of queueing it. It closes when the task is done. Each session uses plan usage of its own.
               </span>
               {settings.parallelSessions > 0 && <ParallelLimit value={settings.parallelSessions} onChange={(n) => save({ parallelSessions: n })} />}
+            </span>
+          </label>
+          <label className="switch-row">
+            <span className="toggle">
+              <input type="checkbox" role="switch" checked={settings.autoSleepMinutes > 0} onChange={(ev) => save({ autoSleepMinutes: ev.target.checked ? 120 : 0 })} />
+              <span />
+            </span>
+            <span>
+              <span className="switch-row__label">Put idle agents to sleep</span>
+              <span className="field__hint">
+                An agent idle this long has its session stopped, so its memory comes back; the conversation is kept. A task, a daily job or a
+                message wakes it up again (about 15 s). Never the manager.
+              </span>
+              {settings.autoSleepMinutes > 0 && <SleepAfter value={settings.autoSleepMinutes} onChange={(m) => save({ autoSleepMinutes: m })} />}
             </span>
           </label>
           <label className="switch-row">

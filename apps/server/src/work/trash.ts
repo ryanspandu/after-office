@@ -3,7 +3,7 @@ import { basename, dirname, join, sep } from 'node:path'
 import { agentsRepo } from '../db'
 import { AgentError } from '../agents/errors'
 import { AGENTS_DIR, PROJECTS_DIR } from '../fsroots'
-import { entryIn } from './workspaces'
+import { entryIn, guardAgentFolders } from './workspaces'
 
 // The office's trash: files and folders deleted from the dashboard's file manager go to <agents dir>/.trash, one folder
 // per deletion (the item, and meta.json saying where it came from). Never inside a project (that would end up in its
@@ -55,6 +55,7 @@ function sizeOf(path: string, limit = 20_000) {
 export function trashEntries(root: string, rels: string[]) {
   if (!rels.length || rels.length > 200) throw new AgentError('Pick what to delete (at most 200 at once)')
   const items = rels.map((rel) => entryIn(root, rel))
+  for (const { abs } of items) guardAgentFolders(abs, 'moved to the trash')
   mkdirSync(TRASH_DIR, { recursive: true })
   const out: TrashItem[] = []
   for (const { abs, st } of items) {

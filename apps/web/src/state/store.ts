@@ -66,6 +66,8 @@ const OFFLINE_GRACE_MS = 10_000
 const DESK_WIND_DOWN_MS = 20_000
 
 const atDesk = (status: AgentStatus) => status === 'working' || status === 'waiting'
+/** Not in the office: its session is down (offline) or stopped on purpose (asleep). The scene doesn't draw it. */
+export const isAway = (status: AgentStatus) => status === 'offline' || status === 'asleep'
 
 const ROLES = ['Backend engineer', 'Frontend engineer', 'DevOps / infra', 'Tech writer', 'QA engineer', 'Full-stack engineer']
 
@@ -220,7 +222,7 @@ function assignSpot(agent: Pick<OfficeAgent, 'id' | 'desk'> & { kind?: OfficeAge
   if (interviewing(agent.id)) return bossSpot(cols, '-guest0')
   if (boss && hosting(agent.id)) return bossSpot(cols, '-host')
   const desk = boss ? bossSpot(cols) : `desk-${agent.desk}`
-  if (status === 'working' || status === 'waiting' || status === 'offline') return desk
+  if (status === 'working' || status === 'waiting' || isAway(status)) return desk
   const taken = new Set(agents.filter((a) => a.id !== agent.id).map((a) => a.spotId))
   const free = (kind: SpotKind) => FIXED_SPOTS.filter((s) => s.kind === kind && !taken.has(s.id))
   const current = agents.find((a) => a.id === agent.id)?.spotId
@@ -356,7 +358,7 @@ function fromLive(raw: AgentInfo, all: OfficeAgent[], prev?: OfficeAgent, atSpot
   // busy in a side session is busy: the character works (or waits) while any of its sessions does
   const open = (raw.sessions ?? []).filter((s) => s.open)
   const side = open.some((s) => s.status === 'waiting') ? 'waiting' : open.some((s) => s.status === 'working') ? 'working' : null
-  const status = raw.status === 'offline' || raw.status === 'waiting' || !side ? raw.status : raw.status === 'working' ? 'working' : side
+  const status = isAway(raw.status) || raw.status === 'waiting' || !side ? raw.status : raw.status === 'working' ? 'working' : side
   const info: AgentInfo = { ...raw, status }
   const desk = info.desk ?? prev?.desk ?? 0
   const base = { id: info.id, desk, kind: info.kind }
@@ -407,10 +409,14 @@ export const useOffice = create<OfficeStore>((set, get) => ({
     set(({ agents, departing }) => {
       const prev = agents.find((a) => a.id === info.id)
       if (!prev) return { agents: [...agents, fromLive(info, agents)] }
-      const wentOffline = prev.status !== 'offline' && info.status === 'offline'
-      const cameBack = prev.status === 'offline' && info.status !== 'offline'
+      const wentOffline = !isAway(prev.status) && isAway(info.status)
+      const cameBack = isAway(prev.status) && !isAway(info.status)
       let updated = fromLive(info, agents, prev)
-      if (wentOffline) {
+      if (wentOffline && info.status === 'asleep') {
+        // put to sleep: it goes home now (no restart to wait for)
+        updated = { ...updated, lingering: true, spotId: prev.spotId }
+        setTimeout(() => useOffice.getState().leaveIfStillOffline(info.id), 0)
+      } else if (wentOffline) {
         // don't leave yet: a restart comes back within seconds. Leave only if it stays offline.
         updated = { ...updated, lingering: true, spotId: prev.spotId }
         setTimeout(() => useOffice.getState().leaveIfStillOffline(info.id), OFFLINE_GRACE_MS)
@@ -445,7 +451,7 @@ export const useOffice = create<OfficeStore>((set, get) => ({
       // done: the new one goes to its own desk (to settle in), the manager back to what it was doing
       set(({ agents }) => ({
         agents: agents.map((a) =>
-          a.id === agentId ? { ...a, spotId: a.status === 'offline' ? a.spotId : `desk-${a.desk}` } : a.id === managerId ? { ...a, spotId: assignSpot(a, a.status, agents, true) } : a,
+          a.id === agentId ? { ...a, spotId: isAway(a.status) ? a.spotId : `desk-${a.desk}` } : a.id === managerId ? { ...a, spotId: assignSpot(a, a.status, agents, true) } : a,
         ),
       }))
       setTimeout(() => useOffice.getState().leaveDeskIfStillIdle(agentId), DESK_WIND_DOWN_MS)
@@ -469,7 +475,7 @@ export const useOffice = create<OfficeStore>((set, get) => ({
   leaveIfStillOffline: (id) =>
     set(({ agents, departing }) => {
       const a = agents.find((x) => x.id === id)
-      if (!a || a.status !== 'offline' || !a.lingering) return {}
+      if (!a || !isAway(a.status) || !a.lingering) return {}
       // play the leaving animation with a copy while the panel keeps listing the agent
       return {
         agents: agents.map((x) => (x.id === id ? { ...x, lingering: false } : x)),

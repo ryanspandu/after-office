@@ -70,3 +70,16 @@ test("a folder's notes live in the database and follow the folder when it's rena
   expect(folderNotesRepo.get(join(root, 'drafts-v2'))).toBeNull()
   folderNotesRepo.set(join(root, 'drafts-v2', 'inner'), '')
 })
+
+test("an agent's folder (or one holding it) is never renamed or trashed from the file manager", () => {
+  const { agentsRepo } = require('../db') as typeof import('../db')
+  mkdirSync(join(root, 'team', 'tr-agent'), { recursive: true })
+  agentsRepo.insert({ id: 'tr-agent', name: 'TRA', tmux_session: 'ao-tr-agent', cwd: join(root, 'team', 'tr-agent'), desk: 991, role: '', model: 'haiku', permission_mode: 'default', session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'worker' } as never)
+  try {
+    expect(() => trashEntries(root, ['team'])).toThrow('TRA works in team')
+    expect(() => renameEntry(root, 'team/tr-agent', 'other')).toThrow('TRA works in tr-agent')
+    expect(existsSync(join(root, 'team', 'tr-agent'))).toBe(true)
+  } finally {
+    agentsRepo.remove('tr-agent')
+  }
+})
