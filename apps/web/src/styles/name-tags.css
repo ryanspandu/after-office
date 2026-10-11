@@ -21,18 +21,24 @@
 .tag[data-pose='billiards'] [data-icon='billiards'] { display: grid; }
 .tag [data-icon='wait'] { background: var(--hl); color: #fff; }
 .tag__name {
-  display: flex; align-items: center; gap: 5px; white-space: nowrap;
-  font-size: 11px; font-weight: 600;
-  padding: 2px 8px 2px 6px; border-radius: 999px;
-  background: var(--card); color: var(--text); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0; white-space: nowrap;
+  padding: 3px 9px 4px 7px; border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 94%, transparent); color: var(--text); box-shadow: var(--shadow);
   border: 1.5px solid transparent;
 }
+.tag__who { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; line-height: 1.3; }
+.tag__doing { max-width: 150px; overflow: hidden; text-overflow: ellipsis; padding-left: 12px; font-size: 9.5px; font-weight: 500; line-height: 1.25; color: var(--muted); }
+.tag--waiting .tag__doing { color: var(--hl-ink); }
+.tag--selected .tag__doing { color: inherit; opacity: 0.85; }
 .tag__dot { width: 7px; height: 7px; border-radius: 50%; }
 .tag--waiting .tag__name { border-color: var(--hl); }
 .tag--selected .tag__name { background: var(--accent); color: var(--accent-fg); }
 /* a selected agent: its tag grows and sits on top; everyone else's fades back */
 .tag { transition: opacity 0.25s ease; }
 .tag--dimmed { opacity: 0.35; }
-.tag__name { transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); }
+.tag__name { transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1); transform-origin: 50% 100%; }
 .tag--selected .tag__name { transform: scale(1.12); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25), 0 0 0 2px var(--hl); }
 .cat-hearts { color: #e0558f; font-size: 14px; transition: opacity 0.4s; }
+/* the office seen from afar (scene/Office.tsx LabelDetail): names only, except the selected agent's */
+.labels--far .tag:not(.tag--selected) .tag__doing { display: none; }
+.labels--far .tag:not(.tag--selected) .tag__name { padding: 2px 8px 2px 6px; border-radius: 999px; }

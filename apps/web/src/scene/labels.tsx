@@ -3,6 +3,7 @@ import { LuMonitorPlay, LuBookOpen, LuCat, LuCircleAlert, LuCircleDot, LuClipboa
 import { Vector3, type Camera } from 'three'
 import { useLive } from '../state/live'
 import { useOffice } from '../state/store'
+import { activityOf } from '../ui/agentActivity'
 
 // Name tags live in one plain DOM overlay above the canvas. Scene objects move them each frame via
 // `placeLabel`, which avoids creating a React root per tag (what drei's <Html> does).
@@ -76,9 +77,13 @@ function AgentTag({ id }: { id: string }) {
           </span>
         ))}
       </div>
+      {/* a small card: who, and what they're doing (like a status line) */}
       <div className="tag__name">
-        {agent.kind === 'manager' ? <LuCrown className="tag__crown" /> : <span className="tag__dot" style={{ background: agent.look.shirt }} />}
-        {agent.name}
+        <span className="tag__who">
+          {agent.kind === 'manager' ? <LuCrown className="tag__crown" /> : <span className="tag__dot" style={{ background: agent.look.shirt }} />}
+          {agent.name}
+        </span>
+        <span className="tag__doing">{activityOf(agent)}</span>
       </div>
     </div>
   )

@@ -5,7 +5,7 @@ import { useDaylight } from '../state/clock'
 import { headlight, taillight } from './Vehicle'
 import { useOffice } from '../state/store'
 import { streetLampLights } from './Parking'
-import { DESK_LAMP, deskPos, LOUNGE, MEETING_PENDANTS, PANTRY, type Layout } from './layout'
+import { DESK_LAMP, deskPos, LOUNGE, MEETING_PENDANTS, openPlanCenter, PANTRY, type Layout } from './layout'
 import { useRenderConfig } from './quality'
 
 // Lighting that follows the office clock. Day: warm sun through the windows. Night: dark blue ambience, the
@@ -53,6 +53,12 @@ const FIXED_LAMPS: Lamp[] = [
   { pos: [PANTRY.counter.x, 1.8, PANTRY.counter.z + 0.8], power: 4, distance: 4.5 },
 ]
 
+/** The open plan's ring light: a strong light over the middle of the desks (a light pool on low-end devices). */
+const openPlanLamps = (layout: Layout): Lamp[] => {
+  const [x, z] = openPlanCenter(layout)
+  return [{ pos: [x, 2.6, z], power: 9, distance: 10, real: true }]
+}
+
 /** The manager's office (it moves with the open plan): the pendant over the desk, the floor lamp, the sofa corner. */
 const bossLamps = ({ boss }: Layout): Lamp[] => [
   { pos: [boss.desk.x, 1.9, boss.desk.z + 0.3], power: 6, distance: 5.5, real: true },
@@ -98,7 +104,7 @@ export function DayNight({ layout }: { layout: Layout }) {
   const target = useDaylight()
   const cfg = useRenderConfig()
   const lampsList = useMemo<Lamp[]>(
-    () => [...FIXED_LAMPS, ...bossLamps(layout), ...streetLampLights(layout).map((pos): Lamp => ({ pos, power: 5, distance: 7 }))],
+    () => [...FIXED_LAMPS, ...bossLamps(layout), ...openPlanLamps(layout), ...streetLampLights(layout).map((pos): Lamp => ({ pos, power: 5, distance: 7 }))],
     [layout],
   )
   const deskPool = useRef<(PointLight | null)[]>([])

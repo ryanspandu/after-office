@@ -29,6 +29,7 @@ import { CronPanel, LeftSidebar, TaskPanel } from './ui/LeftSidebar'
 import { ManagerPanel, useManager, useManagerPanel } from './ui/ManagerPanel'
 import { Navbar } from './ui/Navbar'
 import { RenderSwitch } from './ui/RenderSwitch'
+import { FocusCard, ViewReset } from './ui/FocusCard'
 import { BossModeBadge } from './ui/BossMode'
 import { PublicAccessBadge } from './ui/PublicAccess'
 import { AppReload } from './ui/AppReload'
@@ -65,7 +66,9 @@ export function App() {
       <Office />
       <LabelLayer />
       <RenderSwitch />
+      <ViewReset />
       <AppReload />
+      <FocusCard />
       {/* phones: Boss mode and Public access float at the stage's top left (in the navbar they'd push it onto more lines) */}
       {mobile && (
         <div className="stage-badges">

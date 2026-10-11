@@ -1,0 +1,33 @@
+/* ── a clicked agent (ui/FocusCard.tsx): its card at the bottom of the stage; the view-reset button ── */
+.focus-card {
+  position: absolute; z-index: 6; left: 50%; bottom: 14px; translate: -50% 0;
+  display: flex; align-items: center; gap: 10px; width: max-content; max-width: min(440px, calc(100% - 24px));
+  padding: 8px 8px 8px 10px; border-radius: 16px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--card) 94%, transparent); backdrop-filter: blur(8px); box-shadow: var(--shadow-lg, var(--shadow));
+  animation: focus-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes focus-in { from { opacity: 0; translate: -50% 10px; } }
+.focus-card .avatar { flex: none; width: 34px; height: 34px; font-size: 14px; }
+.focus-card__text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.focus-card__name { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.focus-card__name .status { font-size: 10.5px; }
+.focus-card__doing { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-card__role { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-card__chat { flex: none; }
+.view-controls {
+  position: absolute; z-index: 5; top: 52px; right: 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px;
+  border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 88%, transparent);
+  backdrop-filter: blur(6px); box-shadow: var(--shadow);
+}
+.view-controls button {
+  display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: var(--text); font-size: 15px; cursor: pointer;
+}
+.view-controls button:hover { background: var(--accent-soft); }
+.view-controls__sep { width: 16px; height: 1px; margin: 2px 0; background: var(--line); }
+/* phones: above the stage's round buttons (reload, minimized, menu) */
+@media (max-width: 768px) {
+  .focus-card { bottom: 72px; }
+  .focus-card__role { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .focus-card { animation: none; } }

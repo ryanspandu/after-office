@@ -317,3 +317,8 @@ export function getLayout(cols: number): Layout {
   cache.set(cols, layout)
   return layout
 }
+
+/** The middle of the open plan (its carpet), where the big ring light hangs. */
+export function openPlanCenter(l: Pick<Layout, 'openMinX'>): [number, number] {
+  return [(l.openMinX + 0.5 + MEETING.bounds.minX - 0.8) / 2, -1]
+}

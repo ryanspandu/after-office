@@ -108,10 +108,16 @@ function Computer({ mode, accent }: { mode: ScreenMode; accent: string }) {
   })
 
   return (
-    <group position={[0, DESK_SIZE.h, -0.28]}>
-      <Box size={[0.2, 0.03, 0.16]} position={[0, 0.015, 0]} color="#2a2d36" />
-      <Box size={[0.05, 0.28, 0.05]} position={[0, 0.16, -0.02]} color="#2a2d36" />
-      <Box size={[0.98, 0.6, 0.05]} position={[0, 0.5, 0]} color="#22252e" />
+    <group position={[0, DESK_SIZE.h, 0.1]}>
+      {/* the laptop's base: aluminium, its keyboard and trackpad */}
+      <Box size={[0.7, 0.03, 0.46]} position={[0, 0.015, 0]} color="#c9ccd2" roughness={0.45} />
+      <Box size={[0.6, 0.006, 0.2]} position={[0, 0.032, -0.06]} color="#2f323a" noShadow />
+      <Box size={[0.2, 0.004, 0.11]} position={[0, 0.031, 0.15]} color="#b4b8bf" noShadow />
+      {/* the lid, tilted back from the hinge; the screen inside is the monitor's, at the lid's size */}
+      <group position={[0, 0.03, -0.225]} rotation={[-0.3, 0, 0]}>
+        <Box size={[0.7, 0.46, 0.025]} position={[0, 0.23, 0]} color="#c9ccd2" roughness={0.45} />
+        <Box size={[0.66, 0.42, 0.004]} position={[0, 0.23, 0.0125]} color="#16181e" noShadow />
+        <group position={[0, 0.23 - 0.5 * LID, 0.004]} scale={LID}>
       <mesh ref={face} position={[0, 0.5, 0.027]} userData={{ dynamic: true }}>
         <planeGeometry args={[0.9, 0.52]} />
         <meshStandardMaterial color="#0d0f16" emissive="#000" roughness={0.4} />
@@ -192,9 +198,14 @@ function Computer({ mode, accent }: { mode: ScreenMode; accent: string }) {
           ))}
         </group>
       </group>
+        </group>
+      </group>
     </group>
   )
 }
+
+/** The monitor's screen (0.9 × 0.52, centred at y 0.5) drawn at this scale inside the laptop's lid. */
+const LID = 0.66
 
 export function Workstation({ at, owner, index }: { at: Vec2; owner?: OfficeAgent; index: number }) {
   const mode: ScreenMode = !owner
@@ -214,31 +225,26 @@ export function Workstation({ at, owner, index }: { at: Vec2; owner?: OfficeAgen
   return (
     <group position={[at[0], 0, at[1]]}>
       {/* desk */}
-      <Box size={[w, 0.06, d]} position={[0, h - 0.03, 0]} color="#f3ede4" />
-      {[-1, 1].map((sx) => (
-        <Box key={sx} size={[0.06, h - 0.06, d - 0.1]} position={[sx * (w / 2 - 0.06), (h - 0.06) / 2, 0]} color="#c9c3b8" />
-      ))}
-      <Box size={[w - 0.2, 0.35, 0.04]} position={[0, h - 0.25, -d / 2 + 0.05]} color="#c9c3b8" />
+      <Box size={[w, 0.07, d]} position={[0, h - 0.035, 0]} color="#e2c9a2" roughness={0.7} />
+      {[-1, 1].flatMap((sx) =>
+        [-1, 1].map((sz) => <Box key={`${sx}${sz}`} size={[0.07, h - 0.07, 0.07]} position={[sx * (w / 2 - 0.08), (h - 0.07) / 2, sz * (d / 2 - 0.08)]} color="#cdb38c" />),
+      )}
+      <Box size={[w - 0.2, 0.06, 0.05]} position={[0, h - 0.12, -d / 2 + 0.08]} color="#cdb38c" />
 
       <Computer mode={mode} accent={owner?.look.shirt ?? '#888'} />
-      <Box size={[0.62, 0.03, 0.2]} position={[0, h + 0.015, 0.18]} color="#3a3d48" />
-      <Box size={[0.08, 0.03, 0.12]} position={[0.46, h + 0.015, 0.2]} color="#3a3d48" />
       {/* mug */}
       <Cyl r={0.06} h={0.12} position={[-0.72, h + 0.06, 0.12]} color={owner?.look.shirt ?? '#dcd6cc'} />
-      {/* PC tower with status LED */}
-      <group position={[0.7, 0, -0.15]}>
-        <Box size={[0.25, 0.5, 0.5]} position={[0, 0.25, 0]} color="#2a2d36" />
-        {/* follows the owner's status: kept out of the desk batch, so a status change doesn't rebuild it */}
-        <group userData={{ dynamic: true }}>
-          <Box
-            size={[0.04, 0.04, 0.02]}
-            position={[0.05, 0.42, 0.26]}
-            color="#333"
-            emissive={mode === 'off' ? undefined : mode === 'wait' ? '#ff9b3d' : '#5dff9b'}
-            emissiveIntensity={2}
-            noShadow
-          />
-        </group>
+      {/* the laptop's status light, on the front of its base: follows the owner's status (kept out of the desk batch,
+          so a status change doesn't rebuild it) */}
+      <group userData={{ dynamic: true }}>
+        <Box
+          size={[0.04, 0.012, 0.01]}
+          position={[0.28, h + 0.016, 0.332]}
+          color="#333"
+          emissive={mode === 'off' ? undefined : mode === 'wait' ? '#ff9b3d' : '#5dff9b'}
+          emissiveIntensity={2}
+          noShadow
+        />
       </group>
       {/* little desk toy varies per desk */}
       {index % 3 === 0 && <Cyl r={0.07} rBottom={0.06} h={0.1} position={[-0.45, h + 0.05, -0.3]} color="#c56a4a" />}

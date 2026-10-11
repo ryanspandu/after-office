@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { MapControls, PerformanceMonitor } from '@react-three/drei'
-import type { Vector3 } from 'three'
+import { MathUtils, Spherical, Vector3 } from 'three'
+import { agentWorld, useView } from './focus'
 import { useOffice } from '../state/store'
 import { Agent } from './Agent'
 import { Cat } from './Cat'
@@ -14,7 +15,7 @@ import { MeetingRoom } from './furniture/MeetingRoom'
 import { Pantry } from './furniture/Pantry'
 import { Parking } from './Parking'
 import { Workstation } from './furniture/Workstation'
-import { MEETING } from './layout'
+import { openPlanCenter } from './layout'
 import { BossOffice } from './furniture/BossOffice'
 import { useQuality, useRenderConfig } from './quality'
 import { useLayout } from './useLayout'
@@ -100,7 +101,21 @@ export function Office() {
       <FrameCap fps={fps} />
       <DayNight layout={layout} />
       <FitCamera layout={layout} />
-      <MapControls makeDefault enableRotate={false} minZoom={4} maxZoom={120} screenSpacePanning={false} target={center(layout)} />
+      {/* drag pans; right-drag (two fingers on a phone) turns the view around the office and tilts it, from nearly
+          straight down to nearly level with the floor (never under it) */}
+      <MapControls
+        makeDefault
+        minZoom={4}
+        maxZoom={180}
+        screenSpacePanning={false}
+        minPolarAngle={MIN_POLAR}
+        maxPolarAngle={MAX_POLAR}
+        rotateSpeed={0.6}
+        target={center(layout)}
+      />
+      <FocusCamera />
+      <NudgeCamera />
+      <LabelDetail />
 
       <Room layout={layout} />
       <Parking layout={layout} slots={agents.length + departing.length} />
@@ -135,15 +150,17 @@ function bounds(layout: Layout) {
   return { minX, maxX, minZ, maxZ }
 }
 
-/** Where the camera looks to start with: the building (the parking in front of it is a pan away). */
+/** Where the camera looks to start with: the open plan, where the agents work (the rest is a pan or a zoom away). */
 function center(layout: Layout): [number, number, number] {
-  // the manager's office, the open plan and the meeting room in the middle (the pantry's end a pan away)
-  const f = layout.floor
-  return [(f.minX + MEETING.bounds.maxX) / 2, 0, (f.minZ + f.maxZ) / 2 - 1.5]
+  const [x, z] = openPlanCenter(layout)
+  return [x, 0, z + 0.5]
 }
 
-/** How close the camera starts: the building filling the stage, a little cropped (closer than everything fitting). */
-const START_CLOSER = 1.5
+/** How much of the office the start view shows across the stage, in metres: close, the people big enough to read. */
+const START_SPAN = { wide: 12, tall: 8 }
+/** The start view's angle from straight down (radians): low, looking across the room rather than down onto it. */
+const START_POLAR = 1.15
+const START_DIST = 30
 
 /** Zoom so the whole scene fits and keep the camera on the isometric diagonal from its center. */
 function FitCamera({ layout }: { layout: Layout }) {
@@ -153,25 +170,22 @@ function FitCamera({ layout }: { layout: Layout }) {
   // Refit on a new layout or a real change of width (a rotated phone, a resized window), never on height alone: on a
   // phone the height changes all the time (the keyboard of a modal's field, the browser bar, a sheet) and refitting
   // then threw away the owner's pan and zoom. A stage hidden or collapsed for a moment (a few px) is ignored too.
-  const last = useRef<{ w: number; key: string } | null>(null)
+  const last = useRef<{ w: number; key: string; reset: number } | null>(null)
+  // "back to the whole office" (the view button): the start view again, whatever was turned or zoomed
+  const resetAt = useView((s) => s.resetAt)
   useEffect(() => {
     if (size.width < 80 || size.height < 80) return
     const key = `${b.minX},${b.maxX},${b.minZ},${b.maxZ}`
     const prev = last.current
-    if (prev && prev.key === key && Math.abs(prev.w - size.width) < 32) return
-    last.current = { w: size.width, key }
+    if (prev && prev.key === key && Math.abs(prev.w - size.width) < 32 && prev.reset === resetAt) return
+    last.current = { w: size.width, key, reset: resetAt }
     const [cx, , cz] = center(layout)
-    // the building's footprint (not the lot): the office is what's looked at
-    const f = layout.floor
-    const span = f.maxX - f.minX + (f.maxZ - f.minZ)
-    // isometric footprint: width ≈ span·cos45°, height ≈ span·sin45°·sin35° + wall height
-    const byWidth = size.width / (span * 0.72)
-    const byHeight = size.height / (span * 0.42 + 3)
-    // a tall stage (a phone held upright): fitting the width leaves the office a small strip in the middle, so fill
-    // the height instead and let the sides run off (it pans)
+    // close in on the desks: about START_SPAN metres across (fewer on a phone held upright)
     const portrait = size.height > size.width * 1.2
-    camera.zoom = Math.max(4, portrait ? byHeight * 0.95 : Math.min(byWidth, byHeight) * START_CLOSER)
-    camera.position.set(cx + 22, 20, cz + 22)
+    camera.zoom = MathUtils.clamp(size.width / (portrait ? START_SPAN.tall : START_SPAN.wide), 20, 140)
+    // on the diagonal, low: looking across the room
+    const flat = Math.sin(START_POLAR) * START_DIST * Math.SQRT1_2
+    camera.position.set(cx + flat, Math.cos(START_POLAR) * START_DIST, cz + flat)
     camera.lookAt(cx, 0, cz)
     camera.updateProjectionMatrix()
     // the controls look at their own target: move it with the camera, or the next frame turns the camera from its
@@ -181,7 +195,162 @@ function FitCamera({ layout }: { layout: Layout }) {
       controls.update()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, controls, size.width, size.height, b.minX, b.maxX, b.minZ, b.maxZ])
+  }, [camera, controls, size.width, size.height, b.minX, b.maxX, b.minZ, b.maxZ, resetAt])
+  return null
+}
+
+/** Below this zoom the office is seen from afar: the name tags drop their "what they're doing" line (it piles up). */
+const DETAIL_ZOOM = 42
+
+/** Marks the label layer far/near as the camera zooms (scene/labels.tsx, styles/name-tags.css). */
+function LabelDetail() {
+  const far = useRef<boolean | null>(null)
+  useFrame(({ camera }) => {
+    const now = camera.zoom < DETAIL_ZOOM
+    if (now === far.current) return
+    far.current = now
+    const el = document.querySelector<HTMLElement>('.labels')
+    if (el) el.classList.toggle('labels--far', now)
+  })
+  return null
+}
+
+/** The stage's turn and zoom buttons: the camera turns around what it looks at, or zooms, smoothly. */
+function NudgeCamera() {
+  const nudge = useView((s) => s.nudge)
+  const camera = useThree((s) => s.camera)
+  const controls = useThree((s) => s.controls) as unknown as Controls | null
+  const left = useRef({ turn: 0, zoom: 0, tilt: 0 })
+  const offset = useRef(new Vector3())
+  const sphere = useRef(new Spherical())
+  useEffect(() => {
+    if (!nudge) return
+    left.current.turn += nudge.turn
+    left.current.tilt += nudge.tilt
+    // zoom as a log, so in and out add up
+    left.current.zoom += Math.log(nudge.zoom)
+  }, [nudge])
+  useFrame((_, rawDt) => {
+    const l = left.current
+    if (!controls || (Math.abs(l.turn) < 1e-4 && Math.abs(l.zoom) < 1e-4 && Math.abs(l.tilt) < 1e-4)) return
+    const k = 1 - Math.exp(-7 * Math.min(rawDt, 0.05))
+    const turn = l.turn * k
+    const zoom = l.zoom * k
+    const tilt = l.tilt * k
+    l.turn -= turn
+    l.zoom -= zoom
+    l.tilt -= tilt
+    const o = offset.current.copy(camera.position).sub(controls.target)
+    o.applyAxisAngle(UP, turn)
+    if (tilt) {
+      const sph = sphere.current.setFromVector3(o)
+      sph.phi = MathUtils.clamp(sph.phi + tilt, MIN_POLAR, MAX_POLAR)
+      o.setFromSpherical(sph)
+    }
+    camera.position.copy(controls.target).add(o)
+    camera.zoom = MathUtils.clamp(camera.zoom * Math.exp(zoom), 4, 180)
+    camera.updateProjectionMatrix()
+    controls.update()
+  })
+  return null
+}
+const UP = new Vector3(0, 1, 0)
+/** How far the view tilts: from almost straight down to almost level with the floor (radians from straight down). */
+const MIN_POLAR = 0.2
+const MAX_POLAR = 1.45
+
+/** How close the camera comes to a clicked agent (at least: closer if it already was). */
+const FOCUS_ZOOM = 120
+
+type Controls = { target: Vector3; update: () => void; addEventListener: (t: string, f: () => void) => void; removeEventListener: (t: string, f: () => void) => void }
+
+/**
+ * A clicked agent: the camera glides to it, comes close and keeps it in the middle while it walks around. Moving the
+ * view by hand stops the following (the agent stays selected). Unselected: back to where the camera was before.
+ */
+function FocusCamera() {
+  const selectedId = useOffice((s) => s.selectedId)
+  const camera = useThree((s) => s.camera)
+  const controls = useThree((s) => s.controls) as unknown as Controls | null
+  const dom = useThree((s) => s.gl.domElement)
+  const st = useRef({ following: false, returning: false, zoomUntil: 0, saved: null as null | { target: Vector3; pos: Vector3; zoom: number } })
+  const step = useRef(new Vector3())
+
+  // the owner turning or moving the view: the reset button shows; a follow stops
+  useEffect(() => {
+    if (!controls) return
+    // a press alone (clicking an agent) isn't moving the view: only a change while pressed is. The wheel's zoom
+    // eases in over the next frames (damping), after its start/end: a change shortly after a wheel counts too.
+    let pressed = false
+    let wheeled = 0
+    const start = () => (pressed = true)
+    const end = () => (pressed = false)
+    const wheel = () => (wheeled = performance.now())
+    dom.addEventListener('wheel', wheel, { passive: true })
+    const change = () => {
+      if (!pressed && performance.now() - wheeled > 600) return
+      st.current.following = false
+      st.current.returning = false
+      useView.getState().setMoved(true)
+    }
+    controls.addEventListener('start', start)
+    controls.addEventListener('end', end)
+    controls.addEventListener('change', change)
+    return () => {
+      controls.removeEventListener('start', start)
+      controls.removeEventListener('end', end)
+      controls.removeEventListener('change', change)
+      dom.removeEventListener('wheel', wheel)
+    }
+  }, [controls, dom])
+
+  useEffect(() => {
+    const s = st.current
+    if (!controls) return
+    if (selectedId) {
+      if (!s.saved) s.saved = { target: controls.target.clone(), pos: camera.position.clone(), zoom: camera.zoom }
+      s.following = true
+      s.returning = false
+      s.zoomUntil = performance.now() + 1600
+    } else if (s.saved) {
+      s.following = false
+      s.returning = true
+    }
+  }, [selectedId, controls, camera])
+  // the start view asked for: nothing to go back to
+  const resetAt = useView((s) => s.resetAt)
+  useEffect(() => {
+    st.current = { following: false, returning: false, zoomUntil: 0, saved: null }
+  }, [resetAt])
+
+  useFrame((_, rawDt) => {
+    const s = st.current
+    if (!controls || (!s.following && !s.returning)) return
+    const dt = Math.min(rawDt, 0.05)
+    const k = 1 - Math.exp(-5 * dt)
+    if (s.following && selectedId) {
+      const at = agentWorld.get(selectedId)
+      if (!at) return
+      // the target and the camera move together: the angle stays, only the place changes
+      const d = step.current.copy(at).sub(controls.target).multiplyScalar(k)
+      controls.target.add(d)
+      camera.position.add(d)
+      if (performance.now() < s.zoomUntil) camera.zoom = MathUtils.lerp(camera.zoom, Math.max(FOCUS_ZOOM, s.saved?.zoom ?? 0), k)
+    } else if (s.returning && s.saved) {
+      controls.target.lerp(s.saved.target, k)
+      camera.position.lerp(s.saved.pos, k)
+      camera.zoom = MathUtils.lerp(camera.zoom, s.saved.zoom, k)
+      if (controls.target.distanceTo(s.saved.target) < 0.02 && Math.abs(camera.zoom - s.saved.zoom) < 0.2) {
+        controls.target.copy(s.saved.target)
+        camera.position.copy(s.saved.pos)
+        camera.zoom = s.saved.zoom
+        s.returning = false
+        s.saved = null
+      }
+    }
+    camera.updateProjectionMatrix()
+    controls.update()
+  })
   return null
 }
 

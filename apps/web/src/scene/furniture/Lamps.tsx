@@ -55,3 +55,24 @@ export function FloorLamp({ position }: { position: [number, number, number] }) 
     </group>
   )
 }
+
+/** A big ring light hanging over the open plan: a thin glowing ring on three cables (it doesn't hide the desks). */
+export function RingLamp({ position, radius = 1.1 }: { position: [number, number, number]; radius?: number }) {
+  return (
+    <group position={position}>
+      {[0, 1, 2].map((i) => {
+        const a = (i * Math.PI * 2) / 3
+        return <Box key={i} size={[0.015, 1.2, 0.015]} position={[Math.cos(a) * radius, 0.6, Math.sin(a) * radius]} color="#333" noShadow />
+      })}
+      {/* the frame, and the glowing ring under it */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+        <torusGeometry args={[radius, 0.025, 8, 48]} />
+        <meshStandardMaterial color="#2a2a2a" roughness={0.5} />
+      </mesh>
+      {/* the light itself: seen from above too */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} material={lampBulb}>
+        <torusGeometry args={[radius, 0.07, 10, 48]} />
+      </mesh>
+    </group>
+  )
+}
