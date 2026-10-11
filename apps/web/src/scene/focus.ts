@@ -4,6 +4,10 @@ import { create } from 'zustand'
 // The camera following a clicked agent (scene/Office.tsx FocusCamera), and the "back to the whole office" request.
 // Agents write where they are each frame; the camera reads the selected one's place.
 
+/** What each agent is doing with its body right now (its pose: 'walk', 'type', 'write'…), set every frame by
+ *  scene/Agent.tsx: props that react to it (the whiteboard) only move while it's really there doing it. */
+export const agentPose = new Map<string, string>()
+
 /** Where each agent is (its chest), in world space, updated every frame by scene/Agent.tsx. */
 export const agentWorld = new Map<string, Vector3>()
 

@@ -7,7 +7,7 @@ import { poolTexture } from './DayNight'
 import { StaticBatch } from './StaticBatch'
 import { Vehicle } from './Vehicle'
 import { placeLabel } from './labels'
-import { agentWorld, setAgentWorld } from './focus'
+import { agentPose, agentWorld, setAgentWorld } from './focus'
 import { findPath } from './pathing'
 import { useLayout } from './useLayout'
 import { dampAngle } from './math'
@@ -15,7 +15,7 @@ import { Cyl } from './prims'
 import { Bag, ELBOW, ForearmShape, HipsShape, SHOULDER_X, UpperArmShape, Ear, Eyewear, Face, Hair, Hat, HEAD_SCALE, KNEE, NECK, Neckwear, SHOULDER, ShinShape, Skirt, ThighShape, Top, TORSO_FIT, TorsoShape } from './figure'
 import { STRIKE_AT, STROKE_PERIOD, strokeOffset } from './furniture/Lounge'
 
-type Pose = 'stand' | 'walk' | 'type' | 'wait' | 'meeting' | 'sofa' | 'relax' | 'eat' | 'pet' | 'billiards' | 'read' | 'watch'
+type Pose = 'stand' | 'walk' | 'type' | 'wait' | 'meeting' | 'sofa' | 'relax' | 'eat' | 'pet' | 'billiards' | 'read' | 'watch' | 'write'
 
 /** Joint angles a pose wants this frame. Characters face +z; negative X rotation swings limbs forward. */
 interface Joints {
@@ -87,6 +87,17 @@ function poseJoints(pose: Pose, t: number, seed: number, spotId: string): Joints
       const page = Math.max(0, Math.sin(t * 0.7 + seed * 2)) ** 6
       return { ...REST, torsoX: 0.08, headX: 0.32, headY: Math.sin(t * 0.25 + seed) * 0.12, armL: -0.55, elbowL: -1.1, armLz: 0.3, armR: -0.55 - page * 0.3, elbowR: -1.1, armRz: -0.3 }
     }
+    case 'write': {
+      // at the whiteboard: the right hand up on the board, moving along a line and down to the next; the head follows
+      const line = (t * 0.55 + seed) % 1
+      const row = Math.floor((t * 0.55 + seed) % 4)
+      const across = -0.35 + line * 0.7
+      return {
+        ...REST, headX: -0.12 - row * 0.03, headY: across * 0.35,
+        armR: -1.75 + row * 0.12 + Math.sin(t * 9) * 0.04, armRz: -0.15 - across * 0.45, elbowR: -0.55 + Math.sin(t * 14) * 0.06,
+        armL: -0.1, elbowL: -0.35, armLz: 0.1,
+      }
+    }
     case 'watch': {
       // leaning back at its own desk, eyes on the screen: a hand on the mouse, the other on the lap; a laugh now and then
       const laugh = Math.max(0, Math.sin(t * 0.45 + seed * 2)) ** 12
@@ -108,6 +119,7 @@ function poseFor(kind: SpotKind, status: OfficeAgent['status']): Pose {
   if (kind === 'cat') return 'pet'
   if (kind === 'pantry') return 'eat'
   if (kind === 'read') return 'read'
+  if (kind === 'board') return 'write'
   if (kind === 'pc') return 'watch'
   return 'billiards'
 }
@@ -194,7 +206,13 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
     n.arrived = false
   }, [spot])
 
-  useEffect(() => () => void agentWorld.delete(agent.id), [agent.id])
+  useEffect(
+    () => () => {
+      agentWorld.delete(agent.id)
+      agentPose.delete(agent.id)
+    },
+    [agent.id],
+  )
 
   // Removed → walk out to the vehicle.
   useEffect(() => {
@@ -309,6 +327,7 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
     const tagAt: Vec2 = shown ? n.pos : c.pos
     // where the camera looks when this agent is clicked (scene/focus.ts)
     setAgentWorld(agent.id, tagAt[0], 1.2 + j.rootY, tagAt[1])
+    agentPose.set(agent.id, shown ? pose : 'away')
     const tag = placeLabel(agent.id, anchor.set(tagAt[0], shown ? 2.3 + j.rootY : 1.9, tagAt[1]), camera, size.width, size.height)
     if (tag) {
       // only what changed is written (every write makes the browser redo the page's layout)

@@ -1,5 +1,5 @@
 import { useCallback, type ReactNode } from 'react'
-import { LuMonitorPlay, LuBookOpen, LuCat, LuCircleAlert, LuCircleDot, LuClipboardCheck, LuCrown, LuCoffee, LuHeart, LuKeyboard, LuMessageCircle, LuSandwich, LuTv } from 'react-icons/lu'
+import { LuMonitorPlay, LuBookOpen, LuPenLine, LuCat, LuCircleAlert, LuCircleDot, LuClipboardCheck, LuCrown, LuCoffee, LuHeart, LuKeyboard, LuMessageCircle, LuSandwich, LuTv } from 'react-icons/lu'
 import { Vector3, type Camera } from 'three'
 import { useLive } from '../state/live'
 import { useOffice } from '../state/store'
@@ -52,6 +52,7 @@ const POSE_ICONS: [pose: string, icon: ReactNode][] = [
   ['pet', <LuCat />],
   ['billiards', <LuCircleDot />],
   ['read', <LuBookOpen />],
+  ['write', <LuPenLine />],
   ['watch', <LuMonitorPlay />],
 ]
 

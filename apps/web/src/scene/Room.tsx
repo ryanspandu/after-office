@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import type { Group, Vector3 } from 'three'
 import { windowGlass } from './DayNight'
 import { Box, Cyl, Sphere } from './prims'
-import { LOUNGE, MEETING, openPlanCenter, PANTRY, WALL_H, type BossRoom, type Layout, type Rect, type Vec2 } from './layout'
+import { frontLeftCenter, LOUNGE, MEETING, openPlanCenter, PANTRY, WALL_H, type BossRoom, type Layout, type Rect, type Vec2 } from './layout'
 import { StaticBatch } from './StaticBatch'
 import { WallSign } from './WallSign'
 import { RingLamp } from './furniture/Lamps'
@@ -68,6 +68,8 @@ export function Room({ layout }: { layout: Layout }) {
       </Cutaway>
       {/* the big ring light over the open plan (lit at night: scene/DayNight.tsx) */}
       <RingLamp position={[openPlanCenter(layout)[0], 3.0, openPlanCenter(layout)[1]]} radius={1.3} />
+      {/* and a smaller one over the floor in front of the manager's office */}
+      <RingLamp position={[frontLeftCenter(layout)[0], 3.0, frontLeftCenter(layout)[1]]} radius={1.0} />
       <Bookshelf rect={layout.bookshelf} />
       <WaterCooler at={layout.waterCooler} />
       {layout.plants.map((p, i) => (

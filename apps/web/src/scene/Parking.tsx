@@ -8,8 +8,8 @@ import { lampBulb } from './DayNight'
 // Everything outside the front of the building: sidewalk, one long parking row, the road, lamps and trees.
 
 const SIDEWALK = { from: MAX_Z, to: 10.2 }
-const LOT = { from: 10.2, to: 13.6 }
-const ROAD = { from: 13.6, to: 17.4 }
+const LOT = { from: 10.2, to: 14.6 }
+const ROAD = { from: 14.6, to: 19.2 }
 
 export function Parking({ layout, slots }: { layout: Layout; slots: number }) {
   const { lot } = layout
@@ -22,8 +22,9 @@ export function Parking({ layout, slots }: { layout: Layout; slots: number }) {
   for (let x = lot.maxX - 2; x > lot.minX + 1; x -= 7) lampXs.push(x)
   const treeXs: number[] = []
   for (let x = lot.maxX - 1.5; x > lot.minX + 0.5; x -= 4.5) treeXs.push(x)
-  // slot lines for every slot in use plus a few spare ones
-  const lineCount = Math.max(slots + 3, 8)
+  // bays painted along the whole lot (not only the ones in use): as many as fit before its far end
+  let lineCount = 0
+  while (lineCount < 300 && slotPos(lineCount)[0] - 1.3 >= lot.minX) lineCount++
 
   return (
     <StaticBatch version={`${slots}:${lot.minX}:${lot.maxX}`}>
@@ -41,7 +42,6 @@ export function Parking({ layout, slots }: { layout: Layout; slots: number }) {
       {/* painted bays: one per slot, sized for the car or scooter that parks there */}
       {Array.from({ length: lineCount }, (_, i) => {
         const [x, z] = slotPos(i)
-        if (x - 1.3 < lot.minX) return null
         return <Bay key={i} x={x} z={z} kind={vehicleKind(i)} />
       })}
       {/* road markings */}
@@ -93,19 +93,21 @@ const PAINT = '#efece4'
 
 /** Painted parking bay: side lines, back line, a wheel stop for cars and a small marker for scooters. */
 function Bay({ x, z, kind }: { x: number; z: number; kind: 'car' | 'moto' }) {
-  const w = kind === 'car' ? 2.3 : 1.3
-  const d = kind === 'car' ? 3.0 : 2.0
-  const back = z - d / 2 + 0.2 // side nearest the building
+  // centred on where the vehicle stops (slotPos), so it sits in the middle of its bay
+  const w = kind === 'car' ? 2.7 : 1.6
+  const d = kind === 'car' ? 4.0 : 2.6
+  const back = z - d / 2 // side nearest the building
   return (
     <group position={[x, 0.025, 0]}>
       {[-1, 1].map((s) => (
-        <Box key={s} size={[0.07, 0.01, d]} position={[(s * w) / 2, 0, z + 0.2]} color={PAINT} noShadow />
+        <Box key={s} size={[0.07, 0.01, d]} position={[(s * w) / 2, 0, z]} color={PAINT} noShadow />
       ))}
-      <Box size={[w + 0.07, 0.01, 0.07]} position={[0, 0, back - 0.1]} color={PAINT} noShadow />
+      <Box size={[w + 0.07, 0.01, 0.07]} position={[0, 0, back]} color={PAINT} noShadow />
       {kind === 'car' ? (
-        <Box size={[1.1, 0.1, 0.16]} position={[0, 0.04, back + 0.25]} color="#c9c3b6" />
+        // the wheel stop, just behind the parked car's rear
+        <Box size={[1.3, 0.1, 0.14]} position={[0, 0.04, back + 0.14]} color="#c9c3b6" />
       ) : (
-        <Box size={[0.5, 0.01, 0.5]} position={[0, 0, z + 1.1]} color="#f5b914" noShadow />
+        <Box size={[0.5, 0.01, 0.5]} position={[0, 0, z + 0.9]} color="#f5b914" noShadow />
       )}
     </group>
   )

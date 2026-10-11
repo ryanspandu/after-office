@@ -9,6 +9,7 @@ import {
   LuKeyboard,
   LuPowerOff,
   LuRotateCw,
+  LuLocateFixed,
   LuMessageSquareText,
   LuSlidersHorizontal,
   LuTrash2,
@@ -27,7 +28,7 @@ import { ReportsPanel } from './Reports'
 import { idleText, waitingLabel } from './agentActivity'
 import { useDashboard } from '../state/dashboard'
 import { confirmWith } from './Confirm'
-import { openUrl } from '../state/url'
+import { openUrl, setUrl } from '../state/url'
 import { tip } from './Tooltip'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { useFlip } from '../state/useFlip'
@@ -291,6 +292,10 @@ function AgentRow({
               label: live ? (unreadOf(a) ? `Open chat · ${unreadOf(a)} new` : 'Open chat') : 'Open profile',
               run: onProfile,
             },
+            // the camera goes to it in the office and follows it (a phone's Agents sheet makes way)
+            ...(a.status !== 'offline'
+              ? [{ key: 'map', icon: <LuLocateFixed />, label: 'Show on map', run: () => (useOffice.getState().select(a.id), setUrl({ sheet: null })) }]
+              : []),
             ...(live ? [{ key: 'restart', icon: <LuRotateCw />, label: 'Restart session', hint: 'keeps the conversation', run: () => act('restart', () => liveApi.restart(a.id)) }] : []),
             { key: 'pin', icon: a.pinned ? <LuPinOff /> : <LuPin />, label: a.pinned ? 'Unpin' : 'Pin to the top', run: onPin },
             { key: 'remove', icon: <LuTrash2 />, label: 'Remove agent', danger: true, run: () => void removeAgent() },

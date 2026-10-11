@@ -5,7 +5,7 @@ import { useDaylight } from '../state/clock'
 import { headlight, taillight } from './Vehicle'
 import { useOffice } from '../state/store'
 import { streetLampLights } from './Parking'
-import { DESK_LAMP, deskPos, LOUNGE, MEETING_PENDANTS, openPlanCenter, PANTRY, type Layout } from './layout'
+import { DESK_LAMP, deskPos, LOUNGE, MEETING_PENDANTS, openPlanCenter, frontLeftCenter, PANTRY, type Layout } from './layout'
 import { useRenderConfig } from './quality'
 
 // Lighting that follows the office clock. Day: warm sun through the windows. Night: dark blue ambience, the
@@ -56,7 +56,11 @@ const FIXED_LAMPS: Lamp[] = [
 /** The open plan's ring light: a strong light over the middle of the desks (a light pool on low-end devices). */
 const openPlanLamps = (layout: Layout): Lamp[] => {
   const [x, z] = openPlanCenter(layout)
-  return [{ pos: [x, 2.6, z], power: 9, distance: 10, real: true }]
+  const [fx, fz] = frontLeftCenter(layout)
+  return [
+    { pos: [x, 2.6, z], power: 9, distance: 10, real: true },
+    { pos: [fx, 2.6, fz], power: 7, distance: 8, real: true },
+  ]
 }
 
 /** The manager's office (it moves with the open plan): the pendant over the desk, the floor lamp, the sofa corner. */

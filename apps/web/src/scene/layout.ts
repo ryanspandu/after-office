@@ -7,7 +7,7 @@
 export type Vec2 = [x: number, z: number]
 
 /** What an agent does once it reaches a spot. */
-export type SpotKind = 'desk' | 'meeting' | 'sofa' | 'cat' | 'billiards' | 'pantry' | 'read' | 'pc'
+export type SpotKind = 'desk' | 'meeting' | 'sofa' | 'cat' | 'billiards' | 'pantry' | 'read' | 'pc' | 'board'
 
 export interface Spot {
   id: string
@@ -77,6 +77,7 @@ export interface BossRoom {
   desk: Rect
   seat: Vec2
   guests: Vec2[]
+  /** the whiteboard on its stand against the back wall (the manager plans on it when idle) */
   shelf: Rect
   rug: Rect
   plant: Vec2
@@ -99,7 +100,7 @@ export function bossRoom(cols: number): BossRoom {
       [cx - 0.5, -3.0],
       [cx + 1.1, -3.0],
     ],
-    shelf: { x: cx + 0.3, z: MIN_Z + 0.38, w: 3.6, d: 0.5 },
+    shelf: { x: cx + 0.3, z: MIN_Z + 0.4, w: 2.8, d: 0.45 },
     rug: { x: cx + 0.3, z: -4.2, w: 4.4, d: 4.4 },
     plant: [maxX - 0.55, MIN_Z + 0.6],
     lamp: [minX + 0.55, MIN_Z + 0.55],
@@ -108,7 +109,7 @@ export function bossRoom(cols: number): BossRoom {
 }
 /**
  * Places in the manager's office, as `boss<name>@<desk columns>` (the room moves with them): its chair (`boss@N`,
- * working / waiting / offline, and idle at its desk), the sofa's two seats and the bookcase (idle), the chair when it
+ * working / waiting / offline, and idle at its desk), the sofa's two seats and the whiteboard (idle), the chair when it
  * interviews someone (`boss-host`) and the visitors' chairs (`boss-guest0/1`, the one being interviewed).
  */
 export type BossPlace = '' | '-sofa0' | '-sofa1' | '-shelf' | '-host' | '-guest0' | '-guest1'
@@ -125,8 +126,8 @@ function bossPlaceSpot(id: string): Spot {
       // on the sofa against the left wall, facing into the room (+x)
       return { id, kind: 'sofa', x: room.sofa.x + 0.12, z: room.sofa.z + (name === '-sofa0' ? -0.45 : 0.45), rotY: Math.PI / 2 }
     case '-shelf':
-      // browsing the bookcase, facing it
-      return { id, kind: 'read', x: room.shelf.x - 1.1, z: room.shelf.z + 0.75, rotY: Math.PI }
+      // writing on the whiteboard, facing it (a little left of its middle: the right hand reaches across)
+      return { id, kind: 'board', x: room.shelf.x - 0.35, z: room.shelf.z + 0.85, rotY: Math.PI }
     case '-host':
       // at its desk, talking to whoever sits across
       return { id, kind: 'meeting', x: sx, z: sz, rotY: 0 }
@@ -157,10 +158,11 @@ export const ENTRANCE: Vec2 = [-3, 7.6]
 // ── Outside: sidewalk, parking row, road (in front of the building, +z) ──
 export const OUTSIDE = {
   sidewalkZ: 9.2,
-  parkZ: 11.8,
-  roadZ: 15.6,
-  groundMaxZ: 18,
-  slotGap: 2.7,
+  // a deeper lot and a wider road for full-size cars (scene/Vehicle.tsx SCALE)
+  parkZ: 12.4,
+  roadZ: 16.9,
+  groundMaxZ: 19.4,
+  slotGap: 3.2,
   firstSlotX: MAX_X - 2,
 }
 
@@ -172,7 +174,7 @@ export const vehicleKind = (i: number): VehicleKind => (i % 3 === 1 ? 'moto' : '
 /** Where the driver gets out, next to the parked vehicle. */
 export const doorPos = (i: number): Vec2 => {
   const [x, z] = slotPos(i)
-  return [x + (vehicleKind(i) === 'moto' ? 0.6 : 0.95), z - 0.3]
+  return [x + (vehicleKind(i) === 'moto' ? 0.75 : 1.2), z - 0.4]
 }
 
 /** Walk from the vehicle door to the office entrance (outdoor legs only; A* handles indoors). */
@@ -191,7 +193,7 @@ export const driveInRoute = (i: number, lotMaxX: number): Vec2[] => {
   return [
     [lotMaxX + 4, OUTSIDE.roadZ],
     [x, OUTSIDE.roadZ],
-    [x, z + 1.2],
+    [x, z + 1.8],
     [x, z],
   ]
 }
@@ -321,4 +323,9 @@ export function getLayout(cols: number): Layout {
 /** The middle of the open plan (its carpet), where the big ring light hangs. */
 export function openPlanCenter(l: Pick<Layout, 'openMinX'>): [number, number] {
   return [(l.openMinX + 0.5 + MEETING.bounds.minX - 0.8) / 2, -1]
+}
+
+/** The open floor in front of the manager's office (the bookcase, the water cooler): its own ring light hangs here. */
+export function frontLeftCenter(l: Pick<Layout, 'boss'>): [number, number] {
+  return [(l.boss.bounds.minX + l.boss.bounds.maxX) / 2, (l.boss.bounds.maxZ + MAX_Z) / 2]
 }

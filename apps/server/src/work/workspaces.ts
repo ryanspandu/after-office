@@ -154,7 +154,7 @@ export async function setGitAs(root: string, rel: string, agentId: unknown) {
 }
 
 // writing: no hooks or fsmonitor from the repo's config (the dashboard's commit isn't the place for them), no pager
-const WRITE = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.pager=cat']
+const WRITE = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.pager=cat', '-c', 'safe.directory=*']
 
 async function gitWrite(top: string, who: AgentRow | null | undefined, args: string[], timeoutMs = 30_000) {
   // the agent's gitconfig (written first, as its session does): its name, email and SSH key

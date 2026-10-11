@@ -8,6 +8,7 @@ export function waitingLabel(k: NonNullable<OfficeAgent['waitingFor']>) {
 }
 
 export function idleText(spotId: string) {
+  if (spotId.startsWith('boss-shelf')) return 'Planning on the whiteboard'
   if (spotId.startsWith('cat')) return 'Playing with the cat'
   if (spotId.startsWith('pool')) return 'Shooting pool'
   if (spotId.startsWith('sofa')) return 'Watching TV'

@@ -19,6 +19,9 @@ const SAFE = [
   '-c', 'protocol.allow=never',
   // never take the index lock: the agent may be using git at the same time
   '-c', 'core.optionalLocks=false',
+  // a repo the owner cloned with their own account (another user than the agents'): git refuses "dubious ownership"
+  // otherwise, and the folder would look like it had no git. Runs with the agents' rights either way.
+  '-c', 'safe.directory=*',
 ]
 
 export async function git(cwd: string, args: string[]) {

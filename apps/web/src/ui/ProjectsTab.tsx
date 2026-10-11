@@ -396,7 +396,8 @@ export function ProjectFolderModal({
       open
       onClose={onClose}
       title={f.name}
-      description={`${f.git ? 'Git repository' : 'Folder'} · ${tilde(f.path)}`}
+      // a long path breaks after a slash, never in the middle of a folder's name
+      description={`${f.git ? 'Git repository' : 'Folder'} · ${tilde(f.path).replace(/\//g, '/\u200b')}`}
       {...max.modalProps}
       hidden={hidden}
       // a click beside it puts it aside (minimized) instead of closing it

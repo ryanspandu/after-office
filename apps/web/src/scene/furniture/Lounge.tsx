@@ -1,6 +1,6 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import type { Mesh, MeshStandardMaterial } from 'three'
+import { CanvasTexture, SRGBColorSpace, type Mesh, type MeshStandardMaterial } from 'three'
 import { useOffice } from '../../state/store'
 import { env, lampBulb } from '../DayNight'
 import { LOUNGE } from '../layout'
@@ -62,41 +62,150 @@ function CoffeeTable() {
   )
 }
 
-const FIELD = { w: 3.0, h: 1.62 }
-const PLAYERS = [
-  { team: '#f5f5f5', phase: 0, ax: 0.9, az: 0.45 },
-  { team: '#f5f5f5', phase: 1.7, ax: 0.6, az: 0.5 },
-  { team: '#f5f5f5', phase: 3.1, ax: 1.1, az: 0.3 },
-  { team: '#ff5a3c', phase: 0.8, ax: 0.8, az: 0.5 },
-  { team: '#ff5a3c', phase: 2.4, ax: 1.0, az: 0.4 },
-  { team: '#ff5a3c', phase: 4.0, ax: 0.5, az: 0.55 },
+/** Seconds per scene of the cartoon, and of the fade to black between two. */
+const SCENE_S = 9
+const FADE_S = 0.6
+type SceneId = 'day' | 'sunset' | 'night' | 'beach'
+const SCENES: { id: SceneId; sky: string; hills: string; ground: string; sun: string }[] = [
+  { id: 'day', sky: '#7cc6ff', hills: '#5fbf6a', ground: '#3f9a4f', sun: '#ffe066' },
+  { id: 'sunset', sky: '#ff9a6b', hills: '#8a5a9c', ground: '#5b3d6b', sun: '#fff2b0' },
+  { id: 'night', sky: '#18224a', hills: '#26345e', ground: '#1b2540', sun: '#eef2ff' },
+  { id: 'beach', sky: '#8ee3f2', hills: '#f0d9a0', ground: '#2f9fd0', sun: '#ffffff' },
 ]
+/** The film's canvas (16:9, like the TV): the picture fills the whole screen. */
+const FILM = { w: 384, h: 216 }
+const STARS: [number, number][] = [[0.08, 0.22], [0.2, 0.32], [0.33, 0.18], [0.47, 0.28], [0.62, 0.16], [0.74, 0.3], [0.88, 0.2], [0.55, 0.38]]
 
-/** Big TV on a low console, facing the sofa. Shows a match when someone is watching. */
+/** One frame of the cartoon: a walk in the hills, a drive at sunset, a quiet night, a boat at sea. */
+function drawFilm(g: CanvasRenderingContext2D, t: number) {
+  const { w, h } = FILM
+  const n = Math.floor(t / SCENE_S)
+  const sc = SCENES[n % SCENES.length]
+  const p = (t % SCENE_S) / SCENE_S
+  const top = 0
+  const bottom = h
+  const horizon = top + (bottom - top) * 0.62
+  const circle = (x: number, y: number, r: number, c: string) => {
+    g.fillStyle = c
+    g.beginPath()
+    g.arc(x, y, r, 0, Math.PI * 2)
+    g.fill()
+  }
+  // sky
+  g.fillStyle = sc.sky
+  g.fillRect(0, top, w, bottom - top)
+  // stars (night) and the sun / moon
+  if (sc.id === 'night')
+    STARS.forEach(([x, y], i) => {
+      g.globalAlpha = 0.5 + Math.sin(t * 3 + i * 1.7) * 0.5
+      circle(x * w, top + y * (bottom - top), 1.6, '#ffffff')
+      g.globalAlpha = 1
+    })
+  circle(sc.id === 'night' ? w * 0.8 : w * (0.18 + p * 0.15), top + 34 - Math.sin(p * Math.PI) * 10, 13, sc.sun)
+  // a cloud drifting by
+  if (sc.id !== 'night') {
+    const cx = ((t * 14) % (w + 80)) - 40
+    ;[[-12, 0, 9], [0, -4, 12], [13, 0, 9]].forEach(([dx, dy, r]) => circle(cx + dx, top + 30 + dy, r, '#ffffff'))
+  }
+  // hills on the horizon, the ground (the sea at the beach)
+  g.fillStyle = sc.hills
+  ;[[0.18, 70], [0.55, 85], [0.88, 66]].forEach(([x, r]) => {
+    g.beginPath()
+    g.arc(x * w, horizon + 18, r, Math.PI, 0)
+    g.fill()
+  })
+  g.fillStyle = sc.ground
+  g.fillRect(0, horizon + 18, w, bottom - horizon - 18)
+  if (sc.id === 'beach') {
+    g.fillStyle = 'rgba(255,255,255,0.55)'
+    for (let i = 0; i < 6; i++) g.fillRect(((i * 70 + t * 20) % (w + 40)) - 20, horizon + 30 + (i % 2) * 14, 22, 2)
+  }
+  // the star of each scene, crossing the picture
+  const x = -30 + p * (w + 60)
+  const ground = horizon + 18
+  if (sc.id === 'day') {
+    const bob = Math.abs(Math.sin(t * 6)) * 2
+    g.fillStyle = '#e8795b'
+    g.fillRect(x - 5, ground - 22 - bob, 10, 16)
+    circle(x, ground - 28 - bob, 6, '#f2d0b1')
+    g.fillStyle = '#3a3f4b'
+    g.fillRect(x - 4, ground - 6 - bob, 3, 6)
+    g.fillRect(x + 1, ground - 6 - bob, 3, 6)
+  } else if (sc.id === 'sunset') {
+    const cx = w - x
+    g.fillStyle = '#e03e3e'
+    g.fillRect(cx - 24, ground - 16, 48, 10)
+    g.fillRect(cx - 12, ground - 24, 24, 9)
+    circle(cx - 14, ground - 5, 5, '#1b1b1b')
+    circle(cx + 14, ground - 5, 5, '#1b1b1b')
+  } else if (sc.id === 'night') {
+    g.fillStyle = '#3a2f4a'
+    g.fillRect(w * 0.22, ground - 30, 46, 30)
+    g.fillStyle = '#2a2238'
+    g.beginPath()
+    g.moveTo(w * 0.22 - 6, ground - 30)
+    g.lineTo(w * 0.22 + 23, ground - 50)
+    g.lineTo(w * 0.22 + 52, ground - 30)
+    g.fill()
+    g.fillStyle = '#ffd27a'
+    g.fillRect(w * 0.22 + 28, ground - 22, 10, 10)
+  } else {
+    const by = ground + 12 + Math.sin(t * 2.2) * 2
+    g.fillStyle = '#7a4a2a'
+    g.fillRect(x - 18, by, 36, 6)
+    g.fillStyle = '#ffffff'
+    g.beginPath()
+    g.moveTo(x, by - 2)
+    g.lineTo(x, by - 30)
+    g.lineTo(x + 16, by - 2)
+    g.fill()
+  }
+  // the cut between scenes: a fade to black
+  const edge = Math.min(t % SCENE_S, SCENE_S - (t % SCENE_S))
+  if (edge < FADE_S) {
+    g.fillStyle = `rgba(0,0,0,${1 - edge / FADE_S})`
+    g.fillRect(0, top, w, bottom - top)
+  }
+}
+
+/**
+ * What's on the TV while someone watches: the cartoon, drawn on a small canvas each frame and shown on the screen as
+ * its picture (flat on the glass, cut at its edges like a real screen).
+ */
+function TvMovie({ watching }: { watching: boolean }) {
+  const mesh = useRef<Mesh>(null!)
+  const film = useMemo(() => {
+    if (typeof document === 'undefined') return null
+    const canvas = document.createElement('canvas')
+    canvas.width = FILM.w
+    canvas.height = FILM.h
+    const texture = new CanvasTexture(canvas)
+    texture.colorSpace = SRGBColorSpace
+    return { g: canvas.getContext('2d')!, texture }
+  }, [])
+  useEffect(() => () => film?.texture.dispose(), [film])
+  useFrame(({ clock }) => {
+    mesh.current.visible = watching
+    if (!watching || !film) return
+    drawFilm(film.g, clock.elapsedTime)
+    film.texture.needsUpdate = true
+  })
+  return (
+    <mesh ref={mesh} position={[0, 0, 0.047]} visible={false} userData={{ dynamic: true }}>
+      <planeGeometry args={[3.16, 1.76]} />
+      <meshBasicMaterial map={film?.texture ?? null} toneMapped={false} />
+    </mesh>
+  )
+}
+
+/** Big TV on a low console, facing the sofa. Plays a cartoon when someone is watching. */
 function TvCorner() {
   const { x, z, w, d } = LOUNGE.tv
   const watching = useOffice((s) => s.agents.some((a) => a.status === 'idle' && a.spotId.startsWith('sofa')))
   const screen = useRef<MeshStandardMaterial>(null!)
-  const dots = useRef<(Mesh | null)[]>([])
-  const ball = useRef<Mesh>(null!)
-  const pitch = useRef<Mesh>(null!)
 
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime
+  useFrame(() => {
     screen.current.emissiveIntensity = watching ? 0.25 : 0.12 + env.night * 0.1
-    pitch.current.visible = watching
-    ball.current.visible = watching
-    const bx = Math.sin(t * 0.9) * 1.1 + Math.sin(t * 2.3) * 0.2
-    const by = Math.sin(t * 1.3) * 0.5
-    ball.current.position.set(bx, by, 0.02)
-    PLAYERS.forEach((p, i) => {
-      const m = dots.current[i]
-      if (!m) return
-      m.visible = watching
-      // players drift around their zone and lean towards the ball
-      const home = (i < 3 ? -0.6 : 0.6) + Math.sin(t * 0.5 + p.phase) * p.ax * 0.4
-      m.position.set(home * 0.6 + bx * 0.4, Math.sin(t * 0.8 + p.phase) * p.az + by * 0.2, 0.015)
-    })
   })
 
   return (
@@ -115,26 +224,7 @@ function TvCorner() {
           <planeGeometry args={[3.16, 1.76]} />
           <meshStandardMaterial ref={screen} color="#0c0f14" emissive="#9fc3ff" emissiveIntensity={0.12} />
         </mesh>
-        <group position={[0, 0, 0.05]} userData={{ dynamic: true }}>
-          <mesh ref={pitch}>
-            <planeGeometry args={[FIELD.w, FIELD.h]} />
-            <meshBasicMaterial color="#2f8f4a" toneMapped={false} />
-          </mesh>
-          <mesh position={[0, 0, 0.005]}>
-            <planeGeometry args={[0.02, FIELD.h]} />
-            <meshBasicMaterial color="#cfe8d4" toneMapped={false} />
-          </mesh>
-          {PLAYERS.map((p, i) => (
-            <mesh key={i} ref={(m) => void (dots.current[i] = m)}>
-              <circleGeometry args={[0.05, 12]} />
-              <meshBasicMaterial color={p.team} toneMapped={false} />
-            </mesh>
-          ))}
-          <mesh ref={ball}>
-            <circleGeometry args={[0.03, 10]} />
-            <meshBasicMaterial color="#ffe36b" toneMapped={false} />
-          </mesh>
-        </group>
+        <TvMovie watching={watching} />
       </group>
     </group>
   )

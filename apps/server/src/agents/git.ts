@@ -68,7 +68,9 @@ const ini = (v: string) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 /** The agent's gitconfig and one file per extra identity: path → content. */
 export function gitConfigFiles(row: AgentRow, identities = gitIdentitiesRepo.forAgent(row.id)): Record<string, string> {
   const files: Record<string, string> = {}
-  const main = ['# After Office: git settings for this agent (made by the dashboard; Overview → Git). Do not edit.', '[include]', '\tpath = ~/.gitconfig']
+  // safe.directory: repos the owner cloned with another account (under the agents' folders) work without "dubious
+  // ownership" errors; the agent works there with its own rights anyway
+  const main = ['# After Office: git settings for this agent (made by the dashboard; Overview → Git). Do not edit.', '[include]', '\tpath = ~/.gitconfig', '[safe]', '\tdirectory = *']
   if (row.git_name || row.git_email) main.push('[user]', ...(row.git_name ? [`\tname = ${ini(row.git_name)}`] : []), ...(row.git_email ? [`\temail = ${ini(row.git_email)}`] : []))
   if (row.ssh_fingerprint) main.push('[core]', `\tsshCommand = ${ini(sshCommand(keyFile(row.id)))}`)
   for (const g of identities) {

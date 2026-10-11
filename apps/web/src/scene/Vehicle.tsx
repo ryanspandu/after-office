@@ -84,11 +84,17 @@ function Moto({ color, rider }: { color: string; rider?: string }) {
   )
 }
 
+/** The models are drawn small; this brings them to the people's size (who are about 2 m tall): a car's roof at their
+ *  shoulders, filling its painted bay (scene/Parking.tsx Bay). */
+const SCALE: Record<VehicleKind, number> = { car: 1.65, moto: 1.55 }
+
 export const Vehicle = forwardRef<Group, { kind: VehicleKind; color: string; riderColor?: string }>(function Vehicle({ kind, color, riderColor }, ref) {
   // the body is rigid: one batch (a car is ~19 meshes otherwise); the rider is shown/hidden, so it stays separate
   return (
     <group ref={ref}>
-      <StaticBatch version={`${kind}:${color}`}>{kind === 'car' ? <Car color={color} /> : <Moto color={color} rider={riderColor} />}</StaticBatch>
+      <group scale={SCALE[kind]}>
+        <StaticBatch version={`${kind}:${color}`}>{kind === 'car' ? <Car color={color} /> : <Moto color={color} rider={riderColor} />}</StaticBatch>
+      </group>
     </group>
   )
 })
