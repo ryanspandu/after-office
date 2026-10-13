@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { afterAll, beforeAll, expect, test, setDefaultTimeout } from 'bun:test'
 import type { OfficeThread } from '@after-office/shared'
 import { agentsRepo, queueRepo, reportsRepo, sideSessionsRepo, tasksRepo, threadQueueRepo, threadsRepo, type AgentRow } from '../db'
 import { updateRuntime, updateSideRuntime } from '../agents/registry'
@@ -6,6 +6,9 @@ import { delegateTask } from './managerTasks'
 import { archiveThread, editQueued, holdQueued, listThreads, reorderThreads, sendToThread, unsendQueued, closeIdleThreads, deleteThread, drainThreads, joinThread, mentionTask, parentFor, threadContext, threadOfSession } from './threads'
 import { deliverToManager, fileReport, isReadingAgentOutput, isReportedNow, onSidePromptSubmitted } from './work'
 import { fakeTuiCommand, fastGate } from '../agents/testing/tui'
+
+// prompts go through the input gate (a fake Claude Code screen): a round takes a second or two
+setDefaultTimeout(15_000)
 
 // Threads: a topic in a side session of the manager's. What it starts belongs to it, what comes back about it goes to
 // it (never to the main session), and its session closes when quiet.

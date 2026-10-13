@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { afterAll, beforeAll, expect, test, setDefaultTimeout } from 'bun:test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,6 +9,9 @@ import { fakeTuiCommand, fastGate } from '../agents/testing/tui'
 import { setRateLimits, updateRuntime } from '../agents/registry'
 import { updateSettings } from './settings'
 import { active, onAgentStopped, onPromptSubmitted, resumeTask, startTask, stopActiveTask } from './work'
+
+// prompts go through the input gate (a fake Claude Code screen): a round takes a second or two
+setDefaultTimeout(15_000)
 
 // Stopping an agent partway through a task (the owner's Stop, the manager's interrupt_agent / stop_task): the task goes
 // back to To do at once, marked stopped, with a note and a report; Resume gives it to the same agent again.
@@ -38,7 +41,7 @@ const task = (id: string, patch: Partial<OfficeTask> = {}): OfficeTask => ({
   ...patch,
 })
 const idle = (id: string) => updateRuntime(id, (rt) => ({ ...rt, status: 'idle', lastEventAt: Date.now() }))
-const until = async (fn: () => boolean, ms = 5000) => {
+const until = async (fn: () => boolean, ms = 12_000) => {
   const end = Date.now() + ms
   while (!fn()) {
     if (Date.now() > end) throw new Error('timed out')

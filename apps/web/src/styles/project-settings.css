@@ -5,7 +5,7 @@
 .project-settings__reset { margin-right: auto; }
 .profile__who .small { flex-shrink: 0; }
 /* Office settings → Move this office (ui/MoveOffice.tsx) */
-.project-settings__move { padding-top: 12px; border-top: 1px solid var(--line); }
+.project-settings__move, .project-settings__tools { padding-top: 12px; border-top: 1px solid var(--line); }
 .project-settings__move-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .move-office { display: flex; flex-direction: column; gap: 12px; }
 .move-office__what { display: flex; flex-direction: column; gap: 6px; }
@@ -46,3 +46,14 @@
 .proxy__test--bad { color: var(--danger); }
 .proxy-form__row { display: grid; grid-template-columns: 1fr 96px; gap: 10px; }
 .proxy-form__seg { align-self: flex-start; }
+
+/* Tools (ui/ToolsModal.tsx): image generation keys and the residential proxy, one section each */
+.tools { display: grid; gap: 18px; }
+.tools__section { display: grid; gap: 10px; }
+.tools__section + .tools__section { padding-top: 14px; border-top: 1px solid var(--line); }
+.tools__section .proxy { padding-top: 0; border-top: 0; }
+.tools__title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; font-weight: 600; }
+.tools__title svg { color: var(--hl-ink); }
+.tools__item { display: grid; gap: 8px; }
+.tools__access { display: grid; gap: 10px; }
+.tools__seg { align-self: flex-start; }

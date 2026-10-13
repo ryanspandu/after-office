@@ -16,6 +16,7 @@ import { useManagerPanel } from './ManagerPanel'
 import { useProfileModal } from './ProfileModal'
 import { NewFolderModal, ProjectFolderModal, type Open } from './ProjectsTab'
 import { ProjectSettingsModal } from './ProjectSettings'
+import { ToolsModal } from './ToolsModal'
 import { ChangePasswordModal } from './ChangePassword'
 import { TwoFactorModal } from './TwoFactor'
 import { EditProfileModal } from './EditProfile'
@@ -103,6 +104,7 @@ export function UrlModals() {
       {p.newtask && <NewTaskFromUrl />}
       {p.daily && <CronFromUrl id={p.daily} />}
       {p.settings && <ProjectSettingsModal onClose={clear(['settings'])} />}
+      {p.tools && <ToolsModal onClose={clear(['tools'])} />}
       {p.password && <ChangePasswordModal onClose={clear(['password'])} />}
       {p.twofa && <TwoFactorModal onClose={clear(['twofa'])} />}
       {p.editprofile && <EditProfileModal onClose={clear(['editprofile'])} />}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { LuCircleCheck, LuCircleX, LuEllipsisVertical, LuInfo, LuKeyRound, LuLogOut, LuMonitor, LuRefreshCw, LuSettings2, LuShieldCheck, LuUserPen, LuSmartphone, LuTablet } from 'react-icons/lu'
+import { LuCircleCheck, LuCircleX, LuEllipsisVertical, LuInfo, LuKeyRound, LuLogOut, LuMonitor, LuRefreshCw, LuSettings2, LuShieldCheck, LuUserPen, LuSmartphone, LuTablet, LuWrench } from 'react-icons/lu'
 import { create } from 'zustand'
 import { describeUserAgent, type LoginEvent, type SessionInfo } from '@after-office/shared'
 import { api, useAuth } from '../state/auth'
@@ -81,6 +81,12 @@ export function ProfileModal() {
           <div className="grow">
             <b>{user}</b>
             <span className="muted">Owner of this office</span>
+            {/* under the name, out of the row of settings (on phones: in the ⋮ menu) */}
+            {!mobile && (
+              <button className="small ghost profile__signout" onClick={logout}>
+                <LuLogOut /> Sign out
+              </button>
+            )}
           </div>
           {mobile ? (
             // phones: one button, the three actions in a menu
@@ -88,6 +94,7 @@ export function ProfileModal() {
               items={[
                 { icon: <LuUserPen />, label: 'Edit profile', onClick: () => openUrl({ editprofile: 1 }) },
                 { icon: <LuSettings2 />, label: 'Office settings', onClick: () => openUrl({ settings: 1 }) },
+                { icon: <LuWrench />, label: 'Tools', onClick: () => openUrl({ tools: 1 }) },
                 { icon: <LuKeyRound />, label: 'Change password', onClick: () => openUrl({ password: 1 }) },
                 { icon: <LuShieldCheck />, label: 'Two-factor', onClick: () => openUrl({ twofa: 1 }) },
                 { icon: <LuLogOut />, label: 'Sign out', onClick: logout },
@@ -101,8 +108,8 @@ export function ProfileModal() {
               <button className="small" onClick={() => openUrl({ settings: 1 })} {...tip("The office's name, description and logo")}>
                 <LuSettings2 /> Office settings
               </button>
-              <button className="small" onClick={logout}>
-                <LuLogOut /> Sign out
+              <button className="small" onClick={() => openUrl({ tools: 1 })} {...tip('The residential proxy and the API keys agents use (image generation)')}>
+                <LuWrench /> Tools
               </button>
             </>
           )}

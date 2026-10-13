@@ -1,8 +1,11 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, expect, test, setDefaultTimeout } from 'bun:test'
 import { agentsRepo } from '../db'
 import { chatTiming, sendChat } from './manager'
 import { updateRuntime } from './registry'
 import { fakeTuiCommand, fastGate } from './testing/tui'
+
+// prompts go through the input gate (a fake Claude Code screen): a round takes a second or two
+setDefaultTimeout(15_000)
 
 // The owner's chat message counts as sent only once Claude Code took it: typed into a screen that isn't at its message
 // box, it would be lost without a word.

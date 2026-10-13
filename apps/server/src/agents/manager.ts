@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dropSecrets, secretEnv } from './secrets'
 import { proxyEnv } from './proxy'
+import { toolsEnv } from './tools'
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { DEFAULT_MANAGER, DEFAULT_MODEL, EFFORTS, isEffort, defaultRulePacks, type RulePackId, type AgentEffort, type AgentFigure, type AgentKind, type AgentProfile, type LiveMode } from '@after-office/shared'
 import { agentsRepo, queueRepo, sideSessionsRepo, type AgentRow, type SideSessionRow, extraDirsOf } from '../db'
@@ -455,9 +456,11 @@ async function startProcess(row: AgentRow, p: { tmuxName: string; sessionId: str
     cwd: row.cwd,
     // its own token: it can only report (and use MCP tools) as itself
     env: {
+      // the office's API keys (Tools: image generation…), when it may have them: an agent's own key (Secrets) wins
+      ...toolsEnv(row.id),
       // the owner's tokens for its projects' services (Overview → Secrets): first, so the office's own below win
       ...secretEnv(row.id),
-      // the office's residential proxy (Office settings): RESIDENTIAL_PROXY_URL…, never HTTP(S)_PROXY (Claude Code's
+      // the office's residential proxy (Tools): RESIDENTIAL_PROXY_URL…, never HTTP(S)_PROXY (Claude Code's
       // own API traffic doesn't go through it)
       ...proxyEnv(),
       AO_AGENT_ID: row.id,

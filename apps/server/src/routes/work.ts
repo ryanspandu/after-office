@@ -25,6 +25,7 @@ import { requestWho, requireFreshCode } from '../auth'
 import { requireSameOrigin, requireSameOriginOnly, shellSocket } from '../agents/term'
 import { lockTerminals, requireUnlockedTerminal, terminalsOpenUntil, unlockTerminals } from '../agents/termLock'
 import { proxyInfo, putProxy, removeProxy, testProxy } from '../agents/proxy'
+import { imageToolInfo, putImageKey, removeImageKey, setImageAccess, testImageKey } from '../agents/tools'
 import { endShell, openShell, shellRunning, shellTarget } from '../work/shells'
 import { emptyTrash, listTrash, purgeTrash, restoreTrash, trashEntries } from '../work/trash'
 
@@ -690,7 +691,7 @@ workRoutes.post('/automation/test', async (c) => {
   return c.json({ results })
 })
 
-// ── the residential proxy (Office settings): the agents' sessions get it as RESIDENTIAL_PROXY_URL (agents/proxy.ts) ──
+// ── the residential proxy (Tools): the agents' sessions get it as RESIDENTIAL_PROXY_URL (agents/proxy.ts) ──
 workRoutes.get('/proxy', (c) => c.json({ proxy: proxyInfo() }))
 workRoutes.put('/proxy', async (c) => c.json({ proxy: putProxy((await c.req.json().catch(() => ({}))) as Record<string, unknown>) }))
 workRoutes.delete('/proxy', (c) => {
@@ -698,6 +699,14 @@ workRoutes.delete('/proxy', (c) => {
   return c.json({ ok: true })
 })
 workRoutes.post('/proxy/test', async (c) => c.json(await testProxy()))
+
+// ── the office's API keys (Tools → Image generation): the agents' sessions get them (agents/tools.ts) ──
+workRoutes.get('/tools/image', (c) => c.json(imageToolInfo()))
+// :id is a provider (google, openrouter…), a custom key's id, or "custom" for a new custom one
+workRoutes.put('/tools/image/:id', async (c) => c.json(putImageKey(c.req.param('id'), (await c.req.json().catch(() => ({}))) as Record<string, unknown>)))
+workRoutes.delete('/tools/image/:id', (c) => c.json(removeImageKey(c.req.param('id'))))
+workRoutes.post('/tools/image/:id/test', async (c) => c.json(await testImageKey(c.req.param('id'))))
+workRoutes.put('/tools/image', async (c) => c.json(setImageAccess((await c.req.json().catch(() => ({}))) as { access?: unknown; preferred?: unknown })))
 
 // ── settings ──
 workRoutes.put('/settings', async (c) => {

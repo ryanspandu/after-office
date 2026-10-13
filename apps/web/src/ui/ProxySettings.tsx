@@ -5,9 +5,10 @@ import { confirm } from './Confirm'
 import { Modal } from './Modal'
 import { Select } from './Select'
 
-// Office settings → Residential proxy: one provider's gateway the agents use for scraping (their sessions get it as
+// Tools → Residential proxy: one provider's gateway the agents use for scraping (their sessions get it as
 // RESIDENTIAL_PROXY_URL and its parts; server: agents/proxy.ts). Any provider: pick one to fill its usual gateway, or
-// paste what the provider shows ("host:port:user:pass" or a proxy URL). The password is never shown again.
+// paste what the provider shows ("host:port:user:pass" or a proxy URL). The username (often the account's key) and
+// the password are never shown again: the username by its last 4 characters.
 
 interface ProxyInfo {
   enabled: boolean
@@ -15,7 +16,8 @@ interface ProxyInfo {
   protocol: 'http' | 'socks5'
   host: string
   port: number
-  username: string
+  userLast4: string
+  hasUsername: boolean
   hasPassword: boolean
   updatedAt: number
 }
@@ -93,7 +95,7 @@ function TestResult({ test }: { test: ProxyTest }) {
   )
 }
 
-/** The section in Office settings: what's set, and its buttons. */
+/** The section in Tools: what's set, and its buttons. */
 export function ProxySection() {
   const [proxy, setProxy] = useState<ProxyInfo | null | undefined>(undefined)
   const [editing, setEditing] = useState(false)
@@ -119,7 +121,7 @@ export function ProxySection() {
   const toggle = (on: boolean) =>
     run('toggle', async () => {
       if (!proxy) return
-      const r = await call<{ proxy: ProxyInfo }>('/api/proxy', 'PUT', { ...proxy, enabled: on, password: '' })
+      const r = await call<{ proxy: ProxyInfo }>('/api/proxy', 'PUT', { ...proxy, enabled: on, username: '', password: '' })
       setProxy(r.proxy)
     })
   const remove = () =>
@@ -132,7 +134,6 @@ export function ProxySection() {
 
   return (
     <div className="field proxy">
-      <span className="field__label">Residential proxy</span>
       {proxy === undefined ? (
         <span className="field__hint">
           <LuLoader className="spin" /> Loading…
@@ -146,7 +147,7 @@ export function ProxySection() {
               <span className="mono muted">
                 {proxy.protocol === 'socks5' ? 'socks5://' : ''}
                 {proxy.host}:{proxy.port}
-                {proxy.username ? ` · ${proxy.username}` : ''}
+                {proxy.hasUsername ? ` · ••••${proxy.userLast4}` : ''}
               </span>
             </span>
             <label className="toggle" data-tip={proxy.enabled ? 'On: agents get it' : 'Off: agents don’t get it'}>
@@ -198,7 +199,8 @@ function ProxyModal({ proxy, onClose, onSaved }: { proxy: ProxyInfo | null; onCl
   const [protocol, setProtocol] = useState<'http' | 'socks5'>(proxy?.protocol ?? 'http')
   const [host, setHost] = useState(proxy?.host ?? providerOf('dataimpulse').host)
   const [port, setPort] = useState(String(proxy?.port ?? providerOf('dataimpulse').port))
-  const [username, setUsername] = useState(proxy?.username ?? '')
+  // saved: shown by its last 4 only; empty keeps it
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [paste, setPaste] = useState('')
   const [busy, setBusy] = useState(false)
@@ -287,7 +289,7 @@ function ProxyModal({ proxy, onClose, onSaved }: { proxy: ProxyInfo | null; onCl
         </div>
         <label className="field">
           <span className="field__label">Username</span>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" spellCheck={false} />
+          <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" spellCheck={false} placeholder={proxy?.hasUsername ? `Saved (••••${proxy.userLast4}): leave empty to keep it` : ''} />
         </label>
         <label className="field">
           <span className="field__label">Password</span>

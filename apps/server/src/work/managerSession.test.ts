@@ -1,8 +1,11 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, expect, test, setDefaultTimeout } from 'bun:test'
 import { agentsRepo, queueRepo, sideSessionsRepo } from '../db'
 import { updateRuntime } from '../agents/registry'
 import { deliverToManager } from './work'
 import { fakeTuiCommand, fastGate } from '../agents/testing/tui'
+
+// prompts go through the input gate (a fake Claude Code screen): a round takes a second or two
+setDefaultTimeout(15_000)
 
 // Work the manager started from one of its side sessions (the owner started it there): what comes back about it goes to
 // that session while it's open; once it's closed (or gone), to the main session as before.

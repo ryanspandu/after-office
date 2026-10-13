@@ -7,6 +7,7 @@
 .profile__who { display: flex; align-items: center; gap: 12px; }
 .profile__who .grow { display: grid; gap: 1px; min-width: 0; }
 .profile__who .muted { font-size: 12.5px; }
+.profile__signout { justify-self: start; margin: 4px 0 0 -8px; color: var(--muted); }
 .profile__avatar { width: 40px; height: 40px; font-size: 16px; background: var(--hl-2); color: #151515; display: grid; place-items: center; border-radius: 12px; }
 .profile__section { display: flex; flex-direction: column; gap: 8px; }
 .profile__head { display: flex; align-items: center; justify-content: space-between; }

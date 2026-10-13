@@ -3,11 +3,12 @@ import { seal, unseal } from '../totp'
 import { AgentError } from './errors'
 import { restartWhenIdle } from './reconciler'
 
-// The office's residential proxy (Office settings → Residential proxy): one provider's gateway (DataImpulse, Bright
+// The office's residential proxy (Tools → Residential proxy): one provider's gateway (DataImpulse, Bright
 // Data, Oxylabs…) the agents use for scraping and other requests that get blocked from a server's IP. It reaches their
 // sessions as RESIDENTIAL_PROXY_URL (and its parts), never as HTTP(S)_PROXY: that would send Claude Code's own API
-// traffic through it too. The password is sealed with the server's key and never sent back to the dashboard. A change
-// restarts the agents once they're idle, so their sessions get it.
+// traffic through it too. The username and password are sealed with the server's key and never sent back to the
+// dashboard (it shows the username's last 4 characters: the username often is the account's key). A change restarts the
+// agents once they're idle, so their sessions get it.
 
 export type ProxyProtocol = 'http' | 'socks5'
 
@@ -17,12 +18,18 @@ export interface ProxyInfo {
   protocol: ProxyProtocol
   host: string
   port: number
-  username: string
+  /** the username's last 4 characters ('' for none): its value never leaves the server */
+  userLast4: string
+  hasUsername: boolean
   /** a password is saved (its value never leaves the server) */
   hasPassword: boolean
   updatedAt: number
 }
-interface Stored extends Omit<ProxyInfo, 'hasPassword'> {
+interface Stored extends Omit<ProxyInfo, 'hasPassword' | 'hasUsername' | 'userLast4'> {
+  /** the username, sealed (older saves kept it in the clear as `username`: sealed on the next load) */
+  sealedUser?: string
+  userLast4?: string
+  username?: string
   sealed?: string
 }
 
@@ -36,15 +43,43 @@ const serverKey = () => {
 }
 
 function load(): Stored | null {
+  let v: Stored | null
   try {
-    const v = JSON.parse(settingsRepo.get(KEY) ?? 'null')
-    return v && typeof v.host === 'string' ? v : null
+    v = JSON.parse(settingsRepo.get(KEY) ?? 'null')
   } catch {
     return null
   }
+  if (!v || typeof v.host !== 'string') return null
+  // saved before usernames were sealed: sealed now (once)
+  if (typeof v.username === 'string' && process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 32) {
+    const { username, ...rest } = v
+    v = { ...rest, ...(username ? { sealedUser: seal(username, process.env.SESSION_SECRET), userLast4: username.slice(-4) } : {}) }
+    settingsRepo.set(KEY, JSON.stringify(v))
+  }
+  return v
 }
 
-const info = (s: Stored): ProxyInfo => ({ enabled: s.enabled, provider: s.provider, protocol: s.protocol, host: s.host, port: s.port, username: s.username, hasPassword: !!s.sealed, updatedAt: s.updatedAt })
+/** The username in the clear (for the agents' sessions and the test only). */
+function usernameOf(s: Stored) {
+  if (typeof s.username === 'string') return s.username
+  const k = process.env.SESSION_SECRET
+  return s.sealedUser && k ? (unseal(s.sealedUser, k) ?? '') : ''
+}
+
+const info = (s: Stored): ProxyInfo => {
+  const user = typeof s.username === 'string' ? s.username : null
+  return {
+    enabled: s.enabled,
+    provider: s.provider,
+    protocol: s.protocol,
+    host: s.host,
+    port: s.port,
+    userLast4: user !== null ? user.slice(-4) : (s.userLast4 ?? ''),
+    hasUsername: user !== null ? !!user : !!s.sealedUser,
+    hasPassword: !!s.sealed,
+    updatedAt: s.updatedAt,
+  }
+}
 
 /** As the dashboard sees it: everything but the password. */
 export const proxyInfo = (): ProxyInfo | null => {
@@ -63,7 +98,7 @@ function restartAll() {
   for (const a of agentsRepo.all()) restartWhenIdle(a.id)
 }
 
-/** Save it. An empty password keeps the saved one. */
+/** Save it. An empty username or password keeps the saved one (`clearUsername`: none any more). */
 export function putProxy(input: Record<string, unknown>): ProxyInfo {
   const prev = load()
   const protocol: ProxyProtocol = input.protocol === 'socks5' ? 'socks5' : 'http'
@@ -71,18 +106,25 @@ export function putProxy(input: Record<string, unknown>): ProxyInfo {
   if (!HOST.test(host)) throw new AgentError('A host like gw.dataimpulse.com', 400)
   const port = Number(input.port)
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new AgentError('A port between 1 and 65535', 400)
-  const username = oneLine(text(input.username, 500), 'username')
+  const typed = oneLine(text(input.username, 500), 'username')
   const password = oneLine(typeof input.password === 'string' ? input.password : '', 'password')
   if (password.length > 500) throw new AgentError('That password is too long', 400)
   const sealed = password ? seal(password, serverKey()) : prev?.sealed
-  if (username && !sealed) throw new AgentError('Paste the password too', 400)
+  const user = typed
+    ? { sealedUser: seal(typed, serverKey()), userLast4: typed.slice(-4) }
+    : input.clearUsername === true || !prev
+      ? {}
+      : prev.sealedUser
+        ? { sealedUser: prev.sealedUser, userLast4: prev.userLast4 }
+        : {}
+  if (user.sealedUser && !sealed) throw new AgentError('Paste the password too', 400)
   const next: Stored = {
     enabled: input.enabled !== false,
     provider: text(input.provider, 40) || 'custom',
     protocol,
     host,
     port,
-    username,
+    ...user,
     ...(sealed ? { sealed } : {}),
     updatedAt: Date.now(),
   }
@@ -102,7 +144,8 @@ export function proxyUrl(s: Stored | null = load()): string | null {
   if (!s?.enabled) return null
   const k = process.env.SESSION_SECRET
   const password = s.sealed && k ? unseal(s.sealed, k) : null
-  const auth = s.username ? `${encodeURIComponent(s.username)}${password !== null ? `:${encodeURIComponent(password)}` : ''}@` : ''
+  const username = usernameOf(s)
+  const auth = username ? `${encodeURIComponent(username)}${password !== null ? `:${encodeURIComponent(password)}` : ''}@` : ''
   return `${s.protocol === 'socks5' ? 'socks5h' : 'http'}://${auth}${s.host}:${s.port}`
 }
 
@@ -118,7 +161,7 @@ export function proxyEnv(): Record<string, string> {
     RESIDENTIAL_PROXY_PROTOCOL: s.protocol,
     RESIDENTIAL_PROXY_HOST: s.host,
     RESIDENTIAL_PROXY_PORT: String(s.port),
-    ...(s.username ? { RESIDENTIAL_PROXY_USERNAME: s.username } : {}),
+    ...(usernameOf(s) ? { RESIDENTIAL_PROXY_USERNAME: usernameOf(s) } : {}),
     ...(password !== null ? { RESIDENTIAL_PROXY_PASSWORD: password } : {}),
   }
 }

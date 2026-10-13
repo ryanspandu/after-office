@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react'
-import { LuDownload, LuImageUp, LuRotateCcw, LuTrash2, LuUpload } from 'react-icons/lu'
+import { LuDownload, LuImageUp, LuRotateCcw, LuTrash2, LuUpload, LuWrench } from 'react-icons/lu'
 import { api } from '../state/auth'
 import { DEFAULT_BRANDING, DEFAULT_LOGO, setBranding, useBranding, type Branding } from '../state/branding'
 import { Modal } from './Modal'
 import { ExportOfficeModal, ImportOfficeModal } from './MoveOffice'
-import { ProxySection } from './ProxySettings'
+import { openUrl } from '../state/url'
 
 // Project settings (from the Profile modal, ?settings=1): the office's name, tagline and logo, shown in the navbar,
 // on the sign-in page and in the browser tab. Empty fields and no logo mean After Office's own.
@@ -124,7 +124,15 @@ export function ProjectSettingsModal({ onClose }: { onClose: () => void }) {
           <input value={tagline} onChange={(e) => setTagline(e.target.value)} maxLength={80} placeholder={DEFAULT_BRANDING.tagline} />
           <span className="field__hint">Leave a field empty to use the default.</span>
         </label>
-        <ProxySection />
+        <div className="field project-settings__tools">
+          <span className="field__label">Tools</span>
+          <div className="project-settings__move-actions">
+            <button type="button" className="small" onClick={() => openUrl({ tools: 1 })}>
+              <LuWrench /> Open Tools
+            </button>
+          </div>
+          <span className="field__hint">The residential proxy and the API keys agents use (image generation) are in Tools.</span>
+        </div>
         <div className="field project-settings__move">
           <span className="field__label">Move this office</span>
           <div className="project-settings__move-actions">

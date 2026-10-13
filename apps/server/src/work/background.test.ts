@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test, setDefaultTimeout } from 'bun:test'
 import { appendFileSync, mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,6 +10,9 @@ import { updateSettings } from './settings'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
 import { fakeTuiCommand, fastGate } from '../agents/testing/tui'
 import { deliver, expectReply, handleStop, onAgentStopped, onPromptSubmitted, startTask } from './work'
+
+// prompts go through the input gate (a fake Claude Code screen): a round takes a second or two
+setDefaultTimeout(15_000)
 
 // Work handed to background subagents, and answers to the manager's messages. The worker has a real (idle) tmux
 // session on the tests' own tmux server, so prompts are typed instead of queued and the run is tracked.
@@ -49,7 +52,7 @@ const managerInbox = () => {
   }
   return out
 }
-const until = async (fn: () => boolean, ms = 5000) => {
+const until = async (fn: () => boolean, ms = 12_000) => {
   const end = Date.now() + ms
   while (!fn()) {
     if (Date.now() > end) throw new Error('timed out')

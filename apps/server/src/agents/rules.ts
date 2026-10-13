@@ -22,11 +22,21 @@ const BODIES: Record<RulePackId, string> = {
 - Tokens the owner set for you (Overview → Secrets) are environment variables of your session (e.g. \`EXPO_TOKEN\`,
   \`RAILWAY_TOKEN\`): the tools that use them read them on their own. Never print, log, echo or commit their values,
   and never paste them into files or messages. One you need and don't have: ask the owner to add it there.
-- Scraping, or a site that blocks or limits a server's IP: if the owner set a residential proxy (Office settings), it
+- Scraping, or a site that blocks or limits a server's IP: if the owner set a residential proxy (Tools), it
   is in \`RESIDENTIAL_PROXY_URL\` (and \`RESIDENTIAL_PROXY_HOST\`, \`_PORT\`, \`_USERNAME\`, \`_PASSWORD\`), e.g.
   \`curl -x "$RESIDENTIAL_PROXY_URL" …\`, or Playwright's \`proxy: { server, username, password }\`. Use it per request or
   per tool; never export it as \`HTTP_PROXY\`/\`HTTPS_PROXY\`/\`ALL_PROXY\` for your whole session, and never print it.
   It costs per GB: only for what needs it. Not set: ask the owner.
+- Making images: if the owner set image generation (Tools), \`AO_IMAGE_PROVIDERS\` lists what's set (JSON: id, label,
+  env = the variable holding its key, baseUrl, model; no keys) and \`AO_IMAGE_PROVIDER\` is the id to use first. E.g.
+  google: Gemini API \`generateContent\` with \`gemini-2.5-flash-image\` ("Nano Banana"), the image comes back base64 in
+  \`inlineData\`; openrouter: chat completions with \`modalities: ["image", "text"]\`; openai: \`/v1/images/generations\`;
+  fal, replicate, goapi or a custom one: their API at its baseUrl (check its docs). A provider or model the owner names
+  ("pakai ChatGPT", "Nano Banana") wins; the first one fails (quota, outage, refused): try the next one listed and say
+  so. The key
+  goes in a header (\`x-goog-api-key\`, \`Authorization: Bearer …\`, \`Authorization: Key …\`, \`x-api-key\`), never in a
+  URL, a file or your output. Save the images in your folder (or the task's) and give their paths. Each image is paid:
+  make what's asked, not dozens of tries. Not set: ask the owner.
 - A video the owner attaches comes with sheets of its frames in \`<video>-frames/\` (listed with it): each sheet is 12
   frames, 4 across and 3 down, read left to right and top to bottom; its name says the part of the video it covers
   and how far apart the frames are (\`sheet-2_00m24s-00m48s_every-2s.jpg\`). Look at those; you can't play the video.

@@ -1,8 +1,11 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, expect, test, setDefaultTimeout } from 'bun:test'
 import { agentsRepo } from '../db'
 import { compactSession, compactTiming, sendPrompt } from './manager'
 import { runtimeOf, updateRuntime } from './registry'
 import { fakeTuiCommand, fastGate } from './testing/tui'
+
+// prompts go through the input gate (a fake Claude Code screen): a round takes a second or two
+setDefaultTimeout(15_000)
 
 // /compact: marked on the server while it runs (every dashboard shows it, a reload keeps it); nothing is sent to the
 // session meanwhile; it ends when "Compacting conversation…" has left the screen.
