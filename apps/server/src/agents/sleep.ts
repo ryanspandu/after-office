@@ -45,6 +45,9 @@ export async function sleepAgent(agentId: string, by: 'owner' | 'auto' = 'owner'
 }
 
 const waking = new Map<string, Promise<void>>()
+/** When each agent last woke up (what reaches it in the next minutes went the wake-up way: delivery logs). */
+const woke = new Map<string, number>()
+export const wokeRecently = (agentId: string, ms = 5 * 60_000) => isWaking(agentId) || Date.now() - (woke.get(agentId) ?? 0) < ms
 /** Was asleep and is starting up right now. */
 export const isWaking = (agentId: string) => waking.has(agentId)
 
@@ -60,6 +63,7 @@ export function wakeAgent(agentId: string, why: string): Promise<void> {
   updateRuntime(agentId, (rt) => ({ ...rt, status: 'offline' }))
   const p = reviveAgent(agentsRepo.get(agentId)!)
     .then(() => {
+      woke.set(agentId, Date.now())
       log(agentId, `Woke up: ${why}.`)
       console.log(`[sleep] ${row.name} woke up (${why})`)
     })

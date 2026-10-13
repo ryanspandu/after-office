@@ -149,6 +149,8 @@ export function requestApproval(task: OfficeTask, reason?: string) {
     kind: 'delegation',
     tool: 'delegate_task',
     message: `${target?.name ?? 'Someone'}: ${task.title}`,
+    // shown in the chat of the session it came from (a thread's), answerable there
+    ...(task.managerSession ? { sessionKey: task.managerSession } : {}),
     input: {
       taskId: task.id,
       agentId: task.agentId,

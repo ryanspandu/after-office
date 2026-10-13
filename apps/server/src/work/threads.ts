@@ -179,9 +179,10 @@ export function ensureOpen(t: OfficeThread): Promise<void> {
 }
 
 /**
- * The owner's message in a thread (with its attachments already in the text). While the manager is in the middle of
- * a turn there, it waits in the thread's queue and goes in once that turn ends: typed in mid-turn, it can stay stuck
- * in the message box (the Enter lost while the screen redraws), and the next message would be added to it.
+ * The owner's message in a thread (with its attachments already in the text). Like the manager's own chat it goes in
+ * right away, also in the middle of a turn (Claude Code takes it into the turn); the input gate (agents/manager.ts)
+ * waits for an empty message box, so it's never added to text already there. It waits in the thread's queue only
+ * when the session can't take it now: starting up, compacting, a question or menu open, or messages already waiting.
  */
 export async function sendToThread(id: string, text: string): Promise<'sent' | 'queued'> {
   const t = getThread(id)
@@ -189,14 +190,20 @@ export async function sendToThread(id: string, text: string): Promise<'sent' | '
   await ensureOpen(t)
   const message = t.started ? text : `${threadContext(t)}\n\n${text}`
   const rt = sideRuntimeOf(t.managerId, t.sessionKey)
-  if (rt.status !== 'idle' || rt.compactingSince || threadQueueRepo.countFor(t.id)) {
-    threadQueueRepo.add(t.id, message, true)
-    touchThread(t.id, { started: true })
-    return 'queued'
+  const takes = (rt.status === 'idle' || rt.status === 'working') && !rt.compactingSince && !threadQueueRepo.countFor(t.id) && (await isOpen(t))
+  if (takes) {
+    try {
+      await sendChat(t.managerId, message, t.sessionKey)
+      touchThread(t.id, { started: true })
+      return 'sent'
+    } catch (e) {
+      // not ready after all: it waits (and stays editable) instead of being lost
+      console.warn(`[threads] "${t.title}" didn't take the message now, queued:`, e instanceof Error ? e.message : e)
+    }
   }
-  await sendChat(t.managerId, message, t.sessionKey)
+  threadQueueRepo.add(t.id, message, true)
   touchThread(t.id, { started: true })
-  return 'sent'
+  return 'queued'
 }
 
 /**
@@ -206,8 +213,12 @@ export async function sendToThread(id: string, text: string): Promise<'sent' | '
 export async function deliverToThread(t: OfficeThread, text: string) {
   touchThread(t.id)
   if (threadQueueRepo.countFor(t.id) === 0 && (await isOpen(t)) && sideRuntimeOf(t.managerId, t.sessionKey).status === 'idle') {
-    await sendPrompt(t.managerId, text, t.sessionKey)
-    return 'sent' as const
+    try {
+      await sendPrompt(t.managerId, text, t.sessionKey)
+      return 'sent' as const
+    } catch (e) {
+      console.warn(`[threads] "${t.title}" didn't take it now, queued:`, e instanceof Error ? e.message : e)
+    }
   }
   threadQueueRepo.add(t.id, text)
   void ensureOpen(t)
@@ -221,24 +232,28 @@ const draining = new Set<string>()
 export const HOLD_MS = 5 * 60_000
 /** Send each thread's oldest queued message once its session is free. On a timer, and when its turn ends. */
 export async function drainThreads() {
-  for (const t of threadsRepo.all()) {
-    if (draining.has(t.id) || !threadQueueRepo.countFor(t.id)) continue
-    if (sideRuntimeOf(t.managerId, t.sessionKey).status !== 'idle' || !(await isOpen(t))) continue
-    const next = threadQueueRepo.next(t.id)
-    if (!next) continue
-    // the owner is editing it: the queue waits here (a stale hold, e.g. the page closed mid-edit, lets it go)
-    if (next.held_at && Date.now() - next.held_at < HOLD_MS) continue
-    draining.add(t.id)
-    try {
-      threadQueueRepo.remove(next.id)
-      await sendPrompt(t.managerId, next.text, t.sessionKey)
-      // a queued message of the owner's went in: no longer "queued" on any dashboard
-      publish()
-    } catch (e) {
-      console.warn(`[threads] could not send to "${t.title}":`, e instanceof Error ? e.message : e)
-    } finally {
-      draining.delete(t.id)
-    }
+  // each thread on its own: one waiting for its session to be ready doesn't hold up the others
+  await Promise.all(threadsRepo.all().map((t) => drainThread(t)))
+}
+
+async function drainThread(t: OfficeThread) {
+  if (draining.has(t.id) || !threadQueueRepo.countFor(t.id)) return
+  if (sideRuntimeOf(t.managerId, t.sessionKey).status !== 'idle' || !(await isOpen(t))) return
+  const next = threadQueueRepo.next(t.id)
+  if (!next) return
+  // the owner is editing it: the queue waits here (a stale hold, e.g. the page closed mid-edit, lets it go)
+  if (next.held_at && Date.now() - next.held_at < HOLD_MS) return
+  draining.add(t.id)
+  try {
+    await sendPrompt(t.managerId, next.text, t.sessionKey)
+    // out of the queue only once it's typed in: a session that wasn't ready keeps it for the next round
+    threadQueueRepo.remove(next.id)
+    // a queued message of the owner's went in: no longer "queued" on any dashboard
+    publish()
+  } catch (e) {
+    console.warn(`[threads] could not send to "${t.title}":`, e instanceof Error ? e.message : e)
+  } finally {
+    draining.delete(t.id)
   }
 }
 

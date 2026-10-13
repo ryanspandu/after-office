@@ -8,3 +8,8 @@
 /* an agent's menu opens on a right click or a long press: the card doesn't select text or show the phone's own menu */
 .row.agent { -webkit-touch-callout: none; }
 .row.agent.row--menu { background: var(--card-2); }
+
+/* touch screens: a long press opens the agent's menu, never a text selection (or the browser's search panel) */
+@media (hover: none) {
+  .row.agent, .row.agent * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+}

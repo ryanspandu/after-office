@@ -401,6 +401,8 @@ export async function grantFolder(agentId: string, folder: string, opts: { live?
   if (opts.live === false) return
   if (!(await tmux.hasSession(row.tmux_session))) return // added with --add-dir when it starts
   if (sessionDirs.get(agentId)?.has(dir)) return
+  // not into a session that can't take it yet (it's added with --add-dir on its next start anyway)
+  if (!(await untilReady(row.tmux_session).then(() => true, () => false))) return
   await tmux.paste(row.tmux_session, `/add-dir ${dir}`)
   await Bun.sleep(300)
   await tmux.keys(row.tmux_session, 'Enter')
@@ -816,23 +818,134 @@ export async function sendChat(id: string, text: string, key = '') {
   throw new AgentError("The message did not reach it (its screen isn't at the message box). Try again in a moment; if it keeps happening, restart the agent.", 409)
 }
 
+// ── the input gate ──
+//
+// A prompt typed into a Claude Code that isn't at its message box yet is lost without a trace: a session just woken
+// or restarted (--resume) draws its screen and status line a moment before it takes keys, and a /clear still running
+// takes what's typed as its own arguments ("/clear New task: …"). So nothing is typed until the box is on screen,
+// empty and has stayed so for a moment, and Enter is only pressed once the text shows in the box.
+
+/** How long to wait for the box (a session that's starting can take a while), how often to look, how long the box must
+ *  stay still after a wait, how long a paste may take to show, the youngest session typed into, and how long a /clear
+ *  may take to report its new conversation (tests shorten them). */
+export const gateTiming = { readyMs: 60_000, pollMs: 400, stableMs: 1_200, pasteMs: 3_000, minAgeMs: 3_000, clearMs: 20_000 }
+
+/** The screen as text, with what's drawn dim left out: Claude Code's placeholder and suggested next prompt are ghost
+ *  text in the box (SGR 2), not something typed. Line breaks are kept. */
+export function withoutGhostText(styled: string) {
+  let out = ''
+  let dim = false
+  let last = 0
+  for (const m of styled.matchAll(/\x1b\[([0-9;:]*)m|\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Za-z0-9]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g)) {
+    const chunk = styled.slice(last, m.index)
+    out += dim ? chunk.replace(/[^\n]/g, '') : chunk
+    last = m.index! + m[0].length
+    if (m[1] === undefined) continue
+    const ps = m[1] === '' ? [0] : m[1].split(/[;:]/).map(Number)
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i]
+      // a colour (38/48/58;5;n or ;2;r;g;b): its numbers aren't attributes
+      if (p === 38 || p === 48 || p === 58) i += ps[i + 1] === 5 ? 2 : ps[i + 1] === 2 ? 4 : 1
+      else if (p === 2) dim = true
+      else if (p === 0 || p === 22) dim = false
+    }
+  }
+  const rest = styled.slice(last)
+  return out + (dim ? rest.replace(/[^\n]/g, '') : rest)
+}
+
+/** What's typed in the message box (ghost text left out), or null when no message box is on screen. */
+export function typedInput(styled: string) {
+  const screen = withoutGhostText(styled)
+  if (screen.split('\n').filter((l) => /^\s*─{20,}/.test(l)).length < 2) return null
+  return inputBoxText(screen)
+}
+
+/** Why this screen can't take a prompt now (null: it can). */
+function notReady(styled: string) {
+  const typed = typedInput(styled)
+  if (typed === null) return parseDialogOptions(withoutGhostText(styled)).length ? 'a question or menu is open' : 'its message box is not on screen'
+  if (typed) return 'its message box already holds other text'
+  return null
+}
+
+/**
+ * Wait until the session's message box is on screen and empty. Right away when it already is; after a wait (it was
+ * starting, or busy drawing) it must stay so for a moment, since a TUI that just appeared may not take keys yet.
+ */
+export async function untilReady(session: string, ms = gateTiming.readyMs, settle = false) {
+  const until = Date.now() + ms
+  let readySince: number | null = null
+  let waited = settle
+  let why = 'it is not running'
+  while (true) {
+    const age = await tmux.sessionAge(session)
+    const styled = age === null ? null : await tmux.captureStyled(session).catch(() => null)
+    const blocked = styled === null ? 'it is not running' : age! < gateTiming.minAgeMs ? 'it is starting' : notReady(styled)
+    if (blocked) {
+      why = blocked
+      readySince = null
+      waited = true
+    } else {
+      readySince ??= Date.now()
+      if (!waited || Date.now() - readySince >= gateTiming.stableMs) return
+    }
+    if (Date.now() >= until) throw new AgentError(`It isn't ready for a message (${why}). It goes in once it is.`, 409)
+    await Bun.sleep(gateTiming.pollMs)
+  }
+}
+
+/** The start of a prompt as it shows in the box: its first line, or Claude Code's "[Pasted text …]" for a long one. */
+const shows = (typed: string | null, probe: string) => !!typed && (typed.includes(probe) || /\[Pasted text/i.test(typed))
+
 async function typeIntoSession(id: string, text: string, key = '') {
   const { session } = await requireLive(id, key)
   const body = text.trim()
   if (!body) throw new AgentError('Message is empty')
   if (body.length > 20_000) throw new AgentError('Message is too long')
   if (body.startsWith('/') && !ALLOWED_COMMANDS.includes(body.split(/\s/)[0])) throw new AgentError(`Command ${body.split(/\s/)[0]} is not allowed from the dashboard`)
-  await tmux.paste(session, body)
+  const probe = body.split('\n')[0].slice(0, 24)
+  const typed = async () => typedInput(await tmux.captureStyled(session).catch(() => ''))
+  // typed in only once the box shows it: a paste a TUI didn't take yet is gone, and the box is empty to try again
+  let landed = false
+  for (let attempt = 0; attempt < 2 && !landed; attempt++) {
+    await untilReady(session)
+    await tmux.paste(session, body, false)
+    const until = Date.now() + gateTiming.pasteMs
+    while (Date.now() < until && !(landed = shows(await typed(), probe))) await Bun.sleep(150)
+  }
+  if (!landed) throw new AgentError("The message did not reach it (its message box didn't take the text). It goes in once it does.", 409)
+  await tmux.keys(session, 'Enter')
   // The Enter can get lost while the TUI is busy redrawing (e.g. right as a turn ends); the text then sits in the
   // input box. Check, and press Enter again.
-  const probe = body.split('\n')[0].slice(0, 24)
   for (let i = 0; i < 3; i++) {
     await Bun.sleep(700)
-    const input = inputBoxText(await tmux.capture(session).catch(() => ''))
-    if (!input || !(input.includes(probe) || /\[Pasted text/i.test(input))) return
+    if (!shows(await typed(), probe)) return
     await tmux.keys(session, 'Enter')
   }
+  await Bun.sleep(700)
+  if (!shows(await typed(), probe)) return
+  // still in the box: take our text out again, so the box is free (and nothing is typed onto it later)
+  for (let i = 0; i < 20 && (await typed()); i++) await tmux.keys(session, 'C-e', 'C-u')
+  throw new AgentError('The message sat in its message box without being sent. It goes in once it can.', 409)
 }
+
+/** After /clear: the new conversation is up (Claude Code's SessionEnd "clear", or a new session id), then the box. */
+export async function untilCleared(id: string, key: string, before: { sessionId?: string; transcriptPath?: string }, ms = gateTiming.clearMs) {
+  const until = Date.now() + ms
+  let seen = false
+  while (!seen && Date.now() < until) {
+    const rt = rtOf(id, key)
+    seen = (!!rt.sessionId && rt.sessionId !== before.sessionId) || (!!before.transcriptPath && !rt.transcriptPath)
+    if (!seen) await Bun.sleep(gateTiming.pollMs)
+  }
+  // either way the box must be back, empty and still (no hook: that's all there is to go on)
+  const { session } = await requireLive(id, key)
+  await untilReady(session, gateTiming.readyMs, true)
+}
+
+/** The session's current conversation, to tell when a /clear has started a new one. */
+export const conversationOf = (id: string, key = '') => ({ sessionId: rtOf(id, key).sessionId, transcriptPath: rtOf(id, key).transcriptPath })
 
 // ── compacting (/compact) ──
 

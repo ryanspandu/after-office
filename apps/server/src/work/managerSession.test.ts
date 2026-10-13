@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { agentsRepo, queueRepo, sideSessionsRepo } from '../db'
 import { updateRuntime } from '../agents/registry'
 import { deliverToManager } from './work'
+import { fakeTuiCommand, fastGate } from '../agents/testing/tui'
 
 // Work the manager started from one of its side sessions (the owner started it there): what comes back about it goes to
 // that session while it's open; once it's closed (or gone), to the main session as before.
@@ -18,9 +19,11 @@ afterAll(() => {
 test('to the side session it came from while open, else the main one', async () => {
   agentsRepo.insert({ id, name: 'Boss', tmux_session: 'ao-mgr-test', cwd: '/tmp', desk: 92, role: 'GM', model: 'opus', permission_mode: 'auto', session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'manager' } as never)
   sideSessionsRepo.insert({ agent_id: id, key: 's2', tmux_session: 'ao-mgr-test--s2', session_id: crypto.randomUUID(), title: null, created_at: Date.now(), closed_at: null } as never)
-  // two "Claude Code"s: plain shells that show what's typed into them
-  sh('new-session', '-d', '-s', 'ao-mgr-test', 'cat')
-  sh('new-session', '-d', '-s', 'ao-mgr-test--s2', 'cat')
+  // two "Claude Code"s that show what's sent to them
+  fastGate()
+  const fake = () => fakeTuiCommand({ dir: `/tmp/ao-mgr-${process.pid}` })
+  sh('new-session', '-d', '-s', 'ao-mgr-test', '-x', '200', '-y', '50', fake())
+  sh('new-session', '-d', '-s', 'ao-mgr-test--s2', '-x', '200', '-y', '50', fake())
   updateRuntime(id, (rt) => ({ ...rt, status: 'idle' }))
   await Bun.sleep(300)
 

@@ -448,6 +448,8 @@ function useLongPress(onPress: (at: { x: number; y: number }) => void) {
       cancel()
       timer.current = setTimeout(() => {
         timer.current = null
+        // the phone may have started selecting a word under the finger: the menu, not a selection
+        window.getSelection()?.removeAllRanges()
         if (start.current) onPress(start.current)
       }, 500)
     },

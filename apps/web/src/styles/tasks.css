@@ -144,6 +144,7 @@ button.danger-solid:hover:not(:disabled) { color: #fff; opacity: 0.9; border-col
 .timeline__composer .timeline__send:disabled { opacity: 0.35; }
 .check-pill--stopped { color: #d97706; background: rgba(217, 119, 6, 0.14); }
 .blocked-badge--stopped { color: #d97706; }
+.blocked-badge--failed { color: var(--danger); }
 /* phones: while you type in the task (the keyboard is up), the footer shrinks to one slim row with just the main
    action (Mark done / Accept / Resume / Reopen), so the box and what you're writing stay in view; Close is the ✕ above.
    Everything is back as soon as you leave the field. */

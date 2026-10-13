@@ -16,6 +16,8 @@ import { deliver, notifyUser } from './work'
 export interface HireRequest {
   id: string
   managerId: string
+  /** the manager's session it was asked from (its card shows in that chat) */
+  session?: string
   name: string
   role: string
   brief?: string
@@ -87,6 +89,7 @@ function show(h: HireRequest) {
     agentId: h.managerId,
     kind: 'hire',
     tool: 'create_agent',
+    ...(h.session ? { sessionKey: h.session } : {}),
     message: `Hire ${h.name} (${h.role})`,
     input: { name: h.name, role: h.role, model: h.model, mode: h.mode, folder: h.folder, brief: h.brief ?? '', figure: h.figure ?? '', connectors: h.connectors ?? [], effort: h.effort ?? '', rules: h.rules ?? defaultRulePacks(h.role) },
     createdAt: h.createdAt,

@@ -5,6 +5,7 @@ import { updateRuntime, updateSideRuntime } from '../agents/registry'
 import { delegateTask } from './managerTasks'
 import { archiveThread, editQueued, holdQueued, listThreads, reorderThreads, sendToThread, unsendQueued, closeIdleThreads, deleteThread, drainThreads, joinThread, mentionTask, parentFor, threadContext, threadOfSession } from './threads'
 import { deliverToManager, fileReport, isReadingAgentOutput, isReportedNow, onSidePromptSubmitted } from './work'
+import { fakeTuiCommand, fastGate } from '../agents/testing/tui'
 
 // Threads: a topic in a side session of the manager's. What it starts belongs to it, what comes back about it goes to
 // it (never to the main session), and its session closes when quiet.
@@ -35,8 +36,9 @@ beforeAll(() => {
   sideSessionsRepo.insert({ agent_id: 'thr-m', key: 's7', tmux_session: SIDE, session_id: crypto.randomUUID(), title: null, created_at: Date.now(), closed_at: null })
   sideSessionsRepo.update('thr-m', 's7', { thread_id: thread.id })
   threadsRepo.put(thread)
-  // stands in for the manager's thread session: whatever is typed into it goes nowhere
-  sh('new-session', '-d', '-s', SIDE, 'sleep 120')
+  // stands in for the manager's thread session (a message box that takes what's typed)
+  fastGate()
+  sh('new-session', '-d', '-s', SIDE, '-x', '200', '-y', '50', fakeTuiCommand({ dir: `/tmp/ao-thr-${process.pid}` }))
   updateRuntime('thr-w', (rt) => ({ ...rt, status: 'idle' }))
 })
 afterAll(() => {
@@ -113,9 +115,18 @@ test("an @mention is a task for that agent, on the manager's behalf, reporting b
   threadQueueRepo.removeThread(thread.id)
 })
 
-test("the owner's message while the manager is mid-turn waits in the thread's queue (never typed into a busy session)", async () => {
+test("the owner's message mid-turn goes in right away, like the manager's own chat", async () => {
   await Bun.sleep(300)
   updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'working' }))
+  // taken (its prompt hook): sent, not queued
+  setTimeout(() => updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, lastEventAt: Date.now() })), 100)
+  expect(await sendToThread(thread.id, 'satu lagi ya')).toBe('sent')
+  expect(threadQueueRepo.countFor(thread.id)).toBe(0)
+  updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'idle' }))
+})
+
+test("the owner's message while the session can't take it (a question open) waits in the thread's queue, in order", async () => {
+  updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'waiting' }))
   expect(await sendToThread(thread.id, 'ini untuk content di mobile ilangin ya')).toBe('queued')
   expect(threadQueueRepo.next(thread.id)?.text).toContain('ini untuk content di mobile')
   // the next one waits behind it, in order
@@ -132,7 +143,7 @@ test("the owner's message while the manager is mid-turn waits in the thread's qu
 })
 
 test('a queued message can be edited (the queue waits meanwhile) or taken back', async () => {
-  updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'working' }))
+  updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'waiting' }))
   await sendToThread(thread.id, 'pertama\n\n[Attached files]\n- /tmp/a.png')
   await sendToThread(thread.id, 'kedua')
   const [first, second] = listThreads().find((x) => x.id === thread.id)!.queued!
@@ -147,8 +158,9 @@ test('a queued message can be edited (the queue waits meanwhile) or taken back',
   // new words, the attachments kept; saving lets the queue go on
   editQueued(thread.id, first.id, 'pertama, versi baru')
   expect(threadQueueRepo.next(thread.id)?.text).toMatch(/pertama, versi baru\n\n\[Attached files\]\n- \/tmp\/a\.png$/)
-  await Bun.sleep(50)
   await drainThreads()
+  // it goes in (it may already be on its way from the save)
+  for (let i = 0; i < 60 && threadQueueRepo.countFor(thread.id); i++) await Bun.sleep(50)
   expect(threadQueueRepo.countFor(thread.id)).toBe(0)
   // gone already: nothing to edit
   expect(() => editQueued(thread.id, first.id, 'x')).toThrow('already went in')

@@ -8,6 +8,7 @@ import { TMUX_SOCKET_ARGS } from '../agents/env'
 import { setRateLimits, updateRuntime } from '../agents/registry'
 import { updateSettings } from './settings'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
+import { fakeTuiCommand, fastGate } from '../agents/testing/tui'
 import { deliver, expectReply, handleStop, onAgentStopped, onPromptSubmitted, startTask } from './work'
 
 // Work handed to background subagents, and answers to the manager's messages. The worker has a real (idle) tmux
@@ -67,7 +68,8 @@ const reportsFor = (taskId: string) => reportsRepo.latest(100).filter((r) => r.r
 beforeAll(() => {
   agentsRepo.insert(agent('bg-w'))
   agentsRepo.insert(agent('bg-mgr', 'manager')) // no session: what it's sent is queued, so the test can read it
-  tmux('new-session', '-d', '-s', 'ao-bg-w', 'sleep 300')
+  fastGate()
+  tmux('new-session', '-d', '-s', 'ao-bg-w', '-x', '200', '-y', '50', fakeTuiCommand({ dir: join(dir, 'fake-transcripts') }))
   mkdirSync(join(CLAUDE_PROJECTS_DIR, 'bg-test'), { recursive: true })
   updateRuntime('bg-w', (rt) => ({ ...rt, transcriptPath: transcript }))
   setRateLimits({ fiveHourPct: 1, sevenDayPct: 1, fiveHourResetsAt: null, sevenDayResetsAt: null })

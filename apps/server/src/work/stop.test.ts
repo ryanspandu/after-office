@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { OfficeTask } from '@after-office/shared'
 import { agentsRepo, commentsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from '../db'
 import { TMUX_SOCKET_ARGS } from '../agents/env'
+import { fakeTuiCommand, fastGate } from '../agents/testing/tui'
 import { setRateLimits, updateRuntime } from '../agents/registry'
 import { updateSettings } from './settings'
 import { active, onAgentStopped, onPromptSubmitted, resumeTask, startTask, stopActiveTask } from './work'
@@ -56,7 +57,8 @@ const inbox = () => {
 beforeAll(() => {
   agentsRepo.insert(agent('st-w'))
   agentsRepo.insert(agent('st-mgr', 'manager')) // no session: what it's sent is queued, so the test can read it
-  tmux('new-session', '-d', '-s', 'ao-st-w', 'sleep 300')
+  fastGate()
+  tmux('new-session', '-d', '-s', 'ao-st-w', '-x', '200', '-y', '50', fakeTuiCommand({ dir: join(dir, 'fake-transcripts') }))
   setRateLimits({ fiveHourPct: 1, sevenDayPct: 1, fiveHourResetsAt: null, sevenDayResetsAt: null })
   updateSettings({ managerApproval: false, autoAssign: false })
 })

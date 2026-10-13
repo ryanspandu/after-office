@@ -662,10 +662,11 @@ export const sideSessionsRepo = {
 }
 
 export const queueRepo = {
-  add: (q: Omit<QueuedPrompt, 'created_at'>) =>
+  /** `created_at` 0 puts it first in line (a prompt typed again after it didn't arrive). */
+  add: (q: Omit<QueuedPrompt, 'created_at'> & { created_at?: number }) =>
     db
       .query('INSERT INTO prompt_queue (id, agent_id, text, clear_first, task_id, cron_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
-      .run(q.id, q.agent_id, q.text, q.clear_first, q.task_id, q.cron_id, Date.now()),
+      .run(q.id, q.agent_id, q.text, q.clear_first, q.task_id, q.cron_id, q.created_at ?? Date.now()),
   next: (agentId: string) =>
     db.query<QueuedPrompt, [string]>('SELECT * FROM prompt_queue WHERE agent_id = ? ORDER BY created_at LIMIT 1').get(agentId),
   remove: (id: string) => db.query('DELETE FROM prompt_queue WHERE id = ?').run(id),

@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test'
 import { agentsRepo } from '../db'
 import { compactSession, compactTiming, sendPrompt } from './manager'
 import { runtimeOf, updateRuntime } from './registry'
+import { fakeTuiCommand, fastGate } from './testing/tui'
 
 // /compact: marked on the server while it runs (every dashboard shows it, a reload keeps it); nothing is sent to the
 // session meanwhile; it ends when "Compacting conversation…" has left the screen.
@@ -11,12 +12,13 @@ const sh = (...a: string[]) => Bun.spawnSync(['tmux', '-L', tmuxName, ...a])
 const id = 'compact-test'
 compactTiming.pollMs = 100
 compactTiming.noShowMs = 1500
+fastGate()
 afterAll(() => void sh('kill-session', '-t', 'ao-compact-test'))
 
 test('compacting marks the session, refuses chat meanwhile, and ends when the screen is clear', async () => {
   agentsRepo.insert({ id, name: 'Compactor', tmux_session: 'ao-compact-test', cwd: '/tmp', desk: 91, role: 'x', model: 'opus', permission_mode: 'auto', session_id: crypto.randomUUID(), created_at: Date.now(), kind: 'worker' } as never)
-  // a "Claude Code" that shows the compacting line for a second, then a clear screen
-  sh('new-session', '-d', '-s', 'ao-compact-test', "sh -c \"echo 'Compacting conversation…'; sleep 1.2; clear; sleep 60\"")
+  // a "Claude Code" that shows the compacting line for a second after /compact, then its message box again
+  sh('new-session', '-d', '-s', 'ao-compact-test', '-x', '200', '-y', '50', fakeTuiCommand({ dir: `/tmp/ao-compact-${process.pid}`, compactMs: 1200 }))
   updateRuntime(id, (rt) => ({ ...rt, status: 'idle', contextPct: 80 }))
   await Bun.sleep(300)
 

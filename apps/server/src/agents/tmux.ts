@@ -141,7 +141,8 @@ export const tmux = {
     await must(['send-keys', '-t', `=${name}:`, ...keys])
   },
 
-  /** Types arbitrary text into the pane without interpreting it, then optionally presses Enter. */
+  /** Types arbitrary text into the pane without interpreting it, then optionally presses Enter. Prompts go through
+   *  typeIntoSession (agents/manager.ts) instead: it waits until Claude Code is ready and checks the text landed. */
   async paste(name: string, text: string, submit = true) {
     const buffer = `ao-${crypto.randomUUID()}`
     await must(['load-buffer', '-b', buffer, '-'], text)
@@ -150,6 +151,18 @@ export const tmux = {
       await Bun.sleep(150)
       await this.keys(name, 'Enter')
     }
+  },
+
+  /** The visible pane with its colours and text attributes (escape sequences kept): tells dim ghost text from typed text. */
+  async captureStyled(name: string) {
+    return must(['capture-pane', '-p', '-e', '-t', `=${name}:`])
+  },
+
+  /** How long ago the session started (ms), or null when there's no such session. */
+  async sessionAge(name: string) {
+    const r = await run(['display-message', '-p', '-t', `=${name}:`, '#{session_created}'])
+    const s = Number(r.out.trim())
+    return r.code === 0 && s > 0 ? Date.now() - s * 1000 : null
   },
 
   /** Plain-text snapshot of the visible pane (plus `history` lines of scrollback). */

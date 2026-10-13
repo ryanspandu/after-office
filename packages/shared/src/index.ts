@@ -524,6 +524,8 @@ export interface OfficeTask {
   gitBase?: { ref: string; untracked: string[]; at: number }
   /** Server-owned: when the owner was told this task looks stuck. */
   stuckNotifiedAt?: number
+  /** Server-owned: when its prompt last failed to reach the agent's session after every retry (back in To do). */
+  deliveryFailedAt?: number
   /** Server-owned: a quality check command the manager proposed, waiting for the owner's approval. */
   pendingCheck?: string
   /** Server-owned: when the manager was asked to find someone for it (auto-assign). */

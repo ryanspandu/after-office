@@ -705,7 +705,7 @@ function buildServer(managerId: string, session = '') {
     },
     async ({ name, role, brief, model, permissionMode, folder, figure, connectors, effort, rules }) => {
       try {
-        const h = requestHire(managerId, { name, role, brief, model: model ?? DEFAULT_MODEL, mode: permissionMode ?? 'auto', folder, figure, effort, ...(rules ? { rules: cleanPacks(rules) } : {}), connectors: connectorPrefixes(connectors) })
+        const h = requestHire(managerId, { name, role, brief, model: model ?? DEFAULT_MODEL, mode: permissionMode ?? 'auto', folder, figure, effort, ...(session ? { session } : {}), ...(rules ? { rules: cleanPacks(rules) } : {}), connectors: connectorPrefixes(connectors) })
         return json({ status: "waiting for the owner's approval", name: h.name, division: divisionOf(h.role), folder: h.folder })
       } catch (e) {
         return fail(e)

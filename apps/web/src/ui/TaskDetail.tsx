@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuCheck, LuCrown, LuMessageSquareReply, LuPlay, LuRotateCcw, LuSend, LuSplit, LuTrash2, LuUser, LuCirclePause, LuStepForward } from 'react-icons/lu'
+import { LuCheck, LuCrown, LuMessageSquareReply, LuPlay, LuRotateCcw, LuSend, LuSplit, LuTrash2, LuUser, LuCirclePause, LuCircleAlert, LuStepForward } from 'react-icons/lu'
 import type { OfficeTask } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { hasUnsaved, useDashboard } from '../state/dashboard'
@@ -151,6 +151,11 @@ export function TaskDetailModal({ taskId, onClose }: { taskId: string; onClose: 
           {stopped && (
             <span className="check-pill check-pill--stopped" data-tip={`Stopped partway, ${new Date(task.stoppedAt!).toLocaleString()}: Resume continues it where it stopped`}>
               <LuCirclePause /> Stopped
+            </span>
+          )}
+          {task.deliveryFailedAt && task.status === 'todo' && (
+            <span className="check-pill check-pill--failed" data-tip={`Its prompt never reached the agent's session (${new Date(task.deliveryFailedAt).toLocaleString()}): start it again, or restart the agent first`}>
+              <LuCircleAlert /> Delivery failed
             </span>
           )}
           {task.sessionKey && (

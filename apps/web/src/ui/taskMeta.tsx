@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ReactSelect from 'react-select'
 import { ProjectFolderPicker } from './ProjectFolderPicker'
-import { LuCircleCheck, LuCircleX, LuFolder, LuHourglass, LuLoader, LuLock, LuCirclePause, LuX } from 'react-icons/lu'
+import { LuCircleCheck, LuCircleX, LuFolder, LuHourglass, LuLoader, LuLock, LuCirclePause, LuCircleAlert, LuX } from 'react-icons/lu'
 import type { OfficeTask, TaskPriority, TaskStatus, TaskStatusDef } from '@after-office/shared'
 import { useLive } from '../state/live'
 import { openUrl } from '../state/url'
@@ -214,6 +214,10 @@ export function BlockedBadge({ task }: { task: OfficeTask }) {
     task.stoppedAt && task.status === 'todo' ? (
       <span className="blocked-badge blocked-badge--stopped" data-tip="Stopped partway: open it to Resume" aria-label="Stopped partway">
         <LuCirclePause />
+      </span>
+    ) : task.deliveryFailedAt && task.status === 'todo' ? (
+      <span className="blocked-badge blocked-badge--failed" data-tip="Delivery failed: its prompt never reached the agent. Open it to start again" aria-label="Delivery failed">
+        <LuCircleAlert />
       </span>
     ) : null
   if (!task.blockedBy?.length || task.status !== 'todo') return stopped

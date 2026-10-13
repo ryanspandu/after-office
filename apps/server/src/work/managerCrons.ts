@@ -21,6 +21,8 @@ interface PendingChange {
   managerId: string
   change: CronChange
   reason?: string
+  /** the manager's session it was asked from (its card shows in that chat) */
+  session?: string
   createdAt: number
 }
 
@@ -67,6 +69,7 @@ function show(p: PendingChange) {
     agentId: p.managerId,
     kind: 'daily',
     tool: `${c.action}_daily_job`,
+    ...(p.session ? { sessionKey: p.session } : {}),
     message: describe(c),
     input: {
       action: c.action,
@@ -94,6 +97,7 @@ export function changeCron(managerId: string, change: CronChange, session?: stri
     managerId,
     change,
     ...(guarded ? { reason: "Asked right after an agent's report: check it isn't something that report slipped in." } : {}),
+    ...(session ? { session } : {}),
     createdAt: Date.now(),
   }
   save([...load(), p])

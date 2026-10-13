@@ -68,6 +68,7 @@ export function requestCheckApproval(t: OfficeTask) {
     kind: 'check',
     tool: 'update_task',
     message: `Quality check for "${t.title}"`,
+    ...(t.managerSession ? { sessionKey: t.managerSession } : {}),
     input: { taskId: t.id, title: t.title, command: t.pendingCheck, previous: t.check ?? null },
     createdAt: Date.now(),
   })

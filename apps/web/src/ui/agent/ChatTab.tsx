@@ -4,7 +4,7 @@ import { chatTime, dateTime, localizeResets } from '../when'
 import { MicButton, ListeningBar, SpeakingChip } from '../Voice'
 import { useDictation } from '../../state/dictation'
 import { primeSpeech, talkedByVoice } from '../../state/speech'
-import { LuPencil, LuUndo2, LuEye, LuEyeOff, LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuFoldVertical, LuSquare, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
+import { LuPencil, LuUndo2, LuEye, LuEyeOff, LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuFoldVertical, LuSquare, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText, LuCrown } from 'react-icons/lu'
 import { openUrl } from '../../state/url'
 import { ComposerBox, type Mentionable, type ComposerHandle } from './ComposerBox'
 import { confirm } from '../Confirm'
@@ -1031,6 +1031,9 @@ function ToolRow({ item, result, report }: { item: Extract<ChatItem, { kind: 'to
   )
 }
 
+/** What each of the manager's asks is called on its card. */
+const APPROVAL_TITLE: Partial<Record<Item['kind'], string>> = { delegation: 'New task', hire: 'Hire', check: 'Quality check', daily: 'Daily job' }
+
 /** A pending permission / plan / question for this agent, answerable right in the chat. */
 function InlineRequest({ item, onOpen, onError }: { item: Item; onOpen: (i: Item) => void; onError: (m: string) => void }) {
   const [sending, setSending] = useState(false)
@@ -1043,16 +1046,28 @@ function InlineRequest({ item, onOpen, onError }: { item: Item; onOpen: (i: Item
       setSending(false)
     }
   }
-  const icon = item.kind === 'plan' ? <LuClipboardList /> : item.kind === 'question' ? <LuCircleHelp /> : <LuShieldAlert />
+  // the manager's asks (a task to hand out, a hire, a daily job, a quality check): approved right here, rejected with a note
+  const approval = APPROVAL_TITLE[item.kind]
+  const icon = approval ? <LuCrown /> : item.kind === 'plan' ? <LuClipboardList /> : item.kind === 'question' ? <LuCircleHelp /> : <LuShieldAlert />
   return (
-    <div className={`req req--${item.kind}`}>
+    <div className={`req req--${approval ? 'approval' : item.kind}`}>
       <div className="req__head">
         {icon}
-        <b>{item.kind === 'plan' ? 'Plan ready' : item.kind === 'question' ? 'Question' : `${item.tool} needs permission`}</b>
+        <b>{approval ?? (item.kind === 'plan' ? 'Plan ready' : item.kind === 'question' ? 'Question' : `${item.tool ?? 'A tool'} needs permission`)}</b>
       </div>
       <div className="req__msg">{item.kind === 'permission' ? <code>{item.command ?? item.message}</code> : item.message}</div>
       <div className="req__actions">
-        {item.kind === 'permission' ? (
+        {approval ? (
+          <>
+            <button className="small primary" disabled={sending} onClick={() => decide({ type: 'approve' })}>
+              <LuCheck /> Approve
+            </button>
+            {/* the details (and a note for the manager) come with it */}
+            <button className="small" disabled={sending} onClick={() => onOpen(item)}>
+              <LuX /> Reject…
+            </button>
+          </>
+        ) : item.kind === 'permission' ? (
           <>
             <button className="small primary" disabled={sending} onClick={() => decide({ type: 'approve' })}>
               <LuCheck /> Allow

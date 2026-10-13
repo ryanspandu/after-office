@@ -1,8 +1,8 @@
-import { closeSync, existsSync, fstatSync, openSync, readSync, realpathSync } from 'node:fs'
-import { sep } from 'node:path'
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readSync, realpathSync, statSync } from 'node:fs'
+import { dirname, join, sep } from 'node:path'
 import type { CronJob, LiveMode, OfficeTask, TaskComment, TaskStatus, WorkReport, WorkState } from '@after-office/shared'
 import { agentsRepo, commentsRepo, cronsRepo, queueRepo, reportsRepo, settingsRepo, sideSessionsRepo, tasksRepo, triggersRepo } from '../db'
-import { AgentError, grantFolder, sendPrompt, setMode } from '../agents/manager'
+import { AgentError, conversationOf, grantFolder, sendPrompt, setMode, untilCleared } from '../agents/manager'
 import { currentRateLimits, publish, runtimeOf, sideRuntimeOf, setWorkProvider, updateRuntime } from '../agents/registry'
 import { agentFiles } from '../agents/files'
 import { mentionedPaths } from '@after-office/shared'
@@ -10,7 +10,8 @@ import { snapshot } from './git'
 import { channelNames, notify } from '../notify'
 import { bossMode, bossModeState, officeSettings } from './settings'
 import { tmux } from '../agents/tmux'
-import { isAsleep, wakeAgent } from '../agents/sleep'
+import type { Runtime } from '../agents/state'
+import { isAsleep, wakeAgent, wokeRecently } from '../agents/sleep'
 import { closeIdleThreads, deliverToThread, drainThreads, listThreads, onThreadTurn, threadOfSession, touchThread } from './threads'
 import { transcriptPath, unwrapPaste } from '../agents/transcripts'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
@@ -105,6 +106,12 @@ interface Active extends WorkRef {
   background?: number
   /** its last "still working in the background" message, and when it went quiet with it */
   update?: { text: string; at: number }
+  /** the prompt as typed (a retry types it again), whether a /clear went first, and when it was typed */
+  text?: string
+  clearFirst?: boolean
+  sentAt?: number
+  /** the "working" mark set when it was typed (lastEventAt): still the same means no hook came since */
+  markedAt?: number
 }
 export const active = new Map<string, Active>()
 
@@ -196,18 +203,202 @@ async function sendNow(agentId: string, text: string, clearFirst: boolean, ref: 
     const gitBase = cwd ? await snapshot(cwd) : undefined
     markTask(task.id, { gitBase, checkState: undefined, checkAttempts: undefined, stuckNotifiedAt: undefined })
   }
+  // the task's id goes in with it: its delivery is confirmed (and found when debugging) by it
+  if (ref.taskId && !text.includes(ref.taskId)) text = `${text}\n\n(Task id: ${ref.taskId})`
+  const path = await deliveryPath(agentId, clearFirst)
   // register before typing: the prompt's UserPromptSubmit hook can arrive before sendPrompt returns
-  if (ref.taskId || ref.cronId) {
+  const work = !!(ref.taskId || ref.cronId)
+  if (work) {
     const title = task?.title ?? (ref.cronId ? cronsRepo.get(ref.cronId)?.name : undefined) ?? 'Work'
-    active.set(agentId, { taskId: ref.taskId, cronId: ref.cronId, title, startedAt: Date.now(), restoreMode, promptHead: promptHead(text) })
+    active.set(agentId, { taskId: ref.taskId, cronId: ref.cronId, title, startedAt: Date.now(), restoreMode, promptHead: promptHead(text), text, clearFirst })
   } else active.delete(agentId)
-  if (clearFirst) {
-    await sendPrompt(agentId, '/clear')
-    await Bun.sleep(1500)
+  try {
+    if (clearFirst) {
+      // the next prompt only once the clear is over: typed while it runs, it becomes the /clear's arguments
+      const before = conversationOf(agentId)
+      await sendPrompt(agentId, '/clear')
+      await untilCleared(agentId, '', before)
+    }
+    const sentAt = Date.now()
+    await sendPrompt(agentId, text)
+    // mark busy right away so the queue doesn't send a second prompt before the hook arrives
+    const markedAt = Date.now()
+    updateRuntime(agentId, (rt) => ({ ...rt, status: 'working', task: text.split('\n')[0].slice(0, 120), lastEventAt: markedAt }))
+    const a = active.get(agentId)
+    if (work && a && sameWork(a, ref)) {
+      a.sentAt = sentAt
+      a.markedAt = markedAt
+      void confirmDelivery(agentId, ref, text, path, sentAt).catch((e) => console.error('[deliver]', e))
+    }
+  } catch (e) {
+    const a = active.get(agentId)
+    if (a && sameWork(a, ref) && !a.submitted) active.delete(agentId)
+    logDelivery(agentId, ref, path, 'no', e instanceof Error ? e.message : String(e))
+    throw e
   }
-  await sendPrompt(agentId, text)
-  // mark busy right away so the queue doesn't send a second prompt before the hook arrives
-  updateRuntime(agentId, (rt) => ({ ...rt, status: 'working', task: text.split('\n')[0].slice(0, 120), lastEventAt: Date.now() }))
+}
+
+// ── delivery confirmation ──
+//
+// Typing a prompt isn't proof it arrived (see the input gate in agents/manager.ts). A task's or daily job's prompt is
+// confirmed by its UserPromptSubmit hook, or else by a new user entry with it (the task id) in the agent's transcript.
+// Not confirmed in time: typed again (at most `attempts` times in all, each through the gate); then the work is marked
+// as not delivered and the owner and the manager hear about it, instead of a task that hangs "in progress".
+
+/** How long a prompt may take to show up, how often to look, tries in all, and how long the watchdog waits. */
+export const deliveryTiming = { confirmMs: 45_000, pollMs: 1_000, attempts: 3, lostMs: 2 * 60_000 }
+type DeliveryPath = 'wake' | 'resume' | 'clear' | 'live'
+/** Tries so far, by work (a task's id, or cron:<id>). */
+const attempts = new Map<string, number>()
+/** Work whose confirmation is being waited for right now. */
+const confirming = new Set<string>()
+/** Tasks whose prompt was seen in their agent's session. */
+const delivered = new Set<string>()
+/** Failed sends of each queued prompt (the gate never found the session ready). */
+const queueFailures = new Map<string, number>()
+const workKey = (ref: WorkRef) => ref.taskId ?? `cron:${ref.cronId}`
+const sameWork = (a: WorkRef, b: WorkRef) => workKey(a) === workKey(b)
+
+async function deliveryPath(agentId: string, clearFirst: boolean): Promise<DeliveryPath> {
+  if (clearFirst) return 'clear'
+  if (wokeRecently(agentId)) return 'wake'
+  const row = agentsRepo.get(agentId)
+  const age = row ? await tmux.sessionAge(row.tmux_session) : null
+  return age !== null && age < 5 * 60_000 ? 'resume' : 'live'
+}
+
+function logDelivery(agentId: string, ref: WorkRef, path: string, confirmed: 'yes' | 'no' | 'gone', note = '') {
+  if (!ref.taskId && !ref.cronId) return
+  const name = agentsRepo.get(agentId)?.name ?? agentId
+  const n = attempts.get(workKey(ref)) ?? 1
+  console.log(`[deliver] agent=${name} ${ref.taskId ? `task=${ref.taskId}` : `cron=${ref.cronId}`} path=${path} attempt=${n} confirmed=${confirmed}${note ? ` (${note})` : ''}`)
+}
+
+/**
+ * Did a prompt with `marker` reach the agent's session (a user entry written since `since` in its newest transcripts)?
+ * `active`: whether anything at all was written since (a session that did nothing didn't get it); `readable`: whether
+ * there was a transcript to read at all (none, or no access: nothing can be told from it).
+ */
+export function transcriptSince(agentId: string, marker: string, since: number) {
+  const row = agentsRepo.get(agentId)
+  const found = { has: false, active: false, readable: false }
+  if (!row) return found
+  const dir = dirname(transcriptPath(row))
+  const needle = JSON.stringify(marker).slice(1, -1)
+  let files: string[] = []
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith('.jsonl'))
+  } catch {
+    return found
+  }
+  for (const f of files) {
+    const path = join(dir, f)
+    let tail: string
+    try {
+      const old = statSync(path).mtimeMs < since - 5_000
+      tail = tailOf(path, old ? 0 : 2_000_000)
+      found.readable = true
+      if (old) continue
+    } catch {
+      continue
+    }
+    for (const line of tail.split('\n')) {
+      if (!line.includes('"timestamp"')) continue
+      let l: { type?: string; timestamp?: string; message?: { content?: unknown } }
+      try {
+        l = JSON.parse(line)
+      } catch {
+        continue
+      }
+      if (!l.timestamp || Date.parse(l.timestamp) < since - 5_000) continue
+      if (l.type === 'user' || l.type === 'assistant') found.active = true
+      // the prompt itself, not a tool's result that mentions it
+      if (l.type === 'user' && !line.includes('"tool_result"') && line.includes(needle)) found.has = true
+    }
+  }
+  return found
+}
+
+function tailOf(path: string, bytes: number) {
+  const fd = openSync(path, 'r')
+  try {
+    const size = fstatSync(fd).size
+    const start = Math.max(0, size - bytes)
+    const buf = Buffer.alloc(size - start)
+    readSync(fd, buf, 0, buf.length, start)
+    return buf.toString('utf8')
+  } finally {
+    closeSync(fd)
+  }
+}
+
+async function confirmDelivery(agentId: string, ref: WorkRef, text: string, path: DeliveryPath, sentAt: number) {
+  const key = workKey(ref)
+  attempts.set(key, (attempts.get(key) ?? 0) + 1)
+  confirming.add(key)
+  const marker = ref.taskId ?? promptHead(text)
+  try {
+    const until = sentAt + deliveryTiming.confirmMs
+    while (true) {
+      const a = active.get(agentId)
+      // stopped, finished, or other work took its place: nothing left to confirm
+      if (!a || !sameWork(a, ref)) return logDelivery(agentId, ref, path, 'gone')
+      if (a.submitted || transcriptSince(agentId, marker, sentAt).has) {
+        if (ref.taskId) delivered.add(ref.taskId)
+        logDelivery(agentId, ref, path, 'yes')
+        attempts.delete(key)
+        return
+      }
+      if (Date.now() >= until) break
+      await Bun.sleep(deliveryTiming.pollMs)
+    }
+    logDelivery(agentId, ref, path, 'no', 'not in its session')
+    redeliver(agentId, ref, `it didn't show up in ${agentsRepo.get(agentId)?.name ?? 'the agent'}'s session within ${Math.round(deliveryTiming.confirmMs / 1000)} s`)
+  } finally {
+    confirming.delete(key)
+  }
+}
+
+/** The work's prompt didn't arrive: typed again (first in its queue, through the gate), or given up after the last try. */
+function redeliver(agentId: string, ref: WorkRef, why: string, text?: string) {
+  const key = workKey(ref)
+  const a = active.get(agentId)
+  const mine = a && sameWork(a, ref) ? a : null
+  const prompt = text ?? mine?.text
+  if (mine) {
+    active.delete(agentId)
+    // the "working" mark was ours: no hook came, so it's idle (and the queue can type into it)
+    updateRuntime(agentId, (rt) => (rt.status === 'working' && rt.lastEventAt === mine.markedAt ? { ...rt, status: 'idle', task: undefined } : rt))
+  }
+  const n = attempts.get(key) ?? 1
+  if (!prompt || n >= deliveryTiming.attempts) return failDelivery(agentId, ref, why)
+  if (ref.taskId) addComment({ taskId: ref.taskId, author: 'system', text: `The task's prompt didn't reach ${agentsRepo.get(agentId)?.name ?? 'the agent'} (${why}). Sending it again (try ${n + 1} of ${deliveryTiming.attempts}).` })
+  // first in line: it was already its turn
+  queueRepo.add({ id: crypto.randomUUID(), agent_id: agentId, text: prompt, clear_first: mine?.clearFirst ? 1 : 0, task_id: ref.taskId ?? null, cron_id: ref.cronId ?? null, created_at: 0 })
+  publishWork('queued')
+  void drainQueues()
+}
+
+/** Every try failed: the task back in To do marked as not delivered; the owner and the manager are told. */
+function failDelivery(agentId: string, ref: WorkRef, why: string) {
+  const key = workKey(ref)
+  attempts.delete(key)
+  const name = agentsRepo.get(agentId)?.name ?? 'The agent'
+  console.warn(`[deliver] agent=${name} ${ref.taskId ? `task=${ref.taskId}` : `cron=${ref.cronId}`} delivery failed: ${why}`)
+  if (ref.cronId && !ref.taskId) {
+    const job = cronsRepo.get(ref.cronId)?.name ?? 'A daily job'
+    void notify('stuck', `"${job}" didn't reach ${name}`, `Its prompt never arrived in ${name}'s session (${why}). It didn't run.`)
+    return
+  }
+  const t = ref.taskId ? tasksRepo.get(ref.taskId) : null
+  if (!t) return
+  markTask(t.id, { status: 'todo', deliveryFailedAt: Date.now(), startedAt: undefined })
+  const text = `Delivery failed: the task's prompt never reached ${name}'s session after ${deliveryTiming.attempts} tries (${why}). It is back in To do; start it again, or restart ${name} first.`
+  addComment({ taskId: t.id, author: 'system', text })
+  void notify('stuck', `"${t.title}" didn't reach ${name}`, text)
+  const manager = t.delegatedBy && agentsRepo.get(t.delegatedBy)?.kind === 'manager' ? t.delegatedBy : agentsRepo.all().find((r) => r.kind === 'manager')?.id
+  if (manager && manager !== agentId)
+    void deliverToManager(manager, `[After Office] Delivery failed: task "${t.title}" (${t.id}) never reached ${name}'s session after ${deliveryTiming.attempts} tries. It is back in To do. Try restart_agent for ${name}, then send it again, or give it to someone else.`, t.managerSession).catch((e) => console.warn('[deliver] could not tell the manager:', e instanceof Error ? e.message : e))
 }
 
 const promptHead = (text: string) => text.trim().split('\n')[0].slice(0, 60)
@@ -224,8 +415,13 @@ async function agentIsFree(agentId: string) {
 export async function deliver(agentId: string, text: string, opts: { clearFirst?: boolean } & WorkRef = {}) {
   if (!agentsRepo.get(agentId)) throw new AgentError('No such agent', 404)
   if (queueRepo.countFor(agentId) === 0 && (await agentIsFree(agentId))) {
-    await sendNow(agentId, text, !!opts.clearFirst, opts)
-    return 'sent' as const
+    try {
+      await sendNow(agentId, text, !!opts.clearFirst, opts)
+      return 'sent' as const
+    } catch (e) {
+      // not ready for it after all (the gate): the queue sends it once it is
+      console.warn(`[deliver] ${agentsRepo.get(agentId)?.name}: queued instead:`, e instanceof Error ? e.message : e)
+    }
   }
   queueRepo.add({ id: crypto.randomUUID(), agent_id: agentId, text, clear_first: opts.clearFirst ? 1 : 0, task_id: opts.taskId ?? null, cron_id: opts.cronId ?? null })
   publishWork('queued')
@@ -238,21 +434,37 @@ const draining = new Set<string>()
 
 /** Send the oldest queued prompt of every idle agent. Called on a timer and whenever an agent stops. */
 export async function drainQueues() {
-  for (const a of agentsRepo.all()) {
-    if (draining.has(a.id)) continue
-    const next = queueRepo.next(a.id)
-    if (!next || !(await agentIsFree(a.id))) continue
-    draining.add(a.id)
-    try {
+  // each agent on its own: one waiting for its session to be ready doesn't hold up the others
+  await Promise.all(agentsRepo.all().map((a) => drainOne(a.id, a.name)))
+}
+
+async function drainOne(agentId: string, name: string) {
+  if (draining.has(agentId)) return
+  const next = queueRepo.next(agentId)
+  if (!next || !(await agentIsFree(agentId))) return
+  draining.add(agentId)
+  try {
+    // taken out of the queue only once it's typed in: a session that wasn't ready keeps it for the next round
+    await sendNow(agentId, next.text, !!next.clear_first, { taskId: next.task_id, cronId: next.cron_id })
+    queueRepo.remove(next.id)
+    queueFailures.delete(next.id)
+    if (next.task_id) markTask(next.task_id, { status: 'in_progress', agentId, startedAt: Date.now(), deliveryFailedAt: undefined })
+    publishWork('queued')
+  } catch (e) {
+    const n = (queueFailures.get(next.id) ?? 0) + 1
+    console.warn(`[queue] could not deliver to ${name} (try ${n} of ${deliveryTiming.attempts}):`, e instanceof Error ? e.message : e)
+    if (n < deliveryTiming.attempts) queueFailures.set(next.id, n)
+    else {
+      queueFailures.delete(next.id)
       queueRepo.remove(next.id)
-      await sendNow(a.id, next.text, !!next.clear_first, { taskId: next.task_id, cronId: next.cron_id })
-      if (next.task_id) markTask(next.task_id, { status: 'in_progress', agentId: a.id, startedAt: Date.now() })
       publishWork('queued')
-    } catch (e) {
-      console.error('[queue] could not deliver to', a.name, e)
-    } finally {
-      draining.delete(a.id)
+      if (next.task_id || next.cron_id) {
+        attempts.set(workKey({ taskId: next.task_id, cronId: next.cron_id }), deliveryTiming.attempts)
+        failDelivery(agentId, { taskId: next.task_id, cronId: next.cron_id }, e instanceof Error ? e.message : String(e))
+      }
     }
+  } finally {
+    draining.delete(agentId)
   }
 }
 
@@ -650,15 +862,11 @@ export async function resumeTask(taskId: string) {
   return result
 }
 
-export async function startTask(taskId: string, agentId?: string) {
-  const task = tasksRepo.get(taskId)
-  if (!task) throw new AgentError('No such task', 404)
-  const target = agentId ?? task.agentId
-  if (task.forOwner && !agentId) throw new AgentError("It's your own task: it isn't sent to an agent")
-  if (!target || !agentsRepo.get(target)) throw new AgentError('Assign the task to an agent first')
+/** What an agent gets when a task starts. */
+export function taskPrompt(task: OfficeTask) {
   const folder = task.folder && existsSync(task.folder) ? task.folder : null
   const deadline = new Intl.DateTimeFormat('en-GB', { timeZone: timezone(), dateStyle: 'medium', timeStyle: 'short' }).format(task.deadline)
-  const prompt = [
+  return [
     `New task: ${task.title}`,
     folder ? `Folder: ${folder} (work there)` : null,
     `Priority: ${task.priority} · Deadline: ${deadline}`,
@@ -667,6 +875,15 @@ export async function startTask(taskId: string, agentId?: string) {
   ]
     .filter(Boolean)
     .join('\n')
+}
+
+export async function startTask(taskId: string, agentId?: string) {
+  const task = tasksRepo.get(taskId)
+  if (!task) throw new AgentError('No such task', 404)
+  const target = agentId ?? task.agentId
+  if (task.forOwner && !agentId) throw new AgentError("It's your own task: it isn't sent to an agent")
+  if (!target || !agentsRepo.get(target)) throw new AgentError('Assign the task to an agent first')
+  const prompt = taskPrompt(task)
   // the agent is busy and the task may run next to that work: a session of its own (parallel.ts)
   if (task.parallel && mainBusy(target) && !parallelBlocker(task, target)) {
     const gitFolder = taskFolder(task, target)
@@ -830,6 +1047,25 @@ const BACKGROUND_WAIT_MS = 45 * 60_000
 
 const offlineSince = new Map<string, number>()
 
+/**
+ * A task in progress whose prompt never arrived: typed a while ago, no hook and no trace of it (its id) in the agent's
+ * transcript, and the agent idle. After a server restart (nothing remembered) only when its session did nothing at all
+ * since the task started.
+ */
+function lostPrompt(t: OfficeTask, rt: Runtime, now: number) {
+  if (!t.agentId || delivered.has(t.id) || confirming.has(t.id) || queueRepo.hasTask(t.id) || draining.has(t.agentId)) return false
+  const since = t.startedAt ?? now
+  if (now - since < deliveryTiming.lostMs) return false
+  const a = active.get(t.agentId)
+  // idle, or "working" only by our own mark when it was typed
+  if (rt.status !== 'idle' && !(rt.status === 'working' && a?.markedAt && rt.lastEventAt === a.markedAt)) return false
+  if (a && !sameWork(a, { taskId: t.id })) return false
+  if (a?.submitted) return void delivered.add(t.id), false
+  const seen = transcriptSince(t.agentId, t.id, since)
+  if (seen.has) return void delivered.add(t.id), false
+  return a ? true : seen.readable && !seen.active
+}
+
 function watchStuck(now: number) {
   for (const t of tasksRepo.active()) {
     if (t.status !== 'in_progress' || !t.agentId) {
@@ -858,6 +1094,11 @@ function watchStuck(now: number) {
       const mins = Math.round((now - rt.lastEventAt) / 60_000)
       addComment({ taskId: t.id, author: 'system', text: `No activity from ${row.name} for ${mins} minutes. It may be stuck.` })
       void notify('stuck', `${row.name} may be stuck`, `No activity for ${mins} minutes on "${t.title}".`)
+      continue
+    }
+    // typed but never arrived (no hook, nothing in its transcript): typed again instead of waiting for the report
+    if (!t.sessionKey && lostPrompt(t, rt, now)) {
+      redeliver(t.agentId, { taskId: t.id }, `nothing of it in ${row.name}'s session after ${Math.round((now - (t.startedAt ?? now)) / 60_000)} min`, active.get(t.agentId)?.text ?? taskPrompt(t))
       continue
     }
     const quiet = t.sessionKey
