@@ -336,7 +336,7 @@ export interface OfficeThread {
   /** how full its session's context window was last seen (%): shown while the session rests */
   contextPct?: number
   /** the owner's messages waiting for the manager's turn to end (oldest first); they go in by themselves */
-  queued?: { text: string; at: number }[]
+  queued?: { id: string; text: string; at: number; heldAt?: number }[]
   archivedAt?: number
 }
 

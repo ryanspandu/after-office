@@ -217,6 +217,8 @@ export async function deliverToThread(t: OfficeThread, text: string) {
 }
 
 const draining = new Set<string>()
+/** How long the owner's edit holds the thread's queue at most (closed mid-edit: it goes on after this). */
+export const HOLD_MS = 5 * 60_000
 /** Send each thread's oldest queued message once its session is free. On a timer, and when its turn ends. */
 export async function drainThreads() {
   for (const t of threadsRepo.all()) {
@@ -224,6 +226,8 @@ export async function drainThreads() {
     if (sideRuntimeOf(t.managerId, t.sessionKey).status !== 'idle' || !(await isOpen(t))) continue
     const next = threadQueueRepo.next(t.id)
     if (!next) continue
+    // the owner is editing it: the queue waits here (a stale hold, e.g. the page closed mid-edit, lets it go)
+    if (next.held_at && Date.now() - next.held_at < HOLD_MS) continue
     draining.add(t.id)
     try {
       threadQueueRepo.remove(next.id)
@@ -382,4 +386,46 @@ export async function compactThread(id: string, focus = '') {
   const t = getThread(id)
   await ensureOpen(t)
   await compactSession(t.managerId, t.sessionKey, focus)
+}
+
+// ── the owner's queued messages: edited (the queue waits meanwhile) or taken back before they go in ──
+
+const queuedItem = (threadId: string, id: string) => {
+  getThread(threadId)
+  const q = threadQueueRepo.ownerItem(threadId, id)
+  if (!q) throw new AgentError('That message already went in (or was taken back)', 409)
+  return q
+}
+
+/** Editing it: the thread's queue waits at it (true) or goes on (false). */
+export function holdQueued(threadId: string, id: string, held: boolean) {
+  queuedItem(threadId, id)
+  threadQueueRepo.hold(id, held ? Date.now() : null)
+  publish()
+  if (!held) void drainThreads()
+}
+
+/**
+ * The owner's new words for a queued message. What the office put around them stays: the thread's context block in
+ * front (a first message), the attached files' list after.
+ */
+export function editQueued(threadId: string, id: string, words: string) {
+  const q = queuedItem(threadId, id)
+  const clean = words.trim()
+  if (!clean) throw new AgentError('Write something, or take the message back', 400)
+  const ctxEnd = q.text.startsWith('[Thread: ') ? q.text.indexOf('\n\n') : -1
+  const head = ctxEnd === -1 ? '' : q.text.slice(0, ctxEnd + 2)
+  const filesAt = q.text.lastIndexOf('[Attached files]')
+  const tail = filesAt === -1 || filesAt < head.length ? '' : `\n\n${q.text.slice(filesAt)}`
+  threadQueueRepo.setText(id, `${head}${clean.slice(0, 50_000)}${tail}`)
+  publish()
+  void drainThreads()
+}
+
+/** Taken back before it went in. */
+export function unsendQueued(threadId: string, id: string) {
+  queuedItem(threadId, id)
+  threadQueueRepo.remove(id)
+  publish()
+  void drainThreads()
 }

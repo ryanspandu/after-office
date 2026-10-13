@@ -6,7 +6,7 @@ import { requestWho } from '../auth'
 import { noteOwnerMessage } from '../work/activity'
 import { cleanFolder } from '../work/folders'
 import { cleanTagIds } from '../work/tags'
-import { archiveThread, compactThread, createThread, reorderThreads, deleteThread, getThread, listThreads, markThreadRead, mentionTask, sendToThread, updateThread } from '../work/threads'
+import { archiveThread, compactThread, createThread, editQueued, holdQueued, unsendQueued, reorderThreads, deleteThread, getThread, listThreads, markThreadRead, mentionTask, sendToThread, updateThread } from '../work/threads'
 
 // /api/threads: the owner's topics with the manager (work/threads.ts). Every change reaches the dashboards as work state.
 
@@ -82,6 +82,22 @@ threadRoutes.post('/threads/:id/messages', async (c) => {
     queued = (await sendToThread(t.id, withAttachments(text, paths))) === 'queued'
   }
   return c.json({ ok: true, tasks, queued })
+})
+
+// the owner's queued message (still waiting for the manager): held while edited, edited, or taken back
+threadRoutes.post('/threads/:id/queue/:qid/hold', async (c) => {
+  const b = await c.req.json<{ held?: unknown }>()
+  holdQueued(c.req.param('id'), c.req.param('qid'), b.held === true)
+  return c.json({ ok: true })
+})
+threadRoutes.put('/threads/:id/queue/:qid', async (c) => {
+  const b = await c.req.json<{ text?: unknown }>()
+  editQueued(c.req.param('id'), c.req.param('qid'), typeof b.text === 'string' ? b.text : '')
+  return c.json({ ok: true })
+})
+threadRoutes.delete('/threads/:id/queue/:qid', (c) => {
+  unsendQueued(c.req.param('id'), c.req.param('qid'))
+  return c.json({ ok: true })
 })
 
 // /compact in the thread's session (opened again first if it rests)

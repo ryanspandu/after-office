@@ -3,7 +3,7 @@ import type { OfficeThread } from '@after-office/shared'
 import { agentsRepo, queueRepo, reportsRepo, sideSessionsRepo, tasksRepo, threadQueueRepo, threadsRepo, type AgentRow } from '../db'
 import { updateRuntime, updateSideRuntime } from '../agents/registry'
 import { delegateTask } from './managerTasks'
-import { archiveThread, listThreads, reorderThreads, sendToThread, closeIdleThreads, deleteThread, drainThreads, joinThread, mentionTask, parentFor, threadContext, threadOfSession } from './threads'
+import { archiveThread, editQueued, holdQueued, listThreads, reorderThreads, sendToThread, unsendQueued, closeIdleThreads, deleteThread, drainThreads, joinThread, mentionTask, parentFor, threadContext, threadOfSession } from './threads'
 import { deliverToManager, fileReport, isReadingAgentOutput, isReportedNow, onSidePromptSubmitted } from './work'
 
 // Threads: a topic in a side session of the manager's. What it starts belongs to it, what comes back about it goes to
@@ -129,6 +129,29 @@ test("the owner's message while the manager is mid-turn waits in the thread's qu
   expect(listThreads().find((x) => x.id === thread.id)?.queued).toHaveLength(2)
   threadQueueRepo.removeThread(thread.id)
   updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'idle' }))
+})
+
+test('a queued message can be edited (the queue waits meanwhile) or taken back', async () => {
+  updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'working' }))
+  await sendToThread(thread.id, 'pertama\n\n[Attached files]\n- /tmp/a.png')
+  await sendToThread(thread.id, 'kedua')
+  const [first, second] = listThreads().find((x) => x.id === thread.id)!.queued!
+  // editing the first: the manager is free now, but the queue waits at it
+  holdQueued(thread.id, first.id, true)
+  updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'idle' }))
+  await drainThreads()
+  expect(threadQueueRepo.countFor(thread.id)).toBe(2)
+  // taken back: gone (the held one still holds the line)
+  unsendQueued(thread.id, second.id)
+  expect(threadQueueRepo.countFor(thread.id)).toBe(1)
+  // new words, the attachments kept; saving lets the queue go on
+  editQueued(thread.id, first.id, 'pertama, versi baru')
+  expect(threadQueueRepo.next(thread.id)?.text).toMatch(/pertama, versi baru\n\n\[Attached files\]\n- \/tmp\/a\.png$/)
+  await Bun.sleep(50)
+  await drainThreads()
+  expect(threadQueueRepo.countFor(thread.id)).toBe(0)
+  // gone already: nothing to edit
+  expect(() => editQueued(thread.id, first.id, 'x')).toThrow('already went in')
 })
 
 test('a quiet thread session closes after the idle time (kept: not pruned), a busy one stays', async () => {

@@ -519,6 +519,11 @@ export function ThreadModal({ id, newSub, onClose: close, onMinimize: minimize }
                 mention: (insert) => <MentionButton onPick={insert} />,
                 compact: () => liveApi.compactThread(t.id).then(() => undefined),
                 queued: t.queued,
+                queue: {
+                  hold: (qid, held) => liveApi.holdQueued(t.id, qid, held),
+                  edit: (qid, text) => liveApi.editQueued(t.id, qid, text),
+                  unsend: (qid) => liveApi.unsendQueued(t.id, qid),
+                },
                 names: agents.filter((a) => a.kind !== 'manager').map((a) => ({ name: a.name, role: a.role || a.profile.role, color: a.look.shirt })),
               }}
             />

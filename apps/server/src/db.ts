@@ -153,6 +153,8 @@ if (!hasColumn('agents', 'pinned')) db.exec('ALTER TABLE agents ADD COLUMN pinne
 // put to sleep (agents/sleep.ts): when; its session isn't started again until it's woken. NULL: awake
 // the thread a side session belongs to (work/threads.ts): kept when closed (not pruned), so the thread can open it again
 // a queued thread message the owner wrote (shown as "queued" in the chat until it goes in), not a report or a note
+// held while the owner edits it (work/threads.ts): the thread's queue waits at it until then (or until it's stale)
+if (!hasColumn('thread_queue', 'held_at')) db.exec('ALTER TABLE thread_queue ADD COLUMN held_at INTEGER')
 if (!hasColumn('thread_queue', 'owner')) db.exec('ALTER TABLE thread_queue ADD COLUMN owner INTEGER NOT NULL DEFAULT 0')
 if (!hasColumn('side_sessions', 'thread_id')) db.exec('ALTER TABLE side_sessions ADD COLUMN thread_id TEXT')
 if (!hasColumn('agents', 'asleep_at')) db.exec('ALTER TABLE agents ADD COLUMN asleep_at INTEGER')
@@ -426,11 +428,20 @@ export const threadQueueRepo = {
   /** the owner's messages still waiting, oldest first */
   ownerQueued: (threadId: string) =>
     db
-      .query<{ text: string; created_at: number }, [string]>('SELECT text, created_at FROM thread_queue WHERE thread_id = ? AND owner = 1 ORDER BY created_at')
+      .query<{ id: string; text: string; created_at: number; held_at: number | null }, [string]>(
+        'SELECT id, text, created_at, held_at FROM thread_queue WHERE thread_id = ? AND owner = 1 ORDER BY created_at',
+      )
       .all(threadId)
-      .map((r) => ({ text: r.text, at: r.created_at })),
+      .map((r) => ({ id: r.id, text: r.text, at: r.created_at, ...(r.held_at ? { heldAt: r.held_at } : {}) })),
   next: (threadId: string) =>
-    db.query<{ id: string; text: string }, [string]>('SELECT id, text FROM thread_queue WHERE thread_id = ? ORDER BY created_at LIMIT 1').get(threadId),
+    db
+      .query<{ id: string; text: string; held_at: number | null }, [string]>('SELECT id, text, held_at FROM thread_queue WHERE thread_id = ? ORDER BY created_at LIMIT 1')
+      .get(threadId),
+  /** one of the owner's (null: none, or not the owner's, or not in that thread) */
+  ownerItem: (threadId: string, id: string) =>
+    db.query<{ id: string; text: string }, [string, string]>('SELECT id, text FROM thread_queue WHERE thread_id = ? AND id = ? AND owner = 1').get(threadId, id) ?? null,
+  setText: (id: string, text: string) => db.query('UPDATE thread_queue SET text = ?2, held_at = NULL WHERE id = ?1').run(id, text),
+  hold: (id: string, at: number | null) => db.query('UPDATE thread_queue SET held_at = ?2 WHERE id = ?1').run(id, at),
   remove: (id: string) => db.query('DELETE FROM thread_queue WHERE id = ?').run(id),
   countFor: (threadId: string) => db.query<{ n: number }, [string]>('SELECT COUNT(*) AS n FROM thread_queue WHERE thread_id = ?').get(threadId)!.n,
   removeThread: (threadId: string) => db.query('DELETE FROM thread_queue WHERE thread_id = ?').run(threadId),

@@ -4,7 +4,7 @@ import { chatTime, dateTime, localizeResets } from '../when'
 import { MicButton, ListeningBar, SpeakingChip } from '../Voice'
 import { useDictation } from '../../state/dictation'
 import { primeSpeech, talkedByVoice } from '../../state/speech'
-import { LuEye, LuEyeOff, LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuFoldVertical, LuSquare, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
+import { LuPencil, LuUndo2, LuEye, LuEyeOff, LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuFoldVertical, LuSquare, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
 import { openUrl } from '../../state/url'
 import { ComposerBox, type Mentionable, type ComposerHandle } from './ComposerBox'
 import { confirm } from '../Confirm'
@@ -118,7 +118,13 @@ export interface ThreadChat {
   /** /compact for the thread's session (opened again first if it rests) */
   compact?: () => Promise<void>
   /** the owner's messages waiting on the server for the manager's turn to end (kept across closing the chat) */
-  queued?: { text: string; at: number }[]
+  queued?: { id: string; text: string; at: number; heldAt?: number }[]
+  /** a queued message: held while being edited (the queue waits), given new words, or taken back */
+  queue?: {
+    hold: (id: string, held: boolean) => Promise<unknown>
+    edit: (id: string, text: string) => Promise<unknown>
+    unsend: (id: string) => Promise<unknown>
+  }
 }
 
 /** A message to bring into view (a report's, by its task id; or the one nearest a time), asked again with a new `n`. */
@@ -330,9 +336,19 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
   const serverQueued = (thread?.queued ?? []).map((q) => {
     const { text: noFiles, paths } = splitAttachments(q.text)
     const said = splitThreadBlock(noFiles).rest
-    return { text: said || (paths.length ? `${paths.length} file${paths.length === 1 ? '' : 's'}` : ''), at: q.at }
+    return { id: q.id, words: said, text: said || (paths.length ? `${paths.length} file${paths.length === 1 ? '' : 's'}` : ''), at: q.at }
   })
   const waiting = [...serverQueued, ...queued.filter((l) => !serverQueued.some((s) => s.text.startsWith(l.text.slice(0, 40))))].filter((q) => !items.some((i) => isIt(q, i)))
+  // once the server lists one, its list is what counts (so one taken back or edited doesn't linger here)
+  const serverKey = serverQueued.map((q) => q.id).join(',')
+  useEffect(() => {
+    if (!serverQueued.length) return
+    setQueued((list) => {
+      const left = list.filter((l) => !serverQueued.some((q) => q.text.startsWith(l.text.slice(0, 40))))
+      return left.length === list.length ? list : left
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverKey])
   if (delivered) seen.current?.add(delivered.id)
   useEffect(() => {
     if (!delivered) return
@@ -794,10 +810,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
           return null
         })}
         {waiting.map((q) => (
-          <div key={`${q.at}:${q.text.slice(0, 20)}`} className="msg-user msg-user--queued">
-            {q.text && <div className="msg msg--user">{q.text}</div>}
-            <span className="msg__time">Queued: goes in when {agent.name} finishes</span>
-          </div>
+          <QueuedMessage key={`${q.at}:${'id' in q ? q.id : ''}`} q={q} who={agent.name} queue={thread?.queue} onError={setError} />
         ))}
         {outgoing && !delivered && (
           <div className="msg-user msg--new">
@@ -1104,6 +1117,120 @@ function ReportLinks({ reports, agent }: { reports: WorkReport[]; agent?: boolea
           <span className="truncate">{r.title}</span>
         </button>
       ))}
+    </div>
+  )
+}
+
+/**
+ * A thread message still waiting for the manager's turn to end: it can be edited (the thread's queue waits at it
+ * meanwhile, server: work/threads.ts holdQueued) or taken back before it goes in.
+ */
+function QueuedMessage({
+  q,
+  who,
+  queue,
+  onError,
+}: {
+  q: { id?: string; words?: string; text: string; at: number }
+  who: string
+  queue?: ThreadChat['queue']
+  onError: (e: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(q.words ?? q.text)
+  const [busy, setBusy] = useState(false)
+  const id = q.id
+  // left mid-edit (the chat closed): the queue goes on
+  const held = useRef(false)
+  useEffect(
+    () => () => {
+      if (held.current && id) void queue?.hold(id, false).catch(() => {})
+    },
+    [id, queue],
+  )
+  const act = async (fn: () => Promise<unknown>) => {
+    setBusy(true)
+    try {
+      await fn()
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const start = () =>
+    id &&
+    act(async () => {
+      await queue!.hold(id, true)
+      held.current = true
+      setText(q.words ?? '')
+      setEditing(true)
+    })
+  const stop = () =>
+    id &&
+    act(async () => {
+      await queue!.hold(id, false)
+      held.current = false
+      setEditing(false)
+    })
+  const save = () =>
+    id &&
+    act(async () => {
+      await queue!.edit(id, text)
+      held.current = false
+      setEditing(false)
+    })
+  const unsend = () =>
+    id &&
+    act(async () => {
+      await queue!.unsend(id)
+      held.current = false
+    })
+  return (
+    <div className={`msg-user msg-user--queued${editing ? ' is-editing' : ''}`}>
+      {editing ? (
+        <div className="msg-queued__edit">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            autoFocus
+            rows={Math.min(8, Math.max(2, text.split('\n').length))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                void save()
+              }
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                void stop()
+              }
+            }}
+          />
+          <span className="msg-queued__actions">
+            <button type="button" className="small" onClick={() => void stop()} disabled={busy}>
+              Cancel
+            </button>
+            <button type="button" className="small primary" onClick={() => void save()} disabled={busy || !text.trim()}>
+              Save
+            </button>
+          </span>
+        </div>
+      ) : (
+        q.text && <div className="msg msg--user">{q.text}</div>
+      )}
+      <span className="msg__time msg-queued__meta">
+        {editing ? 'Editing: the queue waits until you save' : `Queued: goes in when ${who} finishes`}
+        {id && queue && !editing && (
+          <>
+            <button type="button" className="link link--inline" onClick={() => void start()} disabled={busy}>
+              <LuPencil /> Edit
+            </button>
+            <button type="button" className="link link--inline msg-queued__unsend" onClick={() => void unsend()} disabled={busy}>
+              <LuUndo2 /> Unsend
+            </button>
+          </>
+        )}
+      </span>
     </div>
   )
 }
