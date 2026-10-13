@@ -518,6 +518,7 @@ export function ThreadModal({ id, newSub, onClose: close, onMinimize: minimize }
                 send: (text, uploads) => liveApi.threadMessage(t.id, { text, uploads, mentions: mentionsIn(text, agents) }),
                 mention: (insert) => <MentionButton onPick={insert} />,
                 compact: () => liveApi.compactThread(t.id).then(() => undefined),
+                queued: t.queued,
                 names: agents.filter((a) => a.kind !== 'manager').map((a) => ({ name: a.name, role: a.role || a.profile.role, color: a.look.shirt })),
               }}
             />

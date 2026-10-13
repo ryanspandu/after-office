@@ -152,6 +152,8 @@ for (const col of ['git_name', 'git_email', 'ssh_public', 'ssh_fingerprint']) if
 if (!hasColumn('agents', 'pinned')) db.exec('ALTER TABLE agents ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
 // put to sleep (agents/sleep.ts): when; its session isn't started again until it's woken. NULL: awake
 // the thread a side session belongs to (work/threads.ts): kept when closed (not pruned), so the thread can open it again
+// a queued thread message the owner wrote (shown as "queued" in the chat until it goes in), not a report or a note
+if (!hasColumn('thread_queue', 'owner')) db.exec('ALTER TABLE thread_queue ADD COLUMN owner INTEGER NOT NULL DEFAULT 0')
 if (!hasColumn('side_sessions', 'thread_id')) db.exec('ALTER TABLE side_sessions ADD COLUMN thread_id TEXT')
 if (!hasColumn('agents', 'asleep_at')) db.exec('ALTER TABLE agents ADD COLUMN asleep_at INTEGER')
 if (!hasColumn('agents', 'extra_dirs')) db.exec("ALTER TABLE agents ADD COLUMN extra_dirs TEXT NOT NULL DEFAULT '[]'")
@@ -417,8 +419,16 @@ export const tasksRepo = {
 export const cronsRepo = docRepo<CronJob>('crons')
 export const threadsRepo = docRepo<OfficeThread>('threads')
 export const threadQueueRepo = {
-  add: (threadId: string, text: string) =>
-    db.query('INSERT INTO thread_queue (id, thread_id, text, created_at) VALUES (?1, ?2, ?3, ?4)').run(crypto.randomUUID(), threadId, text, Date.now()),
+  add: (threadId: string, text: string, owner = false) =>
+    db
+      .query('INSERT INTO thread_queue (id, thread_id, text, created_at, owner) VALUES (?1, ?2, ?3, ?4, ?5)')
+      .run(crypto.randomUUID(), threadId, text, Date.now(), owner ? 1 : 0),
+  /** the owner's messages still waiting, oldest first */
+  ownerQueued: (threadId: string) =>
+    db
+      .query<{ text: string; created_at: number }, [string]>('SELECT text, created_at FROM thread_queue WHERE thread_id = ? AND owner = 1 ORDER BY created_at')
+      .all(threadId)
+      .map((r) => ({ text: r.text, at: r.created_at })),
   next: (threadId: string) =>
     db.query<{ id: string; text: string }, [string]>('SELECT id, text FROM thread_queue WHERE thread_id = ? ORDER BY created_at LIMIT 1').get(threadId),
   remove: (id: string) => db.query('DELETE FROM thread_queue WHERE id = ?').run(id),

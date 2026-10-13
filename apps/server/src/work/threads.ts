@@ -18,7 +18,12 @@ const READY_MS = 45_000
 
 const publish = () => void import('./work').then((w) => w.publishWork('threads')).catch(() => {})
 
-export const listThreads = () => threadsRepo.all().sort((a, b) => b.lastActivityAt - a.lastActivityAt)
+/** Every thread, latest activity first, with the owner's messages still waiting for its manager. */
+export const listThreads = () =>
+  threadsRepo
+    .all()
+    .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
+    .map((t) => ((q) => (q.length ? { ...t, queued: q } : t))(threadQueueRepo.ownerQueued(t.id)))
 
 export function getThread(id: string) {
   const t = threadsRepo.get(id)
@@ -34,7 +39,9 @@ export function threadOfSession(managerId: string, key?: string | null): OfficeT
 }
 
 function save(t: OfficeThread) {
-  threadsRepo.put(t)
+  // shown with the thread, kept in the queue table (not in the thread itself)
+  const { queued: _, ...doc } = t
+  threadsRepo.put(doc)
   publish()
   return t
 }
@@ -183,7 +190,7 @@ export async function sendToThread(id: string, text: string): Promise<'sent' | '
   const message = t.started ? text : `${threadContext(t)}\n\n${text}`
   const rt = sideRuntimeOf(t.managerId, t.sessionKey)
   if (rt.status !== 'idle' || rt.compactingSince || threadQueueRepo.countFor(t.id)) {
-    threadQueueRepo.add(t.id, message)
+    threadQueueRepo.add(t.id, message, true)
     touchThread(t.id, { started: true })
     return 'queued'
   }
@@ -221,6 +228,8 @@ export async function drainThreads() {
     try {
       threadQueueRepo.remove(next.id)
       await sendPrompt(t.managerId, next.text, t.sessionKey)
+      // a queued message of the owner's went in: no longer "queued" on any dashboard
+      publish()
     } catch (e) {
       console.warn(`[threads] could not send to "${t.title}":`, e instanceof Error ? e.message : e)
     } finally {

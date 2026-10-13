@@ -117,6 +117,8 @@ export interface ThreadChat {
   names: Mentionable[]
   /** /compact for the thread's session (opened again first if it rests) */
   compact?: () => Promise<void>
+  /** the owner's messages waiting on the server for the manager's turn to end (kept across closing the chat) */
+  queued?: { text: string; at: number }[]
 }
 
 /** A message to bring into view (a report's, by its task id; or the one nearest a time), asked again with a new `n`. */
@@ -324,7 +326,13 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
   const delivered = outgoing ? items.find((i) => isIt(outgoing, i)) : undefined
   // a thread's messages waiting for the manager's turn to end (server: work/threads.ts sendToThread)
   const [queued, setQueued] = useState<{ text: string; at: number }[]>([])
-  const waiting = queued.filter((q) => !items.some((i) => isIt(q, i)))
+  // the server's list (it outlives this view) and the ones just sent (until the server's list has them)
+  const serverQueued = (thread?.queued ?? []).map((q) => {
+    const { text: noFiles, paths } = splitAttachments(q.text)
+    const said = splitThreadBlock(noFiles).rest
+    return { text: said || (paths.length ? `${paths.length} file${paths.length === 1 ? '' : 's'}` : ''), at: q.at }
+  })
+  const waiting = [...serverQueued, ...queued.filter((l) => !serverQueued.some((s) => s.text.startsWith(l.text.slice(0, 40))))].filter((q) => !items.some((i) => isIt(q, i)))
   if (delivered) seen.current?.add(delivered.id)
   useEffect(() => {
     if (!delivered) return
@@ -786,7 +794,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
           return null
         })}
         {waiting.map((q) => (
-          <div key={q.at} className="msg-user msg-user--queued">
+          <div key={`${q.at}:${q.text.slice(0, 20)}`} className="msg-user msg-user--queued">
             {q.text && <div className="msg msg--user">{q.text}</div>}
             <span className="msg__time">Queued: goes in when {agent.name} finishes</span>
           </div>

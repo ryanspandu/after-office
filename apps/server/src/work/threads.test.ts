@@ -3,7 +3,7 @@ import type { OfficeThread } from '@after-office/shared'
 import { agentsRepo, queueRepo, reportsRepo, sideSessionsRepo, tasksRepo, threadQueueRepo, threadsRepo, type AgentRow } from '../db'
 import { updateRuntime, updateSideRuntime } from '../agents/registry'
 import { delegateTask } from './managerTasks'
-import { archiveThread, reorderThreads, sendToThread, closeIdleThreads, deleteThread, drainThreads, joinThread, mentionTask, parentFor, threadContext, threadOfSession } from './threads'
+import { archiveThread, listThreads, reorderThreads, sendToThread, closeIdleThreads, deleteThread, drainThreads, joinThread, mentionTask, parentFor, threadContext, threadOfSession } from './threads'
 import { deliverToManager, fileReport, isReadingAgentOutput, isReportedNow, onSidePromptSubmitted } from './work'
 
 // Threads: a topic in a side session of the manager's. What it starts belongs to it, what comes back about it goes to
@@ -121,6 +121,12 @@ test("the owner's message while the manager is mid-turn waits in the thread's qu
   // the next one waits behind it, in order
   expect(await sendToThread(thread.id, 'halo')).toBe('queued')
   expect(threadQueueRepo.countFor(thread.id)).toBe(2)
+  // every dashboard sees them waiting (they outlive closing the chat)
+  // (the first carries the thread's context block before the owner's words)
+  expect(listThreads().find((x) => x.id === thread.id)?.queued?.map((q) => q.text.split('\n\n').pop())).toEqual(['ini untuk content di mobile ilangin ya', 'halo'])
+  // a report waiting there too isn't the owner's
+  threadQueueRepo.add(thread.id, '[After Office] Report from Kai')
+  expect(listThreads().find((x) => x.id === thread.id)?.queued).toHaveLength(2)
   threadQueueRepo.removeThread(thread.id)
   updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'idle' }))
 })
