@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -275,18 +275,30 @@ function AgentRow({
     if (ok) act('remove', () => (live ? liveApi.deleteAgent(a.id, { folder: option }) : onRemove()))
   }
 
-  // one click on the card opens its chat (its profile in the demo); the rest is in the ⋯ menu under the avatar.
-  // Phones: a tap on the card does nothing (it's easy to hit while scrolling); the chat button under the status opens it.
+  // one click on the card opens its chat (its profile in the demo); the rest is in its menu: right click (or a long
+  // press on a phone), like the folders. Phones: a tap on the card does nothing (it's easy to hit while scrolling); the
+  // chat button under the status opens it.
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
+  const closeMenu = useCallback(() => setMenuAt(null), [])
+  const longPress = useLongPress(setMenuAt)
   return (
-    <li data-flip={a.id} className={`row agent${selected ? ' row--selected' : ''}${isAway(a.status) ? ' row--off' : ''}`} onClick={phone ? undefined : onProfile}>
+    <li
+      data-flip={a.id}
+      className={`row agent${selected ? ' row--selected' : ''}${isAway(a.status) ? ' row--off' : ''}${menuAt ? ' row--menu' : ''}`}
+      onClick={phone ? undefined : onProfile}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        setMenuAt({ x: e.clientX, y: e.clientY })
+      }}
+      {...longPress}
+    >
       <div className="agent__side">
         <span className="avatar" style={avatarStyle(a.look.shirt)} aria-hidden>
-          {a.name[0]}
+          {busy ? <LuRotateCw className="spin" /> : a.name[0]}
         </span>
         <AgentMenu
-          agent={a}
-          live={live}
-          busy={busy}
+          at={menuAt}
+          onClose={closeMenu}
           items={[
             ...(!live
               ? STAT_STATUSES.map((status) => ({ key: status, icon: STATUS_META[status].icon, label: STATUS_META[status].label, on: a.status === status, run: () => onStatus(status) }))
@@ -374,72 +386,77 @@ interface MenuItem {
 }
 
 /** The card's ⋯ button and its menu (chat, restart, pin, remove; the demo's statuses). */
-function AgentMenu({ agent: a, items, busy }: { agent: OfficeAgent; live: boolean; items: MenuItem[]; busy: string }) {
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
-  const btn = useRef<HTMLButtonElement>(null)
+function AgentMenu({ at, items, onClose }: { at: { x: number; y: number } | null; items: MenuItem[]; onClose: () => void }) {
   const pop = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (!pos) return
-    const away = (e: PointerEvent) => !btn.current?.contains(e.target as Node) && !pop.current?.contains(e.target as Node) && setPos(null)
-    const shut = () => setPos(null)
+    if (!at) return
+    const away = (e: PointerEvent) => !pop.current?.contains(e.target as Node) && onClose()
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('pointerdown', away)
-    window.addEventListener('resize', shut)
-    window.addEventListener('scroll', shut, true)
+    document.addEventListener('keydown', key)
+    window.addEventListener('resize', onClose)
+    window.addEventListener('scroll', onClose, true)
     return () => {
       document.removeEventListener('pointerdown', away)
-      window.removeEventListener('resize', shut)
-      window.removeEventListener('scroll', shut, true)
+      document.removeEventListener('keydown', key)
+      window.removeEventListener('resize', onClose)
+      window.removeEventListener('scroll', onClose, true)
     }
-  }, [pos])
-  const toggle = () => {
-    if (pos) return setPos(null)
-    const r = btn.current?.getBoundingClientRect()
-    if (!r) return
-    const width = 220
-    const height = items.length * 38 + 12
-    const below = r.bottom + 6 + height < window.innerHeight
-    setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)), top: below ? r.bottom + 6 : Math.max(8, r.top - 6 - height) })
-  }
-  return (
-    <>
-      <button
-        ref={btn}
-        className={`icon-btn small ghost agent__more${pos ? ' is-on' : ''}`}
-        aria-label={`More for ${a.name}`}
-        aria-haspopup="menu"
-        aria-expanded={!!pos}
-        disabled={!!busy}
-        onClick={(e) => {
-          e.stopPropagation()
-          toggle()
-        }}
-      >
-        {busy ? <LuRotateCw className="spin" /> : <LuEllipsis />}
-      </button>
-      {pos &&
-        createPortal(
-          <div className="stab-menu__pop agent-menu" role="menu" ref={pop} style={{ left: pos.left, top: pos.top, width: 220 }} onClick={(e) => e.stopPropagation()}>
-            {items.map((it) => (
-              <button
-                key={it.key}
-                role="menuitem"
-                className={`${it.danger ? 'danger-text' : ''}${it.on ? ' is-on' : ''}`}
-                onClick={() => {
-                  setPos(null)
-                  it.run()
-                }}
-              >
-                {it.icon}
-                <span className="agent-menu__label">
-                  {it.label}
-                  {it.hint && <span className="muted agent-menu__hint">{it.hint}</span>}
-                </span>
-              </button>
-            ))}
-          </div>,
-          document.body,
-        )}
-    </>
+  }, [at, onClose])
+  if (!at) return null
+  // where it was asked for, kept inside the screen (above the point when there's no room below)
+  const width = 220
+  const height = items.length * 38 + 12
+  const left = Math.max(8, Math.min(at.x, window.innerWidth - width - 8))
+  const top = at.y + height + 8 < window.innerHeight ? at.y : Math.max(8, at.y - height)
+  return createPortal(
+    <div className="stab-menu__pop agent-menu" role="menu" ref={pop} style={{ left, top, width }} onClick={(e) => e.stopPropagation()}>
+      {items.map((it) => (
+        <button
+          key={it.key}
+          role="menuitem"
+          className={`${it.danger ? 'danger-text' : ''}${it.on ? ' is-on' : ''}`}
+          onClick={() => {
+            onClose()
+            it.run()
+          }}
+        >
+          {it.icon}
+          <span className="agent-menu__label">
+            {it.label}
+            {it.hint && <span className="muted agent-menu__hint">{it.hint}</span>}
+          </span>
+        </button>
+      ))}
+    </div>,
+    document.body,
   )
+}
+
+/** A finger held still on it for a moment: its menu (phones have no right click). Moving (scrolling) cancels. */
+function useLongPress(onPress: (at: { x: number; y: number }) => void) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const start = useRef<{ x: number; y: number } | null>(null)
+  const cancel = () => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = null
+  }
+  return {
+    onTouchStart: (e: React.TouchEvent) => {
+      const t = e.touches[0]
+      start.current = { x: t.clientX, y: t.clientY }
+      cancel()
+      timer.current = setTimeout(() => {
+        timer.current = null
+        if (start.current) onPress(start.current)
+      }, 500)
+    },
+    onTouchMove: (e: React.TouchEvent) => {
+      const t = e.touches[0]
+      if (start.current && Math.hypot(t.clientX - start.current.x, t.clientY - start.current.y) > 8) cancel()
+    },
+    onTouchEnd: cancel,
+    onTouchCancel: cancel,
+  }
 }
 

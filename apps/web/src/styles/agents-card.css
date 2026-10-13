@@ -4,3 +4,7 @@
 /* a pinned agent's pin button: orange (the pin colour), not the black of other pressed toggles */
 .icon-btn.pin-btn[aria-pressed='true'] { background: var(--hl); border-color: var(--hl); color: #fff; }
 .icon-btn.pin-btn[aria-pressed='true']:hover:not(:disabled) { border-color: var(--hl); filter: brightness(0.95); }
+
+/* an agent's menu opens on a right click or a long press: the card doesn't select text or show the phone's own menu */
+.row.agent { -webkit-touch-callout: none; }
+.row.agent.row--menu { background: var(--card-2); }

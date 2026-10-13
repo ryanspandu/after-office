@@ -228,3 +228,17 @@ button.report__thread:hover { text-decoration: underline; }
 
 /* a thread's tab in the manager's sessions: no close button, so room on its right like the button would give */
 span.stab.stab--thread { padding-right: 12px; }
+
+/* a thread's files from its chat: a grid (two across on a phone), each with its way back to the message */
+.thread-files__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.thread-file { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.thread-file .attachments { margin-top: 0; }
+.thread-file .attachment { width: 100%; box-sizing: border-box; }
+button.link.link--inline.thread-file__go { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; font-size: 12px; text-decoration: none; color: var(--hl-ink); }
+@media (max-width: 768px) { .thread-files__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* a report's files in the same grid */
+.thread-files > .attachments { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.thread-files > .attachments > .attachment { width: 100%; box-sizing: border-box; }
+@media (max-width: 768px) { .thread-files > .attachments { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* a picture among the grid: as wide as its cell */
+.thread-files .attachment--image { width: 100%; }

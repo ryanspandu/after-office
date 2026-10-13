@@ -500,7 +500,9 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
     const [kind, value] = [jump.key.slice(0, jump.key.indexOf(':')), jump.key.slice(jump.key.indexOf(':') + 1)]
     const said = items.filter((i) => i.kind === 'user' || i.kind === 'assistant')
     const target =
-      kind === 'task'
+      kind === 'msg'
+        ? said.find((i) => i.id === value)
+        : kind === 'task'
         ? [...said].reverse().find((i) => i.kind === 'user' && i.text.includes(`task id ${value}`))
         : said.reduce<ChatItem | undefined>((best, i) => (!best || Math.abs(i.at - Number(value)) < Math.abs(best.at - Number(value)) ? i : best), undefined)
     jumped.current = jump.n

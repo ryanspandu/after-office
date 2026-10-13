@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { LuArchive, LuArchiveRestore, LuAtSign, LuChevronRight, LuCornerDownRight, LuFolder, LuGitBranch, LuFileText, LuFolderOpen, LuListTodo, LuMessagesSquare, LuMinus, LuPaperclip, LuPlus, LuTrash2, LuX } from 'react-icons/lu'
-import type { ChatItem, OfficeThread, WorkReport } from '@after-office/shared'
+import type { Attachment, ChatItem, OfficeThread, WorkReport } from '@after-office/shared'
 import { mentionedPaths } from '@after-office/shared'
 import { useShallow } from 'zustand/react/shallow'
 import { useNow } from '../state/clock'
@@ -296,35 +296,58 @@ function ChatFiles({ t }: { t: OfficeThread }) {
       .catch(() => !gone && setItems([]))
     return () => void (gone = true)
   }, [t.managerId, t.sessionKey, t.lastActivityAt])
-  const owner = useMemo(() => (items ?? []).flatMap((i) => (i.kind === 'user' ? splitAttachments(i.text).paths.filter((p) => !isFrameSheet(p)) : [])), [items])
+  // each file, and the message it came with (the owner's; or the reply that wrote it or named it): where "Go to chat" goes
+  const owner = useMemo(() => {
+    const at = new Map<string, string>()
+    for (const i of items ?? []) if (i.kind === 'user') for (const p of splitAttachments(i.text).paths) if (!isFrameSheet(p)) at.set(p, i.id)
+    return at
+  }, [items])
   const made = useMemo(() => {
-    const out: string[] = []
+    const at = new Map<string, string>()
+    let written: string[] = []
     for (const i of items ?? []) {
-      if (i.kind === 'tool' && /^(Write|Edit|MultiEdit|NotebookEdit)$/.test(i.tool)) {
+      if (i.kind === 'user') written = []
+      else if (i.kind === 'tool' && /^(Write|Edit|MultiEdit|NotebookEdit)$/.test(i.tool)) {
         const input = (i.input ?? {}) as { file_path?: unknown; notebook_path?: unknown }
         const p = input.file_path ?? input.notebook_path
-        if (typeof p === 'string') out.push(p)
-      } else if (i.kind === 'assistant') out.push(...mentionedPaths(i.text))
+        if (typeof p === 'string') written.push(p)
+      } else if (i.kind === 'assistant') {
+        for (const p of [...written, ...mentionedPaths(i.text)]) if (!at.has(p)) at.set(p, i.id)
+        written = []
+      }
     }
-    return [...new Set(out)]
+    return at
   }, [items])
-  const ownerFiles = useAgentFiles(t.managerId, owner, true)
-  const madeFiles = useAgentFiles(t.managerId, made)
-  const sent = [...ownerFiles.values()].reverse()
-  const replies = [...madeFiles.values()].reverse()
+  const ownerFiles = useAgentFiles(t.managerId, [...owner.keys()], true)
+  const madeFiles = useAgentFiles(t.managerId, [...made.keys()])
+  const sent = [...ownerFiles.entries()].reverse()
+  const replies = [...madeFiles.entries()].reverse()
+  const go = (msg?: string) => msg && openUrl({ thread: t.id, tjump: `msg:${msg}` })
+  const grid = (list: [string, Attachment][], from: Map<string, string>) => (
+    <div className="thread-files__grid">
+      {list.map(([written, f]) => (
+        <div key={f.path} className="thread-file">
+          <Attachments agentId={t.managerId} files={[f]} />
+          <button type="button" className="link link--inline thread-file__go" onClick={() => go(from.get(written))}>
+            <LuMessagesSquare /> Go to chat
+          </button>
+        </div>
+      ))}
+    </div>
+  )
   if (items === null) return <p className="muted thread-files__note">Loading…</p>
   return (
     <>
       {sent.length > 0 && (
         <section className="thread-files">
           <span className="thread-files__head">You sent</span>
-          <Attachments agentId={t.managerId} files={sent} />
+          {grid(sent, owner)}
         </section>
       )}
       {replies.length > 0 && (
         <section className="thread-files">
           <span className="thread-files__head">In the replies</span>
-          <Attachments agentId={t.managerId} files={replies} />
+          {grid(replies, made)}
         </section>
       )}
       {!sent.length && !replies.length && <p className="empty muted">Files attached in this chat (yours, and the ones the manager writes or points to) show up here.</p>}
