@@ -209,5 +209,6 @@ const hostname = process.env.OFFICE_HOST || '127.0.0.1'
 console.log(`After Office on http://${hostname}:${port}`)
 
 // idleTimeout 0: held PermissionRequest hooks and SSE streams stay open for minutes.
-// maxRequestBodySize: hooks carry whole files an agent writes, but nothing needs more than 16 MB.
-export default { port, hostname, fetch: app.fetch, websocket, idleTimeout: 0, maxRequestBodySize: 16 * 1024 * 1024 }
+// maxRequestBodySize: hooks carry whole files an agent writes, and a chat attachment is up to 20 MB (videos come in
+// 8 MB pieces): nothing needs more than 24 MB.
+export default { port, hostname, fetch: app.fetch, websocket, idleTimeout: 0, maxRequestBodySize: 24 * 1024 * 1024 }

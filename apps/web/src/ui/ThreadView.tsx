@@ -16,7 +16,7 @@ import { usePresence } from '../state/usePresence'
 import { ChatView, type ChatJump } from './agent/ChatTab'
 import { Attachments, reportUrl, useAgentFiles } from './Attachments'
 import { FileBrowser } from './FileBrowser'
-import { splitAttachments } from './agent/chatAttachments'
+import { isFrameSheet, splitAttachments } from './agent/chatAttachments'
 import { api } from '../state/auth'
 import { confirm } from './Confirm'
 import { ago } from './FollowUps'
@@ -296,7 +296,7 @@ function ChatFiles({ t }: { t: OfficeThread }) {
       .catch(() => !gone && setItems([]))
     return () => void (gone = true)
   }, [t.managerId, t.sessionKey, t.lastActivityAt])
-  const owner = useMemo(() => (items ?? []).flatMap((i) => (i.kind === 'user' ? splitAttachments(i.text).paths : [])), [items])
+  const owner = useMemo(() => (items ?? []).flatMap((i) => (i.kind === 'user' ? splitAttachments(i.text).paths.filter((p) => !isFrameSheet(p)) : [])), [items])
   const made = useMemo(() => {
     const out: string[] = []
     for (const i of items ?? []) {

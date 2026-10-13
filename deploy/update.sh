@@ -38,6 +38,11 @@ note() { printf '    %s\n' "$1"; }
 warn() { printf '\033[33m    ! %s\033[0m\n' "$1"; }
 
 id "$APP_USER" >/dev/null 2>&1 || { echo "No '$APP_USER' user: run deploy/setup-vps.sh on this server first." >&2; exit 1; }
+# needed since chat videos get frame sheets (servers set up before that may not have it)
+if ! command -v ffmpeg >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+  bold "ffmpeg (frames of chat videos)"
+  apt-get install -y ffmpeg >/dev/null && note "installed" || warn "could not install ffmpeg: videos are attached without frame sheets"
+fi
 [ -x "$BUN" ] || { echo "Bun isn't installed for $APP_USER ($BUN): run deploy/setup-vps.sh first." >&2; exit 1; }
 
 # git, bun and the build run as the dashboard user (the checkout is theirs; agents can't read it). Bun's folder goes on

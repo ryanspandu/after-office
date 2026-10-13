@@ -76,8 +76,8 @@ test('attaching only stages the file; sending moves it into the agent folder; re
   rmSync(cwd, { recursive: true, force: true })
 })
 
-test('attachments never sent are swept after a day', () => {
-  const s = stageUpload('up-b', 'old.txt', new TextEncoder().encode('x'))
+test('attachments never sent are swept after a day', async () => {
+  const s = await stageUpload('up-b', 'old.txt', new TextEncoder().encode('x'))
   expect(sweepStaged(24 * 3600_000)).toBe(0) // fresh: kept
   expect(sweepStaged(24 * 3600_000, Date.now() + 25 * 3600_000)).toBe(1)
   expect(() => commitStaged(row('/tmp'), s.id)).toThrow('gone')
@@ -93,4 +93,40 @@ test('an owner message with an attached picture, as read back from the transcrip
   expect(ownerMessage(['[Image #1][Image #2]\n\n[Attached files]\n-\n-'], ['/u/a.png', '/u/b.png'])).toBe('[Attached files]\n- /u/a.png\n- /u/b.png')
   // an ordinary message stays as it is
   expect(ownerMessage(['hello [Image #1] literally'])).toBe('hello [Image #1] literally')
+})
+
+test('a video comes in pieces, gets its frame sheets, and lands next to them in the agent folder', async () => {
+  const { startChunked, stageChunk, finishChunked, committedPaths, CHUNK_BYTES } = await import('./uploads')
+  const { sheetPlan, sheetName } = await import('./videoFrames')
+  // the plan: a frame every 2 s at least, never more than 60 frames, 12 to a sheet
+  expect(sheetPlan(25)).toEqual({ every: 2, frames: 13, sheets: 2 })
+  expect(sheetPlan(600)).toEqual({ every: 10, frames: 60, sheets: 5 })
+  expect(sheetName(2, 2, 25)).toBe('sheet-2_00m24s-00m25s_every-2s.jpg')
+  // only videos come in pieces, and only up to the limit
+  expect(() => startChunked('up-v', 'notes.pdf', 10)).toThrow('Only videos')
+  expect(() => startChunked('up-v', 'big.mp4', 600 * 1024 * 1024)).toThrow('bigger than')
+  const cwd = mkdtempSync(join(tmpdir(), 'ao-vid-'))
+  try {
+    const src = join(cwd, 'src.mp4')
+    const made = Bun.spawnSync(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=duration=25:size=320x240:rate=10', '-pix_fmt', 'yuv420p', src])
+    if (made.exitCode !== 0) return console.warn('no ffmpeg here: frame sheets not tested')
+    const data = new Uint8Array(readFileSync(src))
+    const { id } = startChunked('up-v', 'clip.mp4', data.byteLength)
+    // in two pieces; the first sent twice (a retry) counts once; out of order is refused
+    const half = Math.min(CHUNK_BYTES, Math.ceil(data.byteLength / 2))
+    expect(stageChunk('up-v', id, 0, data.slice(0, half)).received).toBe(half)
+    expect(stageChunk('up-v', id, 0, data.slice(0, half)).received).toBe(half)
+    expect(() => stageChunk('up-v', id, half + 5, data.slice(half))).toThrow('Expected')
+    await expect(finishChunked('up-v', id)).rejects.toThrow('whole')
+    stageChunk('up-v', id, half, data.slice(half))
+    const staged = await finishChunked('up-v', id)
+    expect(staged).toMatchObject({ name: 'clip.mp4', video: true, sheets: 2 })
+    const sent = commitStaged({ ...row(cwd), id: 'up-v' }, id)
+    expect(sent.sheets).toHaveLength(2)
+    expect(sent.sheets![0]).toContain('clip-frames/sheet-1_00m00s-00m24s_every-2s.jpg')
+    expect(existsSync(sent.path)).toBe(true)
+    expect(committedPaths([sent])).toEqual([sent.path, ...sent.sheets!])
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
 })

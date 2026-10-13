@@ -289,7 +289,12 @@ export interface StagedUpload {
   name: string
   size: number
   image?: boolean
+  video?: boolean
+  /** a video's frame sheets the server made for the agent (0: none, e.g. no ffmpeg there) */
+  sheets?: number
 }
+/** A video's pieces: under the server's request size limit (agents/uploads.ts CHUNK_BYTES). */
+export const CHUNK_BYTES = 8 * 1024 * 1024
 
 export const liveApi = {
   setPinned: (id: string, pinned: boolean) => call(`/api/agents/${id}/pin`, { pinned }, 'PUT'),
@@ -322,6 +327,25 @@ export const liveApi = {
     const res = await api(`/api/agents/${id}/uploads`, { method: 'POST', body: file, headers: { 'content-type': 'application/octet-stream', 'x-file-name': encodeURIComponent(file.name) } })
     if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Upload failed (${res.status})`)
     return res.json()
+  },
+  /** A video, in pieces (up to 500 MB): `onProgress` gets the share sent (0–1); the last step makes its frame sheets. */
+  uploadVideo: async (id: string, file: File, onProgress: (sent: number) => void): Promise<StagedUpload> => {
+    const { id: upload } = (await call(`/api/agents/${id}/uploads/chunked`, { name: file.name, size: file.size })) as { id: string }
+    for (let offset = 0; offset < file.size; ) {
+      const piece = file.slice(offset, offset + CHUNK_BYTES)
+      // a dropped connection: the same piece once more (the server takes a repeat once)
+      let tries = 0
+      for (;;) {
+        const res = await api(`/api/agents/${id}/uploads/${upload}/chunk?offset=${offset}`, { method: 'PUT', body: piece, headers: { 'content-type': 'application/octet-stream', 'x-file-name': encodeURIComponent(file.name) } }).catch(() => null)
+        if (res?.ok) break
+        if (res && res.status < 500) throw new Error((await res.json().catch(() => null))?.error ?? `Upload failed (${res.status})`)
+        if (++tries >= 3) throw new Error('The connection dropped while uploading the video')
+        await new Promise((r) => setTimeout(r, 1000 * tries))
+      }
+      offset += piece.size
+      onProgress(offset / file.size)
+    }
+    return call(`/api/agents/${id}/uploads/${upload}/finish`, {}) as Promise<StagedUpload>
   },
   /** A staged attachment removed from the message (or the message never sent): deleted on the server. */
   discardUpload: (id: string, upload: string, keepalive = false) =>

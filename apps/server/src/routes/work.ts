@@ -269,7 +269,7 @@ workRoutes.get('/reports/:id/file', (c) => {
   const r = reportsRepo.get(c.req.param('id'))
   const f = r ? reportFile(r, c.req.query('path') ?? '') : null
   if (!f) return c.json({ error: 'This file no longer exists' }, 404)
-  return fileResponse(f.real, f.size, c.req.query('inline') === '1')
+  return fileResponse(f.real, f.size, c.req.query('inline') === '1', c.req.header('range'))
 })
 // the owner's own notes (Reports → Notes): the list comes with the work state, a note's text from here
 workRoutes.get('/notes/:id', (c) => {
@@ -490,7 +490,7 @@ workRoutes.post('/workspaces/folders', async (c) => {
 })
 workRoutes.get('/workspaces/file', (c) => {
   const f = folderFile(c.req.query('root') ?? '', c.req.query('path') ?? '')
-  return fileResponse(f.real, f.size, c.req.query('inline') === '1')
+  return fileResponse(f.real, f.size, c.req.query('inline') === '1', c.req.header('range'))
 })
 // a folder whose agent was removed, or one made in the office's own folder: delete it with everything in it (only those)
 workRoutes.delete('/workspaces/folder', async (c) => {

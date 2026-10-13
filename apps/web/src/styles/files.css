@@ -107,6 +107,8 @@
 .docx a { color: var(--hl-ink); }
 .file-preview__image { display: block; max-width: 100%; max-height: min(70vh, 900px); margin: 0 auto; border-radius: 10px; object-fit: contain; background: repeating-conic-gradient(var(--card-2) 0% 25%, transparent 0% 50%) 50% / 16px 16px; }
 .modal--full .file-preview__image { max-height: calc(100vh - 200px); }
+.file-preview__video { display: block; width: 100%; max-height: min(70vh, 900px); margin: 0 auto; border-radius: 10px; background: #000; }
+.modal--full .file-preview__video { max-height: calc(100vh - 200px); }
 
 /* ── the file manager (ui/FileBrowser.tsx): a table with columns, a ⋯ menu per row ── */
 .fb { display: flex; flex-direction: column; min-height: 0; }

@@ -390,3 +390,20 @@ span.stab { padding: 0 4px 0 10px; }
 /* a message jumped to from elsewhere (a thread's Files): lit up for a moment */
 @keyframes msg-flash { 0%, 60% { box-shadow: 0 0 0 2px var(--hl); } 100% { box-shadow: 0 0 0 2px transparent; } }
 .msg--agent.msg--flash, .msg-user.msg--flash > .msg { animation: msg-flash 2.4s ease-out; }
+
+/* a video uploading in pieces: how far it is, under its card */
+.tray-item { position: relative; overflow: hidden; }
+.tray-item__bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--hl); transition: width .2s ease; }
+
+/* the office's own messages (reports, task prompts, the manager's notes): quieter than the owner's */
+.msg-user--system > .msg--user { background: var(--card-2) !important; color: var(--muted) !important; opacity: .85; border: 1px solid var(--line); }
+.msg-user--system > .msg--user:hover { opacity: 1; }
+/* folded (System hidden): one line, a click shows it all */
+.msg--system-line { all: unset; box-sizing: border-box; display: flex; max-width: min(520px, 100%); padding: 5px 12px; border-radius: 999px; font-size: 12px; cursor: pointer; }
+.msg-user--folded > .msg--system-line { background: var(--card-2); color: var(--muted); border: 1px solid var(--line); opacity: .8; }
+.msg-user--folded > .msg--system-line:hover { opacity: 1; color: var(--text); }
+.chat__system { display: inline-flex; align-items: center; gap: 4px; }
+.chat__system.is-on { color: var(--hl-ink); }
+
+/* a thread's context block above the owner's first message: the office's, quiet; then the owner's bubble */
+.msg-user > .msg-user--system { align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 4px; max-width: 100%; }

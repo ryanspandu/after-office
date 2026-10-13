@@ -27,6 +27,10 @@ const BODIES: Record<RulePackId, string> = {
   \`curl -x "$RESIDENTIAL_PROXY_URL" …\`, or Playwright's \`proxy: { server, username, password }\`. Use it per request or
   per tool; never export it as \`HTTP_PROXY\`/\`HTTPS_PROXY\`/\`ALL_PROXY\` for your whole session, and never print it.
   It costs per GB: only for what needs it. Not set: ask the owner.
+- A video the owner attaches comes with sheets of its frames in \`<video>-frames/\` (listed with it): each sheet is 12
+  frames, 4 across and 3 down, read left to right and top to bottom; its name says the part of the video it covers
+  and how far apart the frames are (\`sheet-2_00m24s-00m48s_every-2s.jpg\`). Look at those; you can't play the video.
+  None listed (no ffmpeg on the server): take frames yourself with \`ffmpeg\` if it's there, or ask the owner.
 - Stuck or unsure? Ask instead of guessing. Never publish, deploy, delete data or spend money without the owner's
   approval.`,
   engineering: `## Software engineering

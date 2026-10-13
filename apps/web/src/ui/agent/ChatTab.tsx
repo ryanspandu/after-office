@@ -4,7 +4,7 @@ import { chatTime, dateTime, localizeResets } from '../when'
 import { MicButton, ListeningBar, SpeakingChip } from '../Voice'
 import { useDictation } from '../../state/dictation'
 import { primeSpeech, talkedByVoice } from '../../state/speech'
-import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuFoldVertical, LuSquare, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
+import { LuEye, LuEyeOff, LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuFoldVertical, LuSquare, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
 import { openUrl } from '../../state/url'
 import { ComposerBox, type Mentionable, type ComposerHandle } from './ComposerBox'
 import { confirm } from '../Confirm'
@@ -21,7 +21,7 @@ import { compactTokens } from '../UsagePopover'
 import { MODE_LABEL } from '../AgentsPanel'
 import { Attachments, useAgentFiles } from '../Attachments'
 import { FileLinksProvider } from '../fileLinks'
-import { OutgoingFiles, PendingTray, splitAttachments, usePendingFiles, type Pending } from './chatAttachments'
+import { isFrameSheet, OutgoingFiles, PendingTray, splitAttachments, usePendingFiles, type Pending } from './chatAttachments'
 import { tip } from '../Tooltip'
 import { AsleepBanner, OfflineBanner } from './OfflineBanner'
 import { ChatContextBar, ContextChips, splitContext, useChatContext } from './chatContext'
@@ -93,6 +93,17 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
     : { ...agent, status: agent.mainStatus ?? agent.status }
   return <ChatView key={`${agent.id}:${session}`} agent={view} session={session} header={<SessionTabs agent={agent} current={session} onPick={pick} />} />
 }
+
+const HIDE_SYSTEM_KEY = 'after-office:chat-hide-system'
+/** A prompt the office typed in, not the owner: a report or note for the manager, a task, the manager's message. */
+/** A thread's first message (server: work/threads.ts threadContext): its "[Thread: …]" block, apart from the owner's
+ *  words after it. */
+function splitThreadBlock(text: string): { block: string | null; rest: string } {
+  if (!/^\s*\[Thread: /.test(text)) return { block: null, rest: text }
+  const at = text.indexOf('\n\n')
+  return at === -1 ? { block: text.trim(), rest: '' } : { block: text.slice(0, at).trim(), rest: text.slice(at + 2).trim() }
+}
+const isSystemMessage = (text: string) => /^\s*(\[After Office\]|\[From the manager\]|New task: )/.test(text)
 
 /** A chat in a thread (ui/ThreadView.tsx): sent through the thread (which opens its session again when needed), with
  *  an @ button to hand the message to an agent; the thread's own folder and tags stand in for the chat's. */
@@ -486,6 +497,36 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // the office's own messages (reports, task prompts, the manager's notes) and tool calls: shown faded, or folded away
+  const [hideSystem, setHideSystem] = useState(() => {
+    try {
+      return localStorage.getItem(HIDE_SYSTEM_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleSystem = () =>
+    setHideSystem((v) => {
+      try {
+        localStorage.setItem(HIDE_SYSTEM_KEY, v ? '0' : '1')
+      } catch {
+        // private mode: not remembered
+      }
+      return !v
+    })
+  const [opened, setOpened] = useState<Set<string>>(() => new Set())
+  const systemButton = (
+    <button
+      className={`small ghost chat__system${hideSystem ? ' is-on' : ''}`}
+      onClick={toggleSystem}
+      aria-pressed={hideSystem}
+      data-tip={hideSystem ? "Show the office's messages and tool calls in full" : "Fold the office's messages (reports, task prompts) and hide tool calls"}
+    >
+      {hideSystem ? <LuEyeOff /> : <LuEye />}
+      <span className="chat__compact-label">System</span>
+    </button>
+  )
+
   const findButton = (
     // phones: the same round floating button as the info one next to it
     <button className={`icon-btn${mobile ? ' chat__info' : ' small ghost'}${findOpen ? ' is-on' : ''}`} onClick={() => (findOpen ? closeFind() : setFindOpen(true))} aria-label="Search the chat" aria-pressed={findOpen} data-tip="Search the chat (Ctrl/⌘ F)">
@@ -585,6 +626,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
             <span className="chat__compact-label">Compact</span>
           </button>
         )}
+        {systemButton}
         {!mobile && findButton}
       </div>
   )
@@ -657,10 +699,40 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
           if (i.kind === 'user') {
             // files the owner attached: previews under the bubble, like the agent's own files
             const { text: withCtx, paths } = splitAttachments(i.text)
-            const { text: said, folder, tags } = splitContext(withCtx)
-            const files = paths.map((p) => ownerFiles.get(p)).filter((f) => !!f)
+            const { text: fullText, folder, tags } = splitContext(withCtx)
+            // a thread's first message: the office's context block, then the owner's own words
+            const { block: threadBlock, rest: said } = splitThreadBlock(fullText)
+            // a video's frame sheets are for the agent: the bubble shows the video
+            const files = paths.filter((p) => !isFrameSheet(p)).map((p) => ownerFiles.get(p)).filter((f) => !!f)
+            const system = isSystemMessage(said)
+            const blockId = `${i.id}:thread`
+            const contextPart = threadBlock ? (
+              <div className="msg-user msg-user--system">
+                {hideSystem && !opened.has(blockId) ? (
+                  <button type="button" className="msg msg--user msg--system-line" onClick={() => setOpened((o) => new Set(o).add(blockId))} data-tip="Show it all">
+                    <span className="truncate">{threadBlock.split('\n')[0]}</span>
+                  </button>
+                ) : (
+                  <div className="msg msg--user">{threadBlock}</div>
+                )}
+              </div>
+            ) : null
+            // folded: one faded line (its first), a click shows it all
+            if (system && hideSystem && !opened.has(i.id))
+              return (
+                <div key={i.id} data-mid={i.id} className={`msg-user msg-user--system msg-user--folded${i.id === flash ? ' msg--flash' : ''}`}>
+                  {contextPart}
+                  <button type="button" className="msg msg--user msg--system-line" onClick={() => setOpened((o) => new Set(o).add(i.id))} data-tip="Show it all">
+                    <span className="truncate">{said.split('\n')[0].replace(/^\[After Office\]\s*/, '')}</span>
+                  </button>
+                  <time className="msg__time" dateTime={new Date(i.at).toISOString()} data-tip={dateTime(i.at, timezone)}>
+                    {chatTime(i.at, timezone)}
+                  </time>
+                </div>
+              )
             return (
-              <div key={i.id} data-mid={i.id} className={`msg-user${isNew(i.id)}${i.id === flash ? ' msg--flash' : ''}`}>
+              <div key={i.id} data-mid={i.id} className={`msg-user${system ? ' msg-user--system' : ''}${isNew(i.id)}${i.id === flash ? ' msg--flash' : ''}`}>
+                {contextPart}
                 {files.length > 0 && (
                   <div className="msg-user__files">
                     <Attachments agentId={agent.id} files={files} />
@@ -695,7 +767,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
               </Fragment>
             )
           }
-          if (i.kind === 'tool') return <ToolRow key={i.id} item={i} result={results.get(i.id)} report={links.forTool(agent.id, i)} />
+          if (i.kind === 'tool') return hideSystem ? null : <ToolRow key={i.id} item={i} result={results.get(i.id)} report={links.forTool(agent.id, i)} />
           return null
         })}
         {outgoing && !delivered && (

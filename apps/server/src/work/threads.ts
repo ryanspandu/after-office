@@ -4,6 +4,7 @@ import { AgentError } from '../agents/errors'
 import { closeSideSession, compactSession, forgetSideSession, openSideSession, renameSideSession, reopenSideSession, sendChat, sendPrompt } from '../agents/manager'
 import { sideRuntimeOf } from '../agents/registry'
 import { tmux } from '../agents/tmux'
+import { listTags } from './tags'
 
 // Threads: the owner's topics with the manager. Each runs in a side session of the manager's own, so it keeps the
 // context of that topic only; tasks the manager starts there (or the owner's @mentions) belong to the thread and
@@ -118,7 +119,8 @@ export function threadContext(t: OfficeThread) {
     `[Thread: ${t.title}] You lead this thread: everything about this topic happens here.`,
     parent ? parentSummary(parent) : null,
     t.folder ? `Folder: ${t.folder}` : null,
-    t.tags?.length ? `Tags: ${t.tags.join(', ')}` : null,
+    // by name: what the manager (and the owner, reading the chat) know them as
+    t.tags?.length ? `Tags: ${t.tags.map((id) => listTags().find((x) => x.id === id)?.name ?? id).join(', ')}` : null,
     'Delegate as usual: tasks you start here belong to this thread (its folder and tags unless you say otherwise) and report back here.',
   ]
     .filter(Boolean)

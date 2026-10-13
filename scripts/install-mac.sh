@@ -58,6 +58,8 @@ if ! command -v brew >/dev/null 2>&1; then
   exit 1
 fi
 command -v tmux >/dev/null 2>&1 && note "tmux $(tmux -V | cut -d' ' -f2)" || run brew install tmux
+# the frames of a video attached in a chat, for the agents (optional: without it videos come without them)
+command -v ffmpeg >/dev/null 2>&1 && note "ffmpeg found" || run brew install ffmpeg
 
 BUN=$(command -v bun || true)
 [ -z "$BUN" ] && [ -x "$HOME/.bun/bin/bun" ] && BUN="$HOME/.bun/bin/bun"

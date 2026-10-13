@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LuFile, LuFileText, LuLoader, LuTriangleAlert, LuX } from 'react-icons/lu'
+import { LuFile, LuFileText, LuFilm, LuLoader, LuTriangleAlert, LuX } from 'react-icons/lu'
 import { liveApi, type StagedUpload } from '../../state/live'
 import { formatSize } from '../Attachments'
 
@@ -11,6 +11,12 @@ import { formatSize } from '../Attachments'
 const HEADER = '[Attached files]'
 export const MAX_FILES = 10
 export const MAX_BYTES = 20 * 1024 * 1024
+/** Videos come in pieces, up to this (and the server lays out their frames for the agent). */
+export const MAX_VIDEO_BYTES = 500 * 1024 * 1024
+const VIDEO_RE = /\.(mp4|mov|m4v|webm|mkv|avi|mpe?g|3gp)$/i
+export const isVideoName = (name: string) => VIDEO_RE.test(name)
+/** A video's frame sheet (made by the server for the agent): "<video>-frames/sheet-2_00m24s-00m48s_every-2s.jpg" */
+export const isFrameSheet = (path: string) => /-frames\/sheet-\d+_[^/]*\.jpg$/.test(path)
 
 /** A sent message → the owner's text and the files attached to it. */
 export function splitAttachments(text: string): { text: string; paths: string[] } {
@@ -29,6 +35,8 @@ export interface Pending {
   state: 'uploading' | 'done' | 'error'
   error?: string
   saved?: StagedUpload
+  /** a video: the share sent so far (0–1); 1 while the server makes its frame sheets */
+  progress?: number
 }
 
 const isImage = (f: File) => /^image\/(png|jpe?g|gif|webp|avif)$/i.test(f.type)
@@ -75,8 +83,9 @@ export function usePendingFiles(agentId: string) {
     const next: Pending[] = []
     for (const raw of files.slice(0, room)) {
       const file = named(raw)
-      if (file.size > MAX_BYTES) {
-        problem = `${file.name} is bigger than ${MAX_BYTES / 1024 / 1024} MB`
+      const limit = isVideoName(file.name) ? MAX_VIDEO_BYTES : MAX_BYTES
+      if (file.size > limit) {
+        problem = `${file.name} is bigger than ${limit / 1024 / 1024} MB${limit === MAX_BYTES ? ' (videos: up to 500 MB)' : ''}`
         continue
       }
       if (!file.size) {
@@ -87,7 +96,7 @@ export function usePendingFiles(agentId: string) {
     }
     setItems((list) => [...list, ...next])
     for (const p of next)
-      liveApi.upload(agentId, p.file).then(
+      (isVideoName(p.file.name) ? liveApi.uploadVideo(agentId, p.file, (sent) => patch(p.key, { progress: sent })) : liveApi.upload(agentId, p.file)).then(
         (saved) => {
           // removed (or the chat closed) while it was uploading
           if (dropped.current.delete(p.key)) return void liveApi.discardUpload(agentId, saved.id)
@@ -134,11 +143,22 @@ export function PendingTray({ items, onRemove }: { items: Pending[]; onRemove: (
             <img src={p.thumb} alt={p.file.name} />
           ) : (
             <>
-              <span className="tray-item__icon">{/\.(md|txt|csv|json|log)$/i.test(p.file.name) ? <LuFileText /> : <LuFile />}</span>
+              <span className="tray-item__icon">{isVideoName(p.file.name) ? <LuFilm /> : /\.(md|txt|csv|json|log)$/i.test(p.file.name) ? <LuFileText /> : <LuFile />}</span>
               <span className="tray-item__meta">
                 <span className="tray-item__name truncate">{p.file.name}</span>
-                <span className="tray-item__size">{p.state === 'error' ? 'Failed' : formatSize(p.file.size)}</span>
+                <span className="tray-item__size">
+                  {p.state === 'error'
+                    ? 'Failed'
+                    : p.state === 'uploading' && p.progress !== undefined
+                      ? p.progress >= 1
+                        ? 'Making frames for the agent…'
+                        : `${Math.round(p.progress * 100)}% of ${formatSize(p.file.size)}`
+                      : p.saved?.video
+                        ? `${formatSize(p.file.size)}${p.saved.sheets ? ` · ${p.saved.sheets} frame sheet${p.saved.sheets === 1 ? '' : 's'}` : ''}`
+                        : formatSize(p.file.size)}
+                </span>
               </span>
+              {p.state === 'uploading' && p.progress !== undefined && p.progress < 1 && <span className="tray-item__bar" style={{ width: `${p.progress * 100}%` }} />}
             </>
           )}
           {p.state === 'uploading' && (

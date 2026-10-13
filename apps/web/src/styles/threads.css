@@ -184,7 +184,9 @@ button.report__thread:hover { text-decoration: underline; }
 .new-thread .rs--multi .rs__control { min-height: 32px !important; }
 .new-thread .folder-select__pick { min-height: 30px; }
 
-.threads-search { margin: 8px 0 4px; flex-shrink: 0; }
+.threads-search { margin: 0 0 4px; flex-shrink: 0; }
+/* the tabs and the search close together */
+.card--threads .reports-panel__tabs.threads-tabs { margin-bottom: 6px; }
 
 /* the + : in the head on a computer, on the tabs' row in the phones' sheet */
 .threads-tabs { display: flex; align-items: center; gap: 8px; }

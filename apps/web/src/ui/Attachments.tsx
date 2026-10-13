@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { LuDownload, LuFile, LuFileText, LuFileX, LuSheet, LuTable } from 'react-icons/lu'
+import { LuFilm, LuDownload, LuFile, LuFileText, LuFileX, LuSheet, LuTable } from 'react-icons/lu'
 import { CsvTable } from './preview/CsvTable'
 import { useModalMaximize } from './Maximize'
 import { Markdown } from './FollowUps'
@@ -25,9 +25,11 @@ export function formatSize(n: number) {
 const TEXT_RE = /\.(md|markdown|mdx|txt|text|csv|tsv|json|jsonl|log|ya?ml|toml|ini|env\.example|xml|html?|css|js|jsx|ts|tsx|py|sh|sql|go|rs|rb|php|java|kt|swift)$/i
 const isMarkdown = (p: string) => /\.(md|markdown|mdx)$/i.test(p)
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i
-type Kind = 'markdown' | 'sheet' | 'text' | 'pdf' | 'docx' | 'image'
+type Kind = 'markdown' | 'sheet' | 'text' | 'pdf' | 'docx' | 'image' | 'video'
+const VIDEO_RE = /\.(mp4|mov|m4v|webm|mkv|avi|mpe?g|3gp)$/i
 /** How a file is previewed here, if it is. */
 export function previewKind(path: string): Kind | null {
+  if (VIDEO_RE.test(path)) return 'video'
   if (isMarkdown(path)) return 'markdown'
   if (/\.(csv|tsv)$/i.test(path)) return 'sheet'
   if (TEXT_RE.test(path)) return 'text'
@@ -40,7 +42,8 @@ const TEXT_MAX = 2 * 1024 * 1024
 const FILE_MAX = 30 * 1024 * 1024
 export const canPreview = (f: Pick<Attachment, 'path' | 'size'>) => {
   const kind = previewKind(f.path)
-  return !!kind && f.size <= (kind === 'markdown' || kind === 'text' || kind === 'sheet' ? TEXT_MAX : FILE_MAX)
+  // a video streams (a part at a time): any size plays
+  return !!kind && (kind === 'video' || f.size <= (kind === 'markdown' || kind === 'text' || kind === 'sheet' ? TEXT_MAX : FILE_MAX))
 }
 // the heavy viewers load only when such a file is opened
 const PdfView = lazy(() => import('./preview/PdfView'))
@@ -55,7 +58,7 @@ export function Attachments({ agentId, files, urlFor }: { agentId: string; files
   const url: UrlFor = urlFor ?? ((path, inline) => fileUrl(agentId, path, inline))
   return (
     <div className="attachments">
-      {preview && <FilePreview file={preview} url={url(preview.path)} onClose={() => setPreview(null)} />}
+      {preview && <FilePreview file={preview} url={url(preview.path)} inlineUrl={url(preview.path, true)} onClose={() => setPreview(null)} />}
       {files.map((f) =>
         f.missing ? (
           <div key={f.path} className="attachment attachment--gone" data-tip={f.path}>
@@ -74,12 +77,14 @@ export function Attachments({ agentId, files, urlFor }: { agentId: string; files
               <img src={url(f.path, true)} alt={baseName(f.path)} loading="lazy" />
             </button>
           ) : (
-            <span className="attachment__icon">{/\.(csv|tsv)$/i.test(f.path) ? <LuSheet /> : /\.(md|txt|json|log|pdf|docx)$/i.test(f.path) ? <LuFileText /> : <LuFile />}</span>
+            <span className="attachment__icon">{VIDEO_RE.test(f.path) ? <LuFilm /> : /\.(csv|tsv)$/i.test(f.path) ? <LuSheet /> : /\.(md|txt|json|log|pdf|docx)$/i.test(f.path) ? <LuFileText /> : <LuFile />}</span>
           )}
           {!f.image && canPreview(f) ? (
             <button type="button" className="attachment__meta attachment__open" onClick={() => setPreview(f)} aria-label={`Preview ${baseName(f.path)}`}>
               <span className="attachment__name truncate">{baseName(f.path)}</span>
-              <span className="attachment__size">{formatSize(f.size)} · preview</span>
+              <span className="attachment__size">
+                {formatSize(f.size)} · {VIDEO_RE.test(f.path) ? 'play' : 'preview'}
+              </span>
             </button>
           ) : (
             <span className="attachment__meta">
@@ -101,11 +106,14 @@ export function Attachments({ agentId, files, urlFor }: { agentId: string; files
  * A file the agent made, previewed through the same checked file route as downloads: text (Markdown rendered, sheets as
  * a table), PDFs page by page, Word documents, pictures.
  */
-export function FilePreview({ agentId, file, onClose, url }: { agentId?: string; file: Attachment; onClose: () => void; url?: string }) {
+export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentId?: string; file: Attachment; onClose: () => void; url?: string; inlineUrl?: string }) {
   // the file's download address: an agent's file route, or another (e.g. the Projects tab's file manager)
   const src = url ?? fileUrl(agentId ?? '', file.path)
   const kind = previewKind(file.path) ?? 'text'
   const binary = kind === 'pdf' || kind === 'docx' || kind === 'image'
+  // a video plays straight from its address, a part at a time (nothing loaded in full here)
+  const video = kind === 'video'
+  const playUrl = inlineUrl ?? fileUrl(agentId ?? '', file.path, true)
   const [text, setText] = useState<string | null>(null)
   const [data, setData] = useState<ArrayBuffer | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -114,6 +122,7 @@ export function FilePreview({ agentId, file, onClose, url }: { agentId?: string;
   // full size: the whole window, for long documents and wide tables
   const max = useModalMaximize(kind === 'sheet' || kind === 'pdf' || kind === 'docx' ? 960 : 820)
   useEffect(() => {
+    if (video) return
     let gone = false
     api(src)
       .then(async (r) => {
@@ -128,7 +137,7 @@ export function FilePreview({ agentId, file, onClose, url }: { agentId?: string;
       })
       .catch((e: Error) => !gone && setError(e.message))
     return () => void (gone = true)
-  }, [src, binary])
+  }, [src, binary, video])
   // a picture: shown from memory (the file route sends a download)
   const imageUrl = useMemo(() => (kind === 'image' && data ? URL.createObjectURL(new Blob([data], { type: imageType(file.path) })) : null), [kind, data, file.path])
   useEffect(() => () => void (imageUrl && URL.revokeObjectURL(imageUrl)), [imageUrl])
@@ -137,7 +146,9 @@ export function FilePreview({ agentId, file, onClose, url }: { agentId?: string;
   return (
     <Modal open onClose={onClose} title={baseName(file.path)} description={file.path.replace(/^\/(Users|home)\/[^/]+/, '~')} {...max.modalProps}>
       <div className={`modal__body file-preview file-preview--${kind}`} ref={max.bodyRef}>
-        {error ? (
+        {video ? (
+          <video className="file-preview__video" src={playUrl} controls autoPlay playsInline preload="metadata" />
+        ) : error ? (
           <div className="row__error">{error}</div>
         ) : binary ? (
           !data ? (

@@ -26,7 +26,7 @@ import { readInFolder, writeInFolder } from '../agents/safefs'
 import { join } from 'node:path'
 import { generateKey, putIdentity, removeIdentity, removeKey, setGitIdentity, toIdentity, uploadKey, writeGitConfig } from '../agents/git'
 import { ISOLATED } from '../agents/env'
-import { commitStaged, discardStaged, MAX_UPLOAD_BYTES, MAX_UPLOADS, stageUpload, withAttachments } from '../agents/uploads'
+import { CHUNK_BYTES, commitStaged, committedPaths, discardStaged, finishChunked, MAX_UPLOAD_BYTES, MAX_UPLOADS, stageChunk, stageUpload, startChunked, withAttachments } from '../agents/uploads'
 import { listConnectors, listConnectorTools, setAgentConnectors } from '../agents/connectors'
 import { countEntries, deleteAgentFolder, isOwnAgentFolder } from '../work/projectFolders'
 
@@ -82,7 +82,7 @@ agentRoutes.post('/agents/:id/prompt', async (c) => {
   if (ids.length && !row) throw new AgentError('No such agent', 404)
   // offline: say so before moving anything (the files stay attached for another try)
   if (row && !(await tmux.hasSession(key ? (sideSessionsRepo.get(row.id, key)?.tmux_session ?? '') : row.tmux_session))) throw new AgentError(key ? 'That session is not running' : 'The agent is offline', 409)
-  const paths = row ? ids.map((id) => commitStaged(row, id).path) : []
+  const paths = row ? committedPaths(ids.map((id) => commitStaged(row, id))) : []
   const id = c.req.param('id')
   const block = contextBlock(id, ctx)
   const message = withAttachments(withContext(String(text ?? ''), block), paths)
@@ -135,8 +135,20 @@ agentRoutes.post('/agents/:id/uploads', requireSameOrigin, async (c) => {
   if (Number(c.req.header('content-length') ?? 0) > MAX_UPLOAD_BYTES) throw new AgentError(`${name} is bigger than ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`, 413)
   const data = new Uint8Array(await c.req.arrayBuffer())
   if (!data.byteLength) throw new AgentError(`${name} is empty`)
-  return c.json(stageUpload(row.id, name, data))
+  return c.json(await stageUpload(row.id, name, data))
 })
+// a video, in pieces (up to MAX_VIDEO_BYTES): start → each piece in order (?offset=) → finish (its frame sheets are made then)
+agentRoutes.post('/agents/:id/uploads/chunked', requireSameOrigin, async (c) => {
+  if (!agentsRepo.get(c.req.param('id'))) throw new AgentError('No such agent', 404)
+  const b = await c.req.json<{ name?: unknown; size?: unknown }>()
+  return c.json(startChunked(c.req.param('id'), String(b.name ?? 'video'), Number(b.size)))
+})
+agentRoutes.put('/agents/:id/uploads/:upload/chunk', requireSameOrigin, async (c) => {
+  if (Number(c.req.header('content-length') ?? 0) > CHUNK_BYTES) throw new AgentError('That piece is too big', 413)
+  const data = new Uint8Array(await c.req.arrayBuffer())
+  return c.json(stageChunk(c.req.param('id'), c.req.param('upload'), Number(c.req.query('offset') ?? -1), data))
+})
+agentRoutes.post('/agents/:id/uploads/:upload/finish', requireSameOrigin, async (c) => c.json(await finishChunked(c.req.param('id'), c.req.param('upload'))))
 agentRoutes.delete('/agents/:id/uploads/:upload', (c) => {
   discardStaged(c.req.param('id'), c.req.param('upload'))
   return c.json({ ok: true })
@@ -332,7 +344,7 @@ agentRoutes.get('/agents/:id/file', (c) => {
   const row = agentsRepo.get(c.req.param('id'))
   const f = row ? agentFile(row, c.req.query('path') ?? '') : null
   if (!f) return c.json({ error: 'Not a file this agent can share' }, 404)
-  return fileResponse(f.real, f.size, c.req.query('inline') === '1')
+  return fileResponse(f.real, f.size, c.req.query('inline') === '1', c.req.header('range'))
 })
 
 // skills from the Claude account (every agent has them); read-only

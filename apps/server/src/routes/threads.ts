@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { agentsRepo } from '../db'
 import { AgentError } from '../agents/errors'
-import { commitStaged, MAX_UPLOADS, withAttachments } from '../agents/uploads'
+import { commitStaged, committedPaths, MAX_UPLOADS, withAttachments } from '../agents/uploads'
 import { requestWho } from '../auth'
 import { noteOwnerMessage } from '../work/activity'
 import { cleanFolder } from '../work/folders'
@@ -67,7 +67,7 @@ threadRoutes.post('/threads/:id/messages', async (c) => {
   if (!text.trim() && !ids.length) throw new AgentError('Write something first', 400)
   const manager = agentsRepo.get(t.managerId)
   if (!manager) throw new AgentError('The manager is gone', 409)
-  const paths = ids.map((id) => commitStaged(manager, id).path)
+  const paths = committedPaths(ids.map((id) => commitStaged(manager, id)))
   const mentions = Array.isArray(b.mentions) ? [...new Set(b.mentions.filter((m): m is string => typeof m === 'string'))].slice(0, 5) : []
   const origin = { kind: 'owner' as const, label: `Thread "${t.title}"`, ...requestWho(c), at: Date.now() }
   const tasks = []

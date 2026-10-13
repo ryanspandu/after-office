@@ -10,6 +10,10 @@ import { AGENT_HOME, PROJECTS_DIR, PLANS_DIR } from '../fsroots'
 // bigger than MAX_BYTES. The dashboard's own files (its .env, database) are outside every agent folder.
 
 export const MAX_BYTES = 100 * 1024 * 1024
+/** …except a video (an owner's chat attachment can be one this big: agents/uploads.ts MAX_VIDEO_BYTES) */
+const MAX_VIDEO = 500 * 1024 * 1024
+const VIDEO_RE = /\.(mp4|mov|m4v|webm|mkv|avi|mpe?g|3gp)$/i
+const maxBytes = (path: string) => (VIDEO_RE.test(path) ? MAX_VIDEO : MAX_BYTES)
 export const IMAGE = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg'])
 
 function allowedRoots(row: AgentRow) {
@@ -32,7 +36,7 @@ export function agentFile(row: AgentRow, path: string): (Attachment & { real: st
   const abs = path.startsWith('~/') ? join(AGENT_HOME, path.slice(2)) : isAbsolute(path) ? path : resolve(row.cwd, path)
   try {
     const st = lstatSync(abs)
-    if (!st.isFile() || st.size > MAX_BYTES) return null // no symlinks, devices, folders
+    if (!st.isFile() || st.size > maxBytes(abs)) return null // no symlinks, devices, folders
     const real = realpathSync(abs)
     if (!allowedRoots(row).some((r) => real === r || real.startsWith(r + sep))) return null
     return { path: abs, real, size: st.size, ...(IMAGE.has(extname(real).toLowerCase()) ? { image: true } : {}) }
@@ -66,12 +70,33 @@ export function writtenFile(tool: string | undefined, input: Record<string, unkn
  * Serve a file an agent made. It's untrusted: opened directly it can't run scripts or reach anything (SVG, HTML…).
  * Pictures and PDFs may show in the page (`inline`); everything else downloads.
  */
-export function fileResponse(real: string, size: number, inline: boolean) {
+export function fileResponse(real: string, size: number, inline: boolean, range?: string | null) {
   const file = Bun.file(real)
   const name = basename(real).replace(/["\\\r\n]/g, '_')
-  const show = inline && (IMAGE.has(extname(real).toLowerCase()) || /\.pdf$/i.test(real))
+  const video = VIDEO_RE.test(real)
+  const show = inline && (IMAGE.has(extname(real).toLowerCase()) || /\.pdf$/i.test(real) || video)
+  // a video plays in the page: a part at a time (seeking; Safari asks for parts only)
+  const part = video && inline ? /^bytes=(\d*)-(\d*)$/.exec(range ?? '') : null
+  if (part && (part[1] || part[2])) {
+    const start = part[1] ? Number(part[1]) : Math.max(0, size - Number(part[2]))
+    const end = part[1] && part[2] ? Math.min(size - 1, Number(part[2])) : size - 1
+    if (start >= size || start > end) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}` } })
+    return new Response(file.slice(start, end + 1), {
+      status: 206,
+      headers: {
+        'content-type': file.type || 'video/mp4',
+        'content-length': String(end - start + 1),
+        'content-range': `bytes ${start}-${end}/${size}`,
+        'accept-ranges': 'bytes',
+        'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(basename(real))}`,
+        'x-content-type-options': 'nosniff',
+        'cache-control': 'private, no-store',
+      },
+    })
+  }
   return new Response(file, {
     headers: {
+      ...(video ? { 'accept-ranges': 'bytes' } : {}),
       'content-type': file.type || 'application/octet-stream',
       'content-length': String(size),
       'content-disposition': `${show ? 'inline' : 'attachment'}; filename="${name}"; filename*=UTF-8''${encodeURIComponent(basename(real))}`,
@@ -91,7 +116,7 @@ export function reportFile(report: WorkReport, path: string): { real: string; si
   if (!listed) return null
   try {
     const st = lstatSync(listed.path)
-    if (!st.isFile() || st.size > MAX_BYTES) return null
+    if (!st.isFile() || st.size > maxBytes(listed.path)) return null
     return { real: realpathSync(listed.path), size: st.size }
   } catch {
     return null
