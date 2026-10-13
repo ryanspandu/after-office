@@ -225,3 +225,6 @@ button.report__thread:hover { text-decoration: underline; }
 /* a report's line in Files: its title goes to the chat, the icon opens the report */
 .thread-files__row { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .thread-files__row .thread-files__head { flex: 1; min-width: 0; text-align: left; }
+
+/* a thread's tab in the manager's sessions: no close button, so room on its right like the button would give */
+span.stab.stab--thread { padding-right: 12px; }

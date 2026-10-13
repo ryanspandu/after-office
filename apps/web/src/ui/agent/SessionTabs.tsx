@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { LuMessagesSquare, LuCheck, LuHistory, LuLoader, LuPlus, LuTrash2, LuX } from 'react-icons/lu'
 import type { SideSessionInfo } from '@after-office/shared'
-import { liveApi } from '../../state/live'
+import { useLive, liveApi } from '../../state/live'
 import type { OfficeAgent } from '../../state/store'
 import { confirm } from '../Confirm'
 import { ago } from '../FollowUps'
@@ -107,6 +107,9 @@ export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; cu
     void act(s.key, () => liveApi.renameSession(agent.id, s.key, name))
   }
   const mainStatus = agent.mainStatus ?? agent.status
+  // a thread's session: its unread count is the thread's (read in the thread window)
+  const threadList = useLive((st) => st.threads)
+  const threadUnread = new Map(threadList.map((t) => [t.id, t.unread ?? 0]))
   return (
     <div className="stabs-wrap">
       <div className="stabs" role="tablist" aria-label="Sessions">
@@ -123,6 +126,8 @@ export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; cu
                 <Dot status={s.status} waitingFor={s.waitingFor} />
                 <LuMessagesSquare />
                 <span className="truncate">{nameOf(s)}</span>
+                {/* the manager's replies there not seen yet (the same count as in Threads) */}
+                {(threadUnread.get(s.threadId!) ?? 0) > 0 && <span className="stab__badge">{threadUnread.get(s.threadId!)}</span>}
               </button>
             </span>
           ) : editing === s.key ? (
