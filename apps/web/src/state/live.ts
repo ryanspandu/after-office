@@ -395,7 +395,7 @@ export const liveApi = {
   reorderThreads: (ids: string[]) => call('/api/threads/order', { ids }),
   updateThread: (id: string, b: { title?: string; folder?: string | null; tags?: string[]; pinned?: boolean }) => call(`/api/threads/${id}`, b, 'PUT') as Promise<OfficeThread>,
   threadMessage: (id: string, b: { text: string; uploads?: string[]; mentions?: string[] }) =>
-    call(`/api/threads/${id}/messages`, b) as Promise<{ ok: true; tasks: { id: string; agentId: string }[] }>,
+    call(`/api/threads/${id}/messages`, b) as Promise<{ ok: true; tasks: { id: string; agentId: string }[]; queued?: boolean }>,
   readThread: (id: string) => call(`/api/threads/${id}/read`, {}),
   compactThread: (id: string) => call(`/api/threads/${id}/compact`, {}),
   archiveThread: (id: string, archived: boolean) => call(`/api/threads/${id}/${archived ? 'archive' : 'unarchive'}`, {}) as Promise<OfficeThread>,

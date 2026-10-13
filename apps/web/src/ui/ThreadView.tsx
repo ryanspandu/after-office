@@ -515,9 +515,7 @@ export function ThreadModal({ id, newSub, onClose: close, onMinimize: minimize }
               jump={jump}
               thread={{
                 placeholder: mobile ? `Message ${manager.name}… (@ hands it to an agent)` : `Message ${manager.name} in this thread…  (@Name hands it to an agent · Enter to send)`,
-                send: async (text, uploads) => {
-                  await liveApi.threadMessage(t.id, { text, uploads, mentions: mentionsIn(text, agents) })
-                },
+                send: (text, uploads) => liveApi.threadMessage(t.id, { text, uploads, mentions: mentionsIn(text, agents) }),
                 mention: (insert) => <MentionButton onPick={insert} />,
                 compact: () => liveApi.compactThread(t.id).then(() => undefined),
                 names: agents.filter((a) => a.kind !== 'manager').map((a) => ({ name: a.name, role: a.role || a.profile.role, color: a.look.shirt })),

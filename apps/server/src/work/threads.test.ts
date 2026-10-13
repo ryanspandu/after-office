@@ -3,7 +3,7 @@ import type { OfficeThread } from '@after-office/shared'
 import { agentsRepo, queueRepo, reportsRepo, sideSessionsRepo, tasksRepo, threadQueueRepo, threadsRepo, type AgentRow } from '../db'
 import { updateRuntime, updateSideRuntime } from '../agents/registry'
 import { delegateTask } from './managerTasks'
-import { archiveThread, reorderThreads, closeIdleThreads, deleteThread, drainThreads, joinThread, mentionTask, parentFor, threadContext, threadOfSession } from './threads'
+import { archiveThread, reorderThreads, sendToThread, closeIdleThreads, deleteThread, drainThreads, joinThread, mentionTask, parentFor, threadContext, threadOfSession } from './threads'
 import { deliverToManager, fileReport, isReadingAgentOutput, isReportedNow, onSidePromptSubmitted } from './work'
 
 // Threads: a topic in a side session of the manager's. What it starts belongs to it, what comes back about it goes to
@@ -111,6 +111,18 @@ test("an @mention is a task for that agent, on the manager's behalf, reporting b
   // the manager itself isn't mentioned into a task
   expect(await mentionTask(thread.id, 'thr-m', 'hi', { kind: 'owner', label: 'Thread' })).toBeNull()
   threadQueueRepo.removeThread(thread.id)
+})
+
+test("the owner's message while the manager is mid-turn waits in the thread's queue (never typed into a busy session)", async () => {
+  await Bun.sleep(300)
+  updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'working' }))
+  expect(await sendToThread(thread.id, 'ini untuk content di mobile ilangin ya')).toBe('queued')
+  expect(threadQueueRepo.next(thread.id)?.text).toContain('ini untuk content di mobile')
+  // the next one waits behind it, in order
+  expect(await sendToThread(thread.id, 'halo')).toBe('queued')
+  expect(threadQueueRepo.countFor(thread.id)).toBe(2)
+  threadQueueRepo.removeThread(thread.id)
+  updateSideRuntime('thr-m', 's7', (rt) => ({ ...rt, status: 'idle' }))
 })
 
 test('a quiet thread session closes after the idle time (kept: not pruned), a busy one stays', async () => {

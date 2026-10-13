@@ -108,7 +108,8 @@ const isSystemMessage = (text: string) => /^\s*(\[After Office\]|\[From the mana
 /** A chat in a thread (ui/ThreadView.tsx): sent through the thread (which opens its session again when needed), with
  *  an @ button to hand the message to an agent; the thread's own folder and tags stand in for the chat's. */
 export interface ThreadChat {
-  send: (body: string, uploads: string[]) => Promise<void>
+  /** `queued`: the manager is mid-turn there; it goes in once that turn ends */
+  send: (body: string, uploads: string[]) => Promise<{ queued?: boolean } | void>
   /** what an @ in the message box offers (the thread inserts "@Name ") */
   mention: (insert: (text: string) => void) => ReactNode
   placeholder: string
@@ -317,7 +318,13 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
   const sendRef = useRef<((said?: string) => Promise<void>) | null>(null)
   const [outgoing, setOutgoing] = useState<{ text: string; files: Pending[]; at: number } | null>(null)
   // …and swapped for the real one in the same render: no gap, no second fade-in
-  const delivered = outgoing ? items.find((i) => i.kind === 'user' && i.at >= outgoing.at - 1000) : undefined
+  // its own text, not just any message after it (a report forwarded meanwhile isn't it)
+  const isIt = (o: { text: string; at: number }, i: ChatItem) =>
+    i.kind === 'user' && i.at >= o.at - 1000 && (!o.text || i.text.includes(o.text.slice(0, 40)) || !isSystemMessage(i.text))
+  const delivered = outgoing ? items.find((i) => isIt(outgoing, i)) : undefined
+  // a thread's messages waiting for the manager's turn to end (server: work/threads.ts sendToThread)
+  const [queued, setQueued] = useState<{ text: string; at: number }[]>([])
+  const waiting = queued.filter((q) => !items.some((i) => isIt(q, i)))
   if (delivered) seen.current?.add(delivered.id)
   useEffect(() => {
     if (!delivered) return
@@ -339,7 +346,15 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
     composer.current?.set('')
     stick.current = true
     try {
-      const r = thread ? (await thread.send(body, pending.ids), null) : await liveApi.prompt(agent.id, body, pending.ids, context.value, sk, at - lastSent.current < 60_000)
+      let r: { joined?: boolean } | null = null
+      if (thread) {
+        const sent = await thread.send(body, pending.ids)
+        // waiting for the manager: shown as queued until it really goes in (the next one can be written meanwhile)
+        if (sent?.queued) {
+          setQueued((list) => [...list, { text: body, at }])
+          setOutgoing(null)
+        }
+      } else r = await liveApi.prompt(agent.id, body, pending.ids, context.value, sk, at - lastSent.current < 60_000)
       lastSent.current = at
       if (r?.joined) {
         setJoinedNote(true)
@@ -770,6 +785,12 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
           if (i.kind === 'tool') return hideSystem ? null : <ToolRow key={i.id} item={i} result={results.get(i.id)} report={links.forTool(agent.id, i)} />
           return null
         })}
+        {waiting.map((q) => (
+          <div key={q.at} className="msg-user msg-user--queued">
+            {q.text && <div className="msg msg--user">{q.text}</div>}
+            <span className="msg__time">Queued: goes in when {agent.name} finishes</span>
+          </div>
+        ))}
         {outgoing && !delivered && (
           <div className="msg-user msg--new">
             <OutgoingFiles items={outgoing.files} />

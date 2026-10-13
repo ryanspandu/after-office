@@ -76,11 +76,12 @@ threadRoutes.post('/threads/:id/messages', async (c) => {
     if (task) tasks.push({ id: task.id, agentId })
   }
   // only mentions: the tasks are the message (the manager hears about each one)
+  let queued = false
   if (!mentions.length || !tasks.length) {
     noteOwnerMessage(t.managerId, requestWho(c))
-    await sendToThread(t.id, withAttachments(text, paths))
+    queued = (await sendToThread(t.id, withAttachments(text, paths))) === 'queued'
   }
-  return c.json({ ok: true, tasks })
+  return c.json({ ok: true, tasks, queued })
 })
 
 // /compact in the thread's session (opened again first if it rests)

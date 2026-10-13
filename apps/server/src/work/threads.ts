@@ -171,14 +171,25 @@ export function ensureOpen(t: OfficeThread): Promise<void> {
   return p
 }
 
-/** The owner's message in a thread (with its attachments already in the text). */
-export async function sendToThread(id: string, text: string) {
+/**
+ * The owner's message in a thread (with its attachments already in the text). While the manager is in the middle of
+ * a turn there, it waits in the thread's queue and goes in once that turn ends: typed in mid-turn, it can stay stuck
+ * in the message box (the Enter lost while the screen redraws), and the next message would be added to it.
+ */
+export async function sendToThread(id: string, text: string): Promise<'sent' | 'queued'> {
   const t = getThread(id)
   if (t.archivedAt) save({ ...t, archivedAt: undefined })
   await ensureOpen(t)
   const message = t.started ? text : `${threadContext(t)}\n\n${text}`
+  const rt = sideRuntimeOf(t.managerId, t.sessionKey)
+  if (rt.status !== 'idle' || rt.compactingSince || threadQueueRepo.countFor(t.id)) {
+    threadQueueRepo.add(t.id, message)
+    touchThread(t.id, { started: true })
+    return 'queued'
+  }
   await sendChat(t.managerId, message, t.sessionKey)
   touchThread(t.id, { started: true })
+  return 'sent'
 }
 
 /**
