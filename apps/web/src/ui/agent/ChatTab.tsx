@@ -6,7 +6,7 @@ import { useDictation } from '../../state/dictation'
 import { primeSpeech, talkedByVoice } from '../../state/speech'
 import { LuCheck, LuChevronDown, LuChevronRight, LuChevronUp, LuFoldVertical, LuSquare, LuClipboardList, LuCircleHelp, LuLoader, LuPaperclip, LuSearch, LuSend, LuShieldAlert, LuSlidersHorizontal, LuTag, LuPlus, LuX, LuFileText } from 'react-icons/lu'
 import { openUrl } from '../../state/url'
-import { ComposerBox, type ComposerHandle } from './ComposerBox'
+import { ComposerBox, type Mentionable, type ComposerHandle } from './ComposerBox'
 import { confirm } from '../Confirm'
 import { MOBILE, useMediaQuery } from '../../state/useMediaQuery'
 import type { ChatItem, LiveMode, SideSessionInfo, WorkReport } from '@after-office/shared'
@@ -94,7 +94,18 @@ export function ChatTab({ agent }: { agent: OfficeAgent }) {
   return <ChatView key={`${agent.id}:${session}`} agent={view} session={session} header={<SessionTabs agent={agent} current={session} onPick={pick} />} />
 }
 
-function ChatView({ agent, session, header }: { agent: OfficeAgent; session: string; header: ReactNode }) {
+/** A chat in a thread (ui/ThreadView.tsx): sent through the thread (which opens its session again when needed), with
+ *  an @ button to hand the message to an agent; the thread's own folder and tags stand in for the chat's. */
+export interface ThreadChat {
+  send: (body: string, uploads: string[]) => Promise<void>
+  /** what an @ in the message box offers (the thread inserts "@Name ") */
+  mention: (insert: (text: string) => void) => ReactNode
+  placeholder: string
+  /** who an @ can name: offered while typing, shown in colour once named */
+  names: Mentionable[]
+}
+
+export function ChatView({ agent, session, header, thread }: { agent: OfficeAgent; session: string; header: ReactNode; thread?: ThreadChat }) {
   // message times, in the office's timezone
   const timezone = useClock((s) => s.timezone)
   // the reports a message is, or names: links under it
@@ -267,7 +278,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
   const context = useChatContext(agent.id, session)
   const [contextOpen, setContextOpen] = useState(false)
   // phones: the row only while opened (the + button shows a dot when something is picked); elsewhere also while set
-  const ctxShown = contextOpen || (context.active && !mobile)
+  const ctxShown = !thread && (contextOpen || (context.active && !mobile))
   const fileInput = useRef<HTMLInputElement>(null)
   // opening the chat puts the cursor in the message box (not on phones: that would pop the keyboard up over it)
   useEffect(() => {
@@ -307,7 +318,7 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
     composer.current?.set('')
     stick.current = true
     try {
-      const r = await liveApi.prompt(agent.id, body, pending.ids, context.value, sk, at - lastSent.current < 60_000)
+      const r = thread ? (await thread.send(body, pending.ids), null) : await liveApi.prompt(agent.id, body, pending.ids, context.value, sk, at - lastSent.current < 60_000)
       lastSent.current = at
       if (r?.joined) {
         setJoinedNote(true)
@@ -719,7 +730,19 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
             e.target.value = ''
           }}
         />
-        {mobile ? (
+        {thread ? (
+          // a thread: attach, and @ to hand the message to an agent (its folder and tags are the thread's)
+          <>
+            <button className="icon-btn ghost chat__attach" onClick={() => fileInput.current?.click()} disabled={offline || sending} {...tip('Attach files or pictures (or paste / drop them here)')}>
+              <LuPaperclip />
+            </button>
+            {thread.mention((text) => {
+              const cur = composer.current?.get() ?? ''
+              composer.current?.set(`${cur}${cur && !/\s$/.test(cur) ? ' ' : ''}${text}`)
+              requestAnimationFrame(() => composer.current?.focus())
+            })}
+          </>
+        ) : mobile ? (
           // phones: one + button, its menu has both (the message box keeps the width)
           <ComposerMenu
             disabled={offline}
@@ -747,12 +770,13 @@ function ChatView({ agent, session, header }: { agent: OfficeAgent; session: str
         <ComposerBox
           ref={composer}
           draftKey={`${agent.id}:${session}`}
-          placeholder={offline ? (session ? 'The session is starting…' : 'The agent is offline') : compacting ? `${agent.name} is compacting the conversation… you can write, and send when it's done` : agent.status === 'asleep' ? `Message ${agent.name}… (it wakes up first, about 15 s)` : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
+          placeholder={thread && !offline && !compacting ? thread.placeholder : offline ? (session ? 'The session is starting…' : 'The agent is offline') : compacting ? `${agent.name} is compacting the conversation… you can write, and send when it's done` : agent.status === 'asleep' ? `Message ${agent.name}… (it wakes up first, about 15 s)` : mobile ? `Message ${agent.name}…` : `Message ${agent.name}…  (Enter to send, Shift+Enter for a new line)`}
           disabled={offline}
           enterSends={!mobile}
           onSubmit={() => void send()}
           onFiles={attach}
           onHasText={setHasText}
+          mentions={thread?.names}
         />
         {dict.supported && <MicButton dict={dict} disabled={offline} />}
         {/* the agent is at work and nothing is typed: this button stops it (Esc in its session); typing something turns it back into Send (a follow-up joins the answer) */}

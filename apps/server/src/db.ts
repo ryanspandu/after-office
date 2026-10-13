@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { chmodSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { ActivityEntry, AgentKind, CronJob, LiveMode, OfficeTask, OwnerNote, TaskComment, WorkReport } from '@after-office/shared'
+import type { ActivityEntry, AgentKind, CronJob, LiveMode, OfficeTask, OfficeThread, OwnerNote, TaskComment, WorkReport } from '@after-office/shared'
 
 // Persistent state lives in one SQLite file (OFFICE_DATA_DIR, default apps/server/data).
 // Runtime state (status, current tool, pending approvals) stays in memory and is rebuilt from hooks.
@@ -69,6 +69,19 @@ CREATE TABLE IF NOT EXISTS owner_notes (
   id          TEXT PRIMARY KEY,
   data        TEXT NOT NULL,        -- OwnerNote JSON
   updated_at  INTEGER NOT NULL
+);
+-- the owner's threads with the manager (work/threads.ts): one topic each, in a side session of the manager's
+CREATE TABLE IF NOT EXISTS threads (
+  id          TEXT PRIMARY KEY,
+  data        TEXT NOT NULL,        -- OfficeThread JSON
+  updated_at  INTEGER NOT NULL
+);
+-- what waits for a thread's manager session to be free (a report, a reply): sent in order once it's idle
+CREATE TABLE IF NOT EXISTS thread_queue (
+  id          TEXT PRIMARY KEY,
+  thread_id   TEXT NOT NULL,
+  text        TEXT NOT NULL,
+  created_at  INTEGER NOT NULL
 );
 -- an agent's side sessions: extra Claude Code processes in its folder, opened by the owner to chat in parallel
 CREATE TABLE IF NOT EXISTS side_sessions (
@@ -138,6 +151,8 @@ if (!hasColumn('agents', 'connectors_read_ask')) db.exec('ALTER TABLE agents ADD
 for (const col of ['git_name', 'git_email', 'ssh_public', 'ssh_fingerprint']) if (!hasColumn('agents', col)) db.exec(`ALTER TABLE agents ADD COLUMN ${col} TEXT`)
 if (!hasColumn('agents', 'pinned')) db.exec('ALTER TABLE agents ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0')
 // put to sleep (agents/sleep.ts): when; its session isn't started again until it's woken. NULL: awake
+// the thread a side session belongs to (work/threads.ts): kept when closed (not pruned), so the thread can open it again
+if (!hasColumn('side_sessions', 'thread_id')) db.exec('ALTER TABLE side_sessions ADD COLUMN thread_id TEXT')
 if (!hasColumn('agents', 'asleep_at')) db.exec('ALTER TABLE agents ADD COLUMN asleep_at INTEGER')
 if (!hasColumn('agents', 'extra_dirs')) db.exec("ALTER TABLE agents ADD COLUMN extra_dirs TEXT NOT NULL DEFAULT '[]'")
 db.exec('CREATE INDEX IF NOT EXISTS tasks_updated ON tasks (updated_at)')
@@ -328,7 +343,7 @@ export const offsetsRepo = {
 }
 
 /** JSON-document tables (tasks, crons): the shape lives in @after-office/shared, SQLite just stores it. */
-function docRepo<T extends { id: string }>(table: 'tasks' | 'crons' | 'reports') {
+function docRepo<T extends { id: string }>(table: 'tasks' | 'crons' | 'reports' | 'threads') {
   return {
     all: () => db.query<{ data: string }, []>(`SELECT data FROM ${table} ORDER BY updated_at`).all().map((r) => JSON.parse(r.data) as T),
     get: (id: string) => {
@@ -400,6 +415,16 @@ export const tasksRepo = {
   touch: (id: string) => db.query('UPDATE tasks SET updated_at = ?2 WHERE id = ?1').run(id, Date.now()).changes > 0,
 }
 export const cronsRepo = docRepo<CronJob>('crons')
+export const threadsRepo = docRepo<OfficeThread>('threads')
+export const threadQueueRepo = {
+  add: (threadId: string, text: string) =>
+    db.query('INSERT INTO thread_queue (id, thread_id, text, created_at) VALUES (?1, ?2, ?3, ?4)').run(crypto.randomUUID(), threadId, text, Date.now()),
+  next: (threadId: string) =>
+    db.query<{ id: string; text: string }, [string]>('SELECT id, text FROM thread_queue WHERE thread_id = ? ORDER BY created_at LIMIT 1').get(threadId),
+  remove: (id: string) => db.query('DELETE FROM thread_queue WHERE id = ?').run(id),
+  countFor: (threadId: string) => db.query<{ n: number }, [string]>('SELECT COUNT(*) AS n FROM thread_queue WHERE thread_id = ?').get(threadId)!.n,
+  removeThread: (threadId: string) => db.query('DELETE FROM thread_queue WHERE thread_id = ?').run(threadId),
+}
 const reportsDocs = docRepo<WorkReport>('reports')
 export const reportsRepo = {
   ...reportsDocs,
@@ -563,6 +588,8 @@ export interface SideSessionRow {
   title: string | null
   /** the owner's name for it */
   name?: string | null
+  /** the thread it runs (work/threads.ts) */
+  thread_id?: string | null
   created_at: number
   closed_at: number | null
 }
@@ -573,7 +600,7 @@ export const sideSessionsRepo = {
   forAgent: (agentId: string) =>
     db
       .query<SideSessionRow, [string, number]>(
-        `SELECT * FROM side_sessions WHERE agent_id = ?1 AND (closed_at IS NULL OR key IN (SELECT key FROM side_sessions WHERE agent_id = ?1 AND closed_at IS NOT NULL ORDER BY closed_at DESC LIMIT ?2))
+        `SELECT * FROM side_sessions WHERE agent_id = ?1 AND (closed_at IS NULL OR key IN (SELECT key FROM side_sessions WHERE agent_id = ?1 AND closed_at IS NOT NULL AND thread_id IS NULL ORDER BY closed_at DESC LIMIT ?2))
          ORDER BY closed_at IS NOT NULL, CASE WHEN closed_at IS NULL THEN created_at ELSE -closed_at END`,
       )
       .all(agentId, CLOSED_KEPT),
@@ -588,11 +615,19 @@ export const sideSessionsRepo = {
     db
       .query('INSERT INTO side_sessions (agent_id, key, tmux_session, session_id, title, created_at, closed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
       .run(r.agent_id, r.key, r.tmux_session, r.session_id, r.title, r.created_at, r.closed_at),
-  update: (agentId: string, key: string, patch: Partial<Pick<SideSessionRow, 'session_id' | 'title' | 'name' | 'closed_at'>>) => {
+  update: (agentId: string, key: string, patch: Partial<Pick<SideSessionRow, 'session_id' | 'title' | 'name' | 'closed_at' | 'thread_id'>>) => {
     const row = sideSessionsRepo.get(agentId, key)
     if (!row) return
     const next = { ...row, ...patch }
-    db.query('UPDATE side_sessions SET session_id = ?3, title = ?4, closed_at = ?5, name = ?6 WHERE agent_id = ?1 AND key = ?2').run(agentId, key, next.session_id, next.title, next.closed_at, next.name ?? null)
+    db.query('UPDATE side_sessions SET session_id = ?3, title = ?4, closed_at = ?5, name = ?6, thread_id = ?7 WHERE agent_id = ?1 AND key = ?2').run(
+      agentId,
+      key,
+      next.session_id,
+      next.title,
+      next.closed_at,
+      next.name ?? null,
+      next.thread_id ?? null,
+    )
   },
   remove: (agentId: string, key: string) => db.query('DELETE FROM side_sessions WHERE agent_id = ? AND key = ?').run(agentId, key),
   removeAgent: (agentId: string) => db.query('DELETE FROM side_sessions WHERE agent_id = ?').run(agentId),
@@ -600,7 +635,7 @@ export const sideSessionsRepo = {
   prune: (agentId: string) =>
     db
       .query(
-        `DELETE FROM side_sessions WHERE agent_id = ?1 AND closed_at IS NOT NULL AND key NOT IN (SELECT key FROM side_sessions WHERE agent_id = ?1 AND closed_at IS NOT NULL ORDER BY closed_at DESC LIMIT ?2)`,
+        `DELETE FROM side_sessions WHERE agent_id = ?1 AND closed_at IS NOT NULL AND thread_id IS NULL AND key NOT IN (SELECT key FROM side_sessions WHERE agent_id = ?1 AND closed_at IS NOT NULL ORDER BY closed_at DESC LIMIT ?2)`,
       )
       .run(agentId, CLOSED_KEPT),
 }

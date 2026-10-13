@@ -8,3 +8,5 @@
 .scroll-tabs__arrow svg { width: 13px; height: 13px; }
 .scroll-tabs__arrow:hover { color: var(--text); }
 @media (hover: hover) and (pointer: fine) { .scroll-tabs__arrow { display: inline-flex; } }
+/* phones' Work sheet (three tabs): they share the row, still scrolling if they ever outgrow it */
+.dock-sheet .scroll-tabs__row.task-tabs button { flex: 1 0 auto; justify-content: center; }

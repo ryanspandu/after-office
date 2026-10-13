@@ -20,6 +20,7 @@ import { useMetricsSim, useMockSim } from './state/mockSim'
 import { MOBILE, useMediaQuery } from './state/useMediaQuery'
 import { AgentProfileDrawer } from './ui/AgentProfile'
 import { AgentsCard, AgentsPanel } from './ui/AgentsPanel'
+import { ThreadsFab, ThreadsPanel } from './ui/Threads'
 import { ReportsPanel } from './ui/Reports'
 import { DeskLayout } from './ui/DeskLayout'
 import { useSpeechWatcher } from './state/speech'
@@ -33,7 +34,7 @@ import { FocusCard, ViewReset } from './ui/FocusCard'
 import { BossModeBadge } from './ui/BossMode'
 import { PublicAccessBadge } from './ui/PublicAccess'
 import { AppReload } from './ui/AppReload'
-import { MobileDock } from './ui/MobileDock'
+import { FoldersFab, MobileDock } from './ui/MobileDock'
 
 export function App() {
   useLiveSync()
@@ -70,6 +71,9 @@ export function App() {
       <AppReload />
       <FocusCard />
       {/* phones: Boss mode and Public access float at the stage's top left (in the navbar they'd push it onto more lines) */}
+      {/* phones: threads, a round button above the menu button */}
+      {mobile && <FoldersFab />}
+      {mobile && <ThreadsFab />}
       {mobile && (
         <div className="stage-badges">
           <BossModeBadge compact />
@@ -96,6 +100,7 @@ export function App() {
               </>
             ),
             reports: <ReportsPanel />,
+            threads: <ThreadsPanel />,
             agents: <AgentsCard />,
           }}
         />

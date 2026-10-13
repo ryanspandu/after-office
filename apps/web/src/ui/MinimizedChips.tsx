@@ -4,7 +4,7 @@ import { horizontalListSortingStrategy, SortableContext, useSortable } from '@dn
 import { CSS } from '@dnd-kit/utilities'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { LuEllipsis, LuFileCode, LuFileText, LuFolder, LuFolders, LuListTodo, LuNotebookPen, LuX } from 'react-icons/lu'
+import { LuEllipsis, LuFileCode, LuFileText, LuFolder, LuFolders, LuListTodo, LuMessagesSquare, LuNotebookPen, LuX } from 'react-icons/lu'
 import { useLive } from '../state/live'
 import { useMinimized, type MinimizedFolder } from '../state/minimized'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
@@ -17,7 +17,14 @@ const tilde = (p: string) => p.replace(/^\/(Users|home)\/[^/]+/, '~')
 function useWindowLabels() {
   const notes = useLive((s) => s.notes)
   return (f: MinimizedFolder) =>
-    f.kind === 'report'
+    f.kind === 'thread'
+      ? {
+          name: f.label || 'Thread',
+          sub: 'Thread',
+          icon: <LuMessagesSquare />,
+          open: () => (useMinimized.getState().remove(f.path), openUrl({ thread: f.path.slice('thread:'.length) })),
+        }
+      : f.kind === 'report'
       ? {
           name: f.label || 'Report',
           sub: 'Report',

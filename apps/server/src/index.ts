@@ -34,6 +34,7 @@ import { handleMcp } from './mcp'
 import { startBackgroundJobs } from './agents/reconciler'
 import { agentRoutes } from './routes/agents'
 import { workRoutes } from './routes/work'
+import { threadRoutes } from './routes/threads'
 import { checkTrigger, startWorkJobs, triggerCron } from './work/work'
 import { bodyLimit } from 'hono/body-limit'
 import { refreshOfficeRules } from './agents/rulesSync'
@@ -106,6 +107,7 @@ app.route('/api', profileRoutes)
 setBrandNameSource(() => branding().name)
 setAvatarSource(avatarUrl)
 app.route('/api', workRoutes)
+app.route('/api', threadRoutes)
 app.route('/api', migrateRoutes)
 
 // Folder picker for new agents: directories under the allowed roots (fsroots.ts) only.

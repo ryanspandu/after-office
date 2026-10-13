@@ -5,6 +5,7 @@ import { cleanFolder } from './folders'
 import { AgentError } from '../agents/manager'
 import { addPending, getPending, publish, resolvePending, runtimeOf } from '../agents/registry'
 import { isAsleep } from '../agents/sleep'
+import { joinThread } from './threads'
 import { bossMode, countBoss, officeSettings } from './settings'
 import { addComment, deliver, deliverToManager, isReadingAgentOutput, isReportedNow, endParallelSession, mainBusy, makesCycle, markTask, parallelBlocker, PARALLEL_NOTE, startParallel, publishWork, quotaPause, startTask, tickTasks, waitingOn } from './work'
 import { managerOrigin } from './origin'
@@ -68,13 +69,14 @@ export async function delegateTask(managerId: string, input: DelegateInput) {
   if (after.length) task.blockedBy = after
   const job = jobForTask(input.job, after)
   if (job) task.job = job
+  joinThread(task, managerId, input.managerSession, after)
   const paused = quotaPause()
   // waiting (for other tasks, or for plan usage to drop): the task starts on its own later (tickTasks)
   if (after.length || paused) task.autoStart = true
   // the owner's approval: when they asked for it, or when this comes right after an agent's report (injection guard)
   // …except in Boss mode: the owner trusted the manager with it for now
   const boss = !!bossMode()
-  const guarded = !boss && isReadingAgentOutput(managerId)
+  const guarded = !boss && isReadingAgentOutput(managerId, input.managerSession ?? '')
   const approval = !boss && (officeSettings().managerApproval || guarded)
   if (approval) task.awaitingApproval = true
   tasksRepo.put(task)
@@ -123,6 +125,7 @@ export function ownerTask(managerId: string, input: { title: string; description
   }
   const job = jobForTask(input.job, after)
   if (job) task.job = job
+  joinThread(task, managerId, input.managerSession, after)
   tasksRepo.put(task)
   publishWork('tasks')
   const manager = agentsRepo.get(managerId)?.name ?? 'The manager'
@@ -369,7 +372,7 @@ export const MAX_MANAGER_REVISIONS = 3
  * right after a report (it only asks that agent to fix its own work), but only for the tasks that report is about, and
  * at most MAX_MANAGER_REVISIONS times in a row before the owner steps in.
  */
-export async function managerReviseTask(managerId: string, taskId: string, feedback: string) {
+export async function managerReviseTask(managerId: string, taskId: string, feedback: string, session?: string) {
   const task = tasksRepo.get(taskId)
   if (!task) throw new AgentError(`No task ${taskId}; see list_tasks`, 404)
   if (task.delegatedBy !== managerId) throw new AgentError('You can only send back tasks you delegated')
@@ -379,7 +382,7 @@ export async function managerReviseTask(managerId: string, taskId: string, feedb
     countBoss('sendBacks')
     return reviseTask(taskId, feedback, { author: 'manager', agentId: managerId })
   }
-  if (isReadingAgentOutput(managerId) && !isReportedNow(managerId, taskId))
+  if (isReadingAgentOutput(managerId, session) && !isReportedNow(managerId, taskId, session))
     throw new AgentError("Right after a report, you can only send back the task that report is about. For other work, tell the owner or use delegate_task (the owner approves it).")
   // rounds in a row: the manager's revisions since the owner last said anything on the task
   const timeline = commentsRepo.forTask(taskId)

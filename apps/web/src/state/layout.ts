@@ -4,14 +4,15 @@ import { create } from 'zustand'
 // their gutters; in layout mode a panel can be dragged into another column (above or below a panel) or out to a column
 // of its own. Kept in this browser. Phones and narrow windows keep their fixed layout.
 
-export type PanelId = 'daily' | 'work' | 'office' | 'attention' | 'reports' | 'agents'
-export const PANEL_IDS: PanelId[] = ['daily', 'work', 'office', 'attention', 'reports', 'agents']
+export type PanelId = 'daily' | 'work' | 'office' | 'attention' | 'reports' | 'threads' | 'agents'
+export const PANEL_IDS: PanelId[] = ['daily', 'work', 'office', 'attention', 'reports', 'threads', 'agents']
 export const PANEL_LABEL: Record<PanelId, string> = {
   daily: 'Daily',
   work: 'Tasks · Folders · Tags',
   office: 'Office',
   attention: 'For you',
   reports: 'Reports',
+  threads: 'Threads',
   agents: 'Agents',
 }
 
@@ -33,9 +34,11 @@ export type DropTarget = { panel: PanelId; side: 'above' | 'below' } | { column:
 const STORAGE_KEY = 'after-office:layout'
 
 export const DEFAULT_LAYOUT: LayoutColumn[] = [
-  { id: 'c-left', width: 19, panels: [{ id: 'daily', size: 32 }, { id: 'work', size: 68 }] },
-  { id: 'c-mid', width: 60, panels: [{ id: 'office', size: 78 }, { id: 'attention', size: 22 }] },
-  { id: 'c-right', width: 21, panels: [{ id: 'reports', size: 42 }, { id: 'agents', size: 58 }] },
+  { id: 'c-left', width: 15, panels: [{ id: 'daily', size: 28 }, { id: 'work', size: 72 }] },
+  { id: 'c-mid', width: 43, panels: [{ id: 'office', size: 58 }, { id: 'attention', size: 42 }] },
+  // the conversations: threads above the reports
+  { id: 'c-talk', width: 21, panels: [{ id: 'threads', size: 46 }, { id: 'reports', size: 54 }] },
+  { id: 'c-right', width: 21, panels: [{ id: 'agents', size: 100 }] },
 ]
 
 /** Sizes that add up to 100 (others scaled to make room). */
@@ -51,9 +54,27 @@ function valid(cols: unknown): cols is LayoutColumn[] {
   return seen.length === PANEL_IDS.length && PANEL_IDS.every((id) => seen.includes(id)) && cols.every((c: LayoutColumn) => typeof c.id === 'string' && typeof c.width === 'number' && c.panels.length > 0)
 }
 
+/**
+ * A layout saved before a panel existed: the new panel goes where it belongs by default (Threads: right below Reports,
+ * in whatever column Reports is now), the owner's arrangement stays. Only panels added since then are put in.
+ */
+function withNewPanels(cols: unknown): unknown {
+  if (!Array.isArray(cols)) return cols
+  const seen = new Set(cols.flatMap((c: LayoutColumn) => (Array.isArray(c?.panels) ? c.panels.map((p) => p?.id) : [])))
+  if (seen.has('threads') || !seen.has('reports')) return cols
+  return cols.map((c: LayoutColumn) => {
+    const at = c.panels.findIndex((p) => p.id === 'reports')
+    if (at === -1) return c
+    // half of Reports' height for it, then the column's sizes add up to 100 again
+    const reports = c.panels[at]
+    const panels = [...c.panels.slice(0, at), { ...reports, size: reports.size / 2 }, { id: 'threads' as const, size: reports.size / 2 }, ...c.panels.slice(at + 1)]
+    return { ...c, panels: normalize(panels, (p) => p.size, (p, size) => ({ ...p, size })) }
+  })
+}
+
 function load(): LayoutColumn[] {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as unknown
+    const saved = withNewPanels(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as unknown)
     return valid(saved) ? saved : DEFAULT_LAYOUT
   } catch {
     return DEFAULT_LAYOUT

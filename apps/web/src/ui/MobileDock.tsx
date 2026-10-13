@@ -1,6 +1,6 @@
 import { haptic } from '../state/haptic'
-import { useMemo, type ReactNode, useEffect } from 'react'
-import { LuBot, LuBriefcase, LuCalendarClock, LuCrown, LuInbox, LuLibrary } from 'react-icons/lu'
+import { useMemo, useState, type ReactNode, useEffect } from 'react'
+import { LuBot, LuBriefcase, LuCalendarClock, LuCrown, LuFolderGit2, LuInbox, LuLibrary } from 'react-icons/lu'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
 import { unreadOf, useOffice } from '../state/store'
@@ -13,13 +13,16 @@ import { ReportsPanel } from './Reports'
 import { tip } from './Tooltip'
 import { useLaunch } from '../pwa/launch'
 import { openUrl, setUrl, useParam } from '../state/url'
+import { ThreadsPanel } from './Threads'
+import { FoldersTab } from './ProjectsTab'
+import { SearchBox } from './SearchBox'
 
 // Phones: the office gets the whole screen. Every side panel (attention queue, cron, tasks, reports, agents) opens
 // as a bottom sheet from this floating dock; each button carries a count badge. The open sheet is in the address bar
 // (?sheet=tasks), like every other modal (state/url.ts): the phone's Back (button or swipe) closes it.
 
-type Sheet = 'attention' | 'cron' | 'tasks' | 'reports' | 'agents'
-const SHEETS: Sheet[] = ['attention', 'cron', 'tasks', 'reports', 'agents']
+type Sheet = 'attention' | 'cron' | 'tasks' | 'reports' | 'agents' | 'threads' | 'folders'
+const SHEETS: Sheet[] = ['attention', 'cron', 'tasks', 'reports', 'agents', 'threads', 'folders']
 
 function DockButton({ icon, label, count, alert, onClick }: { icon: ReactNode; label: string; count: number; alert?: boolean; onClick: () => void }) {
   return (
@@ -78,10 +81,18 @@ export function MobileDock() {
         <CronPanel />
       </DockSheet>
       <DockSheet open={sheet === 'tasks'} onClose={close} title="Work" bodyClass="dock-sheet">
-        <TaskPanel />
+        <TaskPanel noFolders />
+      </DockSheet>
+      {/* opened by the round Folders button on the stage */}
+      <DockSheet open={sheet === 'folders'} onClose={close} title="Folders" bodyClass="dock-sheet">
+        <FoldersSheet />
       </DockSheet>
       <DockSheet open={sheet === 'reports'} onClose={close} title="Docs" bodyClass="dock-sheet">
         <ReportsPanel />
+      </DockSheet>
+      {/* opened by the round Threads button on the stage (above the menu button), not from the dock */}
+      <DockSheet open={sheet === 'threads'} onClose={close} title="Threads" bodyClass="dock-sheet">
+        <ThreadsPanel />
       </DockSheet>
       <DockSheet open={sheet === 'agents'} onClose={close} title="Agents" bodyClass="dock-sheet agents-modal">
         {/* opening a chat keeps this sheet: closing the chat (or Back) comes back to it */}
@@ -91,3 +102,27 @@ export function MobileDock() {
   )
 }
 
+
+/** Phones: the office's folders, from their own round button on the stage. */
+function FoldersSheet() {
+  const [q, setQ] = useState('')
+  return (
+    <section className="card card--grow folders-sheet">
+      <div className="side-search-row">
+        <SearchBox value={q} onChange={setQ} placeholder="Search folders" className="side-search" />
+      </div>
+      <div className="side-pane">
+        <FoldersTab q={q} />
+      </div>
+    </section>
+  )
+}
+
+/** Phones: the round Folders button on the stage, right above the menu button (Threads above it). */
+export function FoldersFab() {
+  return (
+    <button className="folders-fab" aria-label="Folders" onClick={() => openUrl({ sheet: 'folders' })}>
+      <LuFolderGit2 />
+    </button>
+  )
+}

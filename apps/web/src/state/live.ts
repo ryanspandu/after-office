@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useActivityLive } from './activity'
 import { create } from 'zustand'
-import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OwnerNoteSummary, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, TaskStatusDef, WorkState, Workspace, GitCommit } from '@after-office/shared'
+import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, OfficeThread, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OwnerNoteSummary, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, TaskStatusDef, WorkState, Workspace, GitCommit } from '@after-office/shared'
 import { api, useAuth } from './auth'
 import { mergeServer, useDashboard, ymd } from './dashboard'
 import { applyReportJob } from './reportBulk'
@@ -34,9 +34,11 @@ interface LiveStore {
   notes: OwnerNoteSummary[]
   /** the task statuses (board columns), in order; empty until the server sends them */
   statuses: TaskStatusDef[]
+  /** the owner's threads with the manager, latest activity first (archived ones too) */
+  threads: OfficeThread[]
 }
 
-export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null, publicAccess: { supported: false, public: false }, notes: [], statuses: [] }))
+export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null, publicAccess: { supported: false, public: false }, notes: [], statuses: [], threads: [] }))
 
 /** Task timelines, loaded per task when one is opened (useTaskComments) and kept current by the SSE stream. */
 export const useComments = create<{ byTask: Record<string, TaskComment[]> }>(() => ({ byTask: {} }))
@@ -62,6 +64,7 @@ function applyWork(work: Partial<WorkState>) {
   if (work.publicAccess) useLive.setState({ publicAccess: work.publicAccess })
   if (work.notes) useLive.setState({ notes: work.notes })
   if (work.statuses) useLive.setState({ statuses: work.statuses })
+  if (work.threads) useLive.setState({ threads: work.threads })
 }
 
 const BRIEFING_MS = 8000
@@ -363,6 +366,15 @@ export const liveApi = {
   renameSession: (id: string, key: string, name: string) => call(`/api/agents/${id}/sessions/${key}`, { name }, 'PUT'),
   reopenSession: (id: string, key: string) => call(`/api/agents/${id}/sessions/${key}/reopen`, {}) as Promise<{ key: string }>,
   forgetSession: (id: string, key: string) => call(`/api/agents/${id}/sessions/${key}/forget`, undefined, 'DELETE'),
+  // threads: the owner's topics with the manager, each in a session of its own (server: work/threads.ts)
+  createThread: (b: { title: string; folder?: string; tags?: string[]; text?: string; parentId?: string }) => call('/api/threads', b) as Promise<OfficeThread>,
+  reorderThreads: (ids: string[]) => call('/api/threads/order', { ids }),
+  updateThread: (id: string, b: { title?: string; folder?: string | null; tags?: string[]; pinned?: boolean }) => call(`/api/threads/${id}`, b, 'PUT') as Promise<OfficeThread>,
+  threadMessage: (id: string, b: { text: string; uploads?: string[]; mentions?: string[] }) =>
+    call(`/api/threads/${id}/messages`, b) as Promise<{ ok: true; tasks: { id: string; agentId: string }[] }>,
+  readThread: (id: string) => call(`/api/threads/${id}/read`, {}),
+  archiveThread: (id: string, archived: boolean) => call(`/api/threads/${id}/${archived ? 'archive' : 'unarchive'}`, {}) as Promise<OfficeThread>,
+  deleteThread: (id: string) => call(`/api/threads/${id}`, undefined, 'DELETE'),
   reviseTask: (taskId: string, feedback: string) => call(`/api/tasks/${taskId}/revise`, { feedback }) as Promise<{ result: 'sent' | 'queued' | 'parallel' }>,
   /** a stopped task taken up again by its agent, where it stopped */
   resumeTask: (taskId: string) => call(`/api/tasks/${taskId}/resume`, {}) as Promise<{ result: 'sent' | 'queued' }>,

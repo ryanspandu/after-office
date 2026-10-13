@@ -82,9 +82,9 @@ function show(p: PendingChange) {
 }
 
 /** Apply the manager's change now, or ask the owner first (the rules above). */
-export function changeCron(managerId: string, change: CronChange): 'applied' | 'approval' {
+export function changeCron(managerId: string, change: CronChange, session?: string): 'applied' | 'approval' {
   const boss = !!bossMode()
-  const guarded = !boss && isReadingAgentOutput(managerId)
+  const guarded = !boss && isReadingAgentOutput(managerId, session)
   if (boss || (!officeSettings().managerApproval && !guarded)) {
     apply(managerId, change)
     return 'applied'

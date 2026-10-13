@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuSlidersHorizontal, LuCheckCheck, LuMail, LuMinus, LuChevronLeft, LuChevronRight, LuCircleAlert, LuCircleCheck, LuCircleX, LuClock, LuHourglass, LuLoader, LuRefreshCw, LuHand, LuCrown, LuFileText, LuFolder, LuLayers, LuListTodo, LuMessageSquareText, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
+import { LuSlidersHorizontal, LuCheckCheck, LuMail, LuMinus, LuChevronLeft, LuChevronRight, LuCircleAlert, LuCircleCheck, LuCircleX, LuClock, LuHourglass, LuLoader, LuRefreshCw, LuHand, LuCrown, LuFileText, LuFolder, LuLayers, LuListTodo, LuMessageSquareText, LuMessagesSquare, LuNotebookPen, LuPlus, LuRotateCcw, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
 import type { OfficeTask, ReportOutcome, WorkJob, WorkReport } from '@after-office/shared'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
@@ -12,7 +12,7 @@ import { Modal } from './Modal'
 import { useModalMaximize } from './Maximize'
 import { confirm } from './Confirm'
 import { tip } from './Tooltip'
-import { useWorkReady } from '../state/live'
+import { useLive, useWorkReady } from '../state/live'
 import { api } from '../state/auth'
 import { bulkStateOf, runReportBulk, useReportBulk, type ReportBulk } from '../state/reportBulk'
 import { openUrl, setUrl, useUrl } from '../state/url'
@@ -101,6 +101,7 @@ export function ReportRow({
                 <LuLayers /> {r.job.title}
               </span>
             )}
+            {r.threadId && <ThreadName id={r.threadId} />}
             <TagChips ids={r.tags} max={allTags ? undefined : 1} />
           </span>
         </span>
@@ -1007,6 +1008,7 @@ function ReportView({ r, onClose, title }: { r: WorkReport; onClose: () => void;
         <span>{new Date(r.finishedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</span>
         <span>·</span>
         <span>took {duration(r.finishedAt - r.startedAt)}</span>
+        {r.threadId && <ThreadLink id={r.threadId} />}
         {r.job && (
           <span className="report-row__job">
             <LuLayers /> {r.job.title}
@@ -1156,5 +1158,27 @@ export function FolderReports({ folder }: { folder: string }) {
         </button>
       )}
     </div>
+  )
+}
+
+/** The thread a report belongs to: a link that opens it (its chat, tasks and files). */
+function ThreadLink({ id }: { id: string }) {
+  const title = useLive((s) => s.threads.find((t) => t.id === id)?.title)
+  if (!title) return null
+  return (
+    <button type="button" className="report-row__job report__thread" onClick={() => openUrl({ thread: id })} data-tip="Open the thread">
+      <LuMessagesSquare /> {title}
+    </button>
+  )
+}
+
+/** In a report's row: the thread it belongs to (the report itself links to it). */
+function ThreadName({ id }: { id: string }) {
+  const title = useLive((s) => s.threads.find((t) => t.id === id)?.title)
+  if (!title) return null
+  return (
+    <span className="report-row__job report-row__thread truncate">
+      <LuMessagesSquare /> {title}
+    </span>
   )
 }

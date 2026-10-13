@@ -11,6 +11,7 @@ import { channelNames, notify } from '../notify'
 import { bossMode, bossModeState, officeSettings } from './settings'
 import { tmux } from '../agents/tmux'
 import { isAsleep, wakeAgent } from '../agents/sleep'
+import { closeIdleThreads, deliverToThread, drainThreads, listThreads, onThreadTurn, threadOfSession, touchThread } from './threads'
 import { transcriptPath, unwrapPaste } from '../agents/transcripts'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
 import { listTags } from './tags'
@@ -61,6 +62,7 @@ export function workState(): WorkState {
     notes: noteSummaries(),
     statuses: taskStatuses(),
     reportJob: reportJob(),
+    threads: listThreads(),
   }
 }
 
@@ -115,6 +117,9 @@ export const expectReply = (agentId: string, managerId: string, session = '') =>
  * there) while that session is open, else, or if that fails, as usual (the main session, queued while it's busy).
  */
 export async function deliverToManager(managerId: string, text: string, session?: string | null) {
+  // a thread's session: queued until it's free, and opened again if it was closed (work/threads.ts)
+  const thread = threadOfSession(managerId, session)
+  if (thread) return deliverToThread(thread, text)
   if (session) {
     const side = sideSessionsRepo.get(managerId, session)
     if (side && !side.closed_at) {
@@ -333,6 +338,8 @@ function fileChatTurn(agentId: string, key: string, finalMessage: string | undef
 export function onSideStopped(agentId: string, key: string, finalMessage?: string, failed = false) {
   // a parallel task's session: the task's report (parallel.ts)
   if (onParallelStopped(agentId, key, finalMessage, failed)) return
+  // a thread's manager session: its answer is new for the owner, and what waits for it goes in next
+  onThreadTurn(agentId, key, finalMessage)
   carryOnChat(agentId, key, finalMessage, failed)
   fileChatTurn(agentId, key, finalMessage, failed)
 }
@@ -360,6 +367,8 @@ const CHAT_CONTINUE = 'Your previous reply was cut off by an API error (connecti
 /** A prompt in a side session: only the chat-report bookkeeping (and where its tool calls came from). */
 export function onSidePromptSubmitted(agentId: string, key: string, prompt?: string) {
   trackTurnOrigin(agentId, prompt ?? '')
+  // a thread's manager session reads reports too: the same guard, for that session
+  noteManagerTurn(agentId, key, prompt)
   promptCount.set(turnKey(agentId, key), (promptCount.get(turnKey(agentId, key)) ?? 0) + 1)
   const c = chatTurns.get(turnKey(agentId, key))
   if (c && prompt) {
@@ -374,10 +383,7 @@ export function onPromptSubmitted(agentId: string, prompt?: string, midTurn = fa
   trackTurnOrigin(agentId, prompt ?? '')
   promptCount.set(agentId, (promptCount.get(agentId) ?? 0) + 1)
   // the manager's turn: started by an agent's output (a forwarded report or answer), or by anything else
-  if (agentsRepo.get(agentId)?.kind === 'manager') {
-    readingAgentOutput.set(agentId, !!prompt && prompt.includes('<<<REPORT'))
-    reportedTasks.set(agentId, prompt ? reportedTaskIds(prompt) : new Set())
-  }
+  noteManagerTurn(agentId, '', prompt)
   // the owner's chat message whose answer goes to Reports: seen now; another message after it means they moved on
   const c = chatTurns.get(agentId)
   if (c && prompt) {
@@ -434,8 +440,11 @@ export function fileReport(agentId: string, ref: Omit<Active, 'restoreMode' | 's
     ...(ref.taskId && tasksRepo.get(ref.taskId)?.folder ? { folder: tasksRepo.get(ref.taskId)!.folder } : {}),
     // and its job: shown with the other steps of the same work
     ...(ref.taskId && tasksRepo.get(ref.taskId)?.job ? { job: tasksRepo.get(ref.taskId)!.job } : {}),
+    // and its thread: shown there with the rest of the topic
+    ...(ref.taskId && tasksRepo.get(ref.taskId)?.threadId ? { threadId: tasksRepo.get(ref.taskId)!.threadId } : {}),
   }
   reportsRepo.put(report)
+  touchThread(report.threadId)
   reportsRepo.prune()
   publishWork('reports')
   if (ref.taskId) addComment({ taskId: ref.taskId, author: 'agent', agentId, kind: 'report', text: report.text, ok })
@@ -460,11 +469,25 @@ export function addComment(c: Omit<TaskComment, 'id' | 'createdAt'>) {
  * Set from the prompt itself (UserPromptSubmit), so the owner's own messages and the office's notes don't count.
  */
 const readingAgentOutput = new Map<string, boolean>()
-export const isReadingAgentOutput = (managerId: string) => readingAgentOutput.get(managerId) === true
+/** Per session of the manager (`${managerId}` or `${managerId}:${key}`, e.g. a thread). Without a session: any of them
+ *  (the careful answer for an action that isn't tied to one). */
+export const isReadingAgentOutput = (managerId: string, session?: string) =>
+  session === undefined
+    ? [...readingAgentOutput].some(([k, v]) => v && (k === managerId || k.startsWith(`${managerId}:`)))
+    : readingAgentOutput.get(turnKey(managerId, session)) === true
 // the tasks whose reports this turn is about: the manager may send those back for another round (same task, same
 // agent) without the owner. Only ids from the office's own header lines count, never from inside a report.
 const reportedTasks = new Map<string, Set<string>>()
-export const isReportedNow = (managerId: string, taskId: string) => reportedTasks.get(managerId)?.has(taskId) === true
+export const isReportedNow = (managerId: string, taskId: string, session?: string) =>
+  session === undefined
+    ? [...reportedTasks].some(([k, v]) => (k === managerId || k.startsWith(`${managerId}:`)) && v.has(taskId))
+    : reportedTasks.get(turnKey(managerId, session))?.has(taskId) === true
+/** A manager's prompt (any of its sessions): did an agent's output start this turn? */
+function noteManagerTurn(agentId: string, key: string, prompt?: string) {
+  if (agentsRepo.get(agentId)?.kind !== 'manager') return
+  readingAgentOutput.set(turnKey(agentId, key), !!prompt && prompt.includes('<<<REPORT'))
+  reportedTasks.set(turnKey(agentId, key), prompt ? reportedTaskIds(prompt) : new Set())
+}
 
 /** Task ids in the office's "Report from … (…, task id X)." lines, outside the fenced reports. */
 export function reportedTaskIds(prompt: string) {
@@ -870,6 +893,9 @@ export function startWorkJobs() {
   // parallel sessions closed by hand or gone: their tasks back to To do
   setInterval(() => tidyParallel(), 20_000)
   setInterval(safe(drainQueues), 5_000)
+  // threads: what waits for their sessions, and quiet sessions closed (their memory back)
+  setInterval(safe(drainThreads), 5_000)
+  setInterval(safe(() => closeIdleThreads()), 60_000)
   void safe(tickCrons)()
 }
 

@@ -27,6 +27,7 @@ import type { AgentStatus, LiveMode } from '@after-office/shared'
 import { liveApi, useLive } from '../state/live'
 import { isAway, unreadOf, useOffice, type OfficeAgent, avatarStyle } from '../state/store'
 import { ReportsPanel } from './Reports'
+import { ThreadsPanel } from './Threads'
 import { idleText, waitingLabel } from './agentActivity'
 import { useDashboard } from '../state/dashboard'
 import { confirmWith } from './Confirm'
@@ -54,11 +55,12 @@ export const MODE_LABEL: Record<LiveMode, string> = {
   dontAsk: "Don't ask",
 }
 
-/** Right column on desktop: reports + agents. On phones the dock (MobileDock.tsx) shows these in modals. */
+/** Right column on desktop: reports, threads and agents. On phones the dock (MobileDock.tsx) shows these in modals. */
 export function AgentsPanel() {
   return (
     <aside className="side side--right">
       <ReportsPanel />
+      <ThreadsPanel />
       <AgentsCard />
     </aside>
   )

@@ -8,7 +8,8 @@ import { create } from 'zustand'
 //   ?folder=<path>  ?newfolder=1  ?newtask=1&nt_agent=&nt_folder=&nt_status=&nt_tag=  ?note=<id>|new&nfolder=&ntag=  ?notes=1&nq=&nview=  ?daily=<id>|new  ?addagent=1|manager
 //   ?agent=<id>&tab=<tab>  ?manager=1&mtab=chat|team  ?automation=1  ?profile=1  ?settings=1 (office branding)  ?password=1  ?twofa=1  ?activity=1
 //   reports view also: &tag=<id,id>
-//   phones: ?sheet=attention|cron|tasks|reports|agents (the dock's bottom sheets, ui/MobileDock.tsx)
+//   ?thread=<id>|new (ui/ThreadView.tsx, ui/Threads.tsx)  ?newtask=1&nt_thread=<id> (a task made in a thread)
+//   phones: ?sheet=attention|cron|tasks|reports|agents|threads (the dock's bottom sheets, ui/MobileDock.tsx; threads: the stage's button)
 
 type Params = Record<string, string>
 

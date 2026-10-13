@@ -130,6 +130,8 @@ export interface SideSessionInfo {
   title?: string
   /** running (its process is up); closed ones can be opened again */
   open: boolean
+  /** the thread it runs (the manager's sessions only) */
+  threadId?: string
   status: AgentStatus
   waitingFor?: 'permission' | 'plan' | 'question'
   tool?: string
@@ -300,6 +302,38 @@ export interface WorkState {
   statuses: TaskStatusDef[]
   /** Read / Unread / Delete on many reports, running on the server (every device shows it), or null */
   reportJob: ReportJob | null
+  /** the owner's threads with the manager, latest activity first (archived ones too) */
+  threads: OfficeThread[]
+}
+
+/**
+ * A thread: one topic, led by the manager in a session of its own (a side session), with everything about it in one
+ * place: the chat, the tasks started from it (and their reports), its folder and tags.
+ */
+export interface OfficeThread {
+  id: string
+  title: string
+  managerId: string
+  /** the manager's side session it runs in (s2, s3…) */
+  sessionKey: string
+  /** a sub-thread: the thread it's part of (one level: a sub-thread has none of its own) */
+  parentId?: string
+  /** kept at the top of the list (a sub-thread: at the top of its thread's) */
+  pinned?: boolean
+  /** its place in the list, set by dragging (among its siblings); unset: by latest activity, above the placed ones */
+  order?: number
+  folder?: string
+  tags?: string[]
+  createdAt: number
+  /** latest message, task or report in it */
+  lastActivityAt: number
+  /** the manager's context block went in with the owner's first message */
+  started?: boolean
+  /** the manager's replies since the owner last looked */
+  unread?: number
+  /** the start of the manager's latest reply */
+  lastMessage?: string
+  archivedAt?: number
 }
 
 /** An action on many reports at once (Reports → pick → Read / Unread / Delete), run by the server in steps. */
@@ -369,6 +403,8 @@ export interface WorkReport {
   tags?: string[]
   /** the piece of work it belongs to (its task's, or the one the manager's note is about) */
   job?: WorkJob
+  /** the thread its task (or the manager's note) belongs to */
+  threadId?: string
   /** how it turned out, when the manager said so (notify_user) */
   outcome?: ReportOutcome
   /** a step of a task the manager handed out: the manager sums it up, so the Reports card leaves it to that summary */
@@ -466,6 +502,8 @@ export interface OfficeTask {
   /** the manager's side session it was delegated from (s2, s3…): what comes back about it (its report, its check,
    *  a rejection) goes to that session while it's open, else to the main one */
   managerSession?: string
+  /** the thread it belongs to (started from it, or by an @mention in it): its report shows there too */
+  threadId?: string
   /** Live: task ids this one waits for. It starts on its own once all of them are finished (review or done). */
   blockedBy?: string[]
   /** tag ids (the owner's labels, see Tag) */

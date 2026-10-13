@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 import { DEFAULT_MODEL, divisionOf, MODEL_CHOICES, RULE_PACKS, type OfficeTask, type RulePackId } from '@after-office/shared'
-import { agentsRepo, commentsRepo, connectorsOf, cronsRepo, queueRepo, reportsRepo, tasksRepo, type AgentRow } from './db'
+import { agentsRepo, commentsRepo, connectorsOf, cronsRepo, queueRepo, reportsRepo, tasksRepo, threadsRepo, type AgentRow } from './db'
 import { knownConnectors, listConnectors } from './agents/connectors'
 import { diffSince } from './work/git'
 import { AgentError, interrupt, restartAgent, sessionKeyOf } from './agents/manager'
@@ -12,6 +12,7 @@ import { requestHire } from './work/hires'
 import { bossMode, countBoss } from './work/settings'
 import { logSystem, noteManagerMessage } from './work/activity'
 import { runtimeOf } from './agents/registry'
+import { createThread, sendToThread, threadOfSession, touchThread, updateThread } from './work/threads'
 import { isAsleep, isWaking, wakeAgent } from './agents/sleep'
 import { jobNamed } from './work/jobs'
 import { statusLabel } from './work/statuses'
@@ -247,7 +248,7 @@ function buildServer(managerId: string, session = '') {
       try {
         const target = resolveAgent(agent, managerId)
         // injection guard (work.ts): a message typed straight into an agent could carry what a report slipped in
-        if (isReadingAgentOutput(managerId) && !bossMode())
+        if (isReadingAgentOutput(managerId, session) && !bossMode())
           return fail(new Error("Right after an agent's report, messages to agents are off. To have the reporting agent redo its task, use send_back_task; otherwise tell the owner what you'd send, or make it a task with delegate_task (the owner approves it)."))
         noteManagerMessage(target.id, managerId)
         const result = await deliver(target.id, `[From the manager] ${body}`)
@@ -270,7 +271,7 @@ function buildServer(managerId: string, session = '') {
   }
   // right after an agent's report, no stopping agents (an injected report mustn't be able to halt the office)
   const stopRefused = () =>
-    isReadingAgentOutput(managerId) && !bossMode()
+    isReadingAgentOutput(managerId, session) && !bossMode()
       ? fail(new Error("Right after an agent's report, stopping agents is off. Tell the owner what you'd stop and why, or wait for your next turn."))
       : null
 
@@ -353,7 +354,7 @@ function buildServer(managerId: string, session = '') {
         if (Date.now() - last < RESTART_EVERY_MS)
           return fail(new Error(`${target.name} was restarted less than 10 minutes ago. Give it time, or tell the owner it still looks stuck.`))
         // injection guard (as for message_agent): right after an agent's report, no stopping an agent mid-work
-        if (now && isReadingAgentOutput(managerId) && !bossMode())
+        if (now && isReadingAgentOutput(managerId, session) && !bossMode())
           return fail(new Error("Right after an agent's report, restarting an agent mid-work is off. Leave out `now` (it restarts once idle), or tell the owner."))
         if (isAsleep(target.id)) {
           lastRestart.set(target.id, Date.now())
@@ -592,7 +593,7 @@ function buildServer(managerId: string, session = '') {
           fresh: !!freshContext,
           enabled: true,
         })
-        return text(`${applied(changeCron(managerId, { action: 'create', cron }), `Daily job "${cron.name}" (id ${cron.id})`)}`)
+        return text(`${applied(changeCron(managerId, { action: 'create', cron }, session), `Daily job "${cron.name}" (id ${cron.id})`)}`)
       } catch (e) {
         return fail(e)
       }
@@ -629,7 +630,7 @@ function buildServer(managerId: string, session = '') {
           },
           previous,
         )
-        return text(applied(changeCron(managerId, { action: 'update', cron, previous }), `Daily job "${cron.name}"`))
+        return text(applied(changeCron(managerId, { action: 'update', cron, previous }, session), `Daily job "${cron.name}"`))
       } catch (e) {
         return fail(e)
       }
@@ -645,7 +646,7 @@ function buildServer(managerId: string, session = '') {
     async ({ job }) => {
       try {
         const previous = findCron(job)
-        return text(applied(changeCron(managerId, { action: 'delete', previous }), `Deleting "${previous.name}"`))
+        return text(applied(changeCron(managerId, { action: 'delete', previous }, session), `Deleting "${previous.name}"`))
       } catch (e) {
         return fail(e)
       }
@@ -788,7 +789,7 @@ function buildServer(managerId: string, session = '') {
     },
     async ({ task, feedback }) => {
       try {
-        const result = await managerReviseTask(managerId, task, feedback)
+        const result = await managerReviseTask(managerId, task, feedback, session)
         return text(
           result === 'sent'
             ? 'Sent back for another round.'
@@ -860,9 +861,68 @@ function buildServer(managerId: string, session = '') {
     },
     async ({ title, text: body, folder, tags, job, outcome }) => {
       try {
-        const where = cleanFolder(folder)
-        notifyUser(managerId, title, body, tagIdsByName(tags), where, job ? jobNamed(job) : undefined, outcome)
+        // written in a thread: the note belongs to it (with its folder and tags unless given)
+        const thread = threadOfSession(managerId, session)
+        const where = cleanFolder(folder) ?? thread?.folder
+        const tagIds = tags?.length ? tagIdsByName(tags) : thread?.tags
+        notifyUser(managerId, title, body, tagIds, where, job ? jobNamed(job) : undefined, outcome, thread?.id)
+        touchThread(thread?.id)
         return text(where ? `Posted to Reports, with the folder ${where}.` : 'Posted to Reports.')
+      } catch (e) {
+        return fail(e)
+      }
+    },
+  )
+
+  server.registerTool(
+    'open_sub_thread',
+    {
+      description:
+        "Only in a thread: when its topic grows into parts that are better handled apart (e.g. the QR page and the poster gallery of one project), open a sub-thread for a part. It gets a session of its own (you there, with a summary of this thread), this thread's folder and tags unless you give others, and your brief as its first message. One level: from a sub-thread, it becomes a sibling. The owner is told in Reports; say so here too.",
+      inputSchema: {
+        title: z.string().min(1).max(80).describe('the part, in a few words'),
+        brief: z.string().min(1).max(20_000).describe('what this part is about and what to do first: the first message in the sub-thread'),
+        folder: z.string().max(1000).optional().describe("absolute path; default: this thread's folder"),
+        tags: z.array(z.string().max(40)).max(10).optional().describe("tag names; default: this thread's tags"),
+      },
+    },
+    async ({ title, brief, folder, tags }) => {
+      try {
+        const here = threadOfSession(managerId, session)
+        if (!here) return fail(new Error('This is not a thread: open_sub_thread only works inside one.'))
+        const sub = await createThread({ title, parentId: here.id, ...(folder ? { folder: cleanFolder(folder) } : {}), ...(tags?.length ? { tags: tagIdsByName(tags) } : {}) })
+        const parent = threadsRepo.get(sub.parentId!)!
+        // its first message: the brief (its session starts now; this doesn't wait for it)
+        void sendToThread(sub.id, `[From you, in the thread "${parent.title}"] ${brief}`).catch((e) => console.warn('[threads] sub-thread brief:', e instanceof Error ? e.message : e))
+        notifyUser(managerId, `New sub-thread: ${sub.title}`, `Opened under "${parent.title}".\n\n${brief}`, sub.tags, sub.folder, undefined, undefined, parent.id)
+        return text(`Sub-thread "${sub.title}" (id ${sub.id}) opened under "${parent.title}"; your brief is its first message. The owner sees it in Threads and Reports.`)
+      } catch (e) {
+        return fail(e)
+      }
+    },
+  )
+
+  server.registerTool(
+    'update_thread',
+    {
+      description:
+        "Only in a thread (your messages there start with \"[Thread: …]\"): rename it, or set the folder and tags its tasks get by default. Use it when the topic's name or place changes; tell the owner.",
+      inputSchema: {
+        title: z.string().min(1).max(80).optional(),
+        folder: z.string().max(1000).optional().describe('absolute path of the folder this topic works in; "" for none'),
+        tags: z.array(z.string().max(40)).max(10).optional().describe('tag names the owner made (see list_tags); [] for none'),
+      },
+    },
+    async ({ title, folder, tags }) => {
+      try {
+        const thread = threadOfSession(managerId, session)
+        if (!thread) return fail(new Error('This is not a thread: update_thread only works inside one.'))
+        const next = updateThread(thread.id, {
+          ...(title !== undefined ? { title } : {}),
+          ...(folder !== undefined ? { folder: folder ? (cleanFolder(folder) ?? null) : null } : {}),
+          ...(tags !== undefined ? { tags: tagIdsByName(tags) ?? null } : {}),
+        })
+        return text(`Thread "${next.title}" updated${next.folder ? ` (folder ${next.folder})` : ''}.`)
       } catch (e) {
         return fail(e)
       }

@@ -1,0 +1,205 @@
+/* ── threads (ui/Threads.tsx, ui/ThreadView.tsx) ───────────────────── */
+.card--threads .card__head h2 { display: inline-flex; align-items: center; gap: 6px; }
+.thread-row__icon {
+  flex-shrink: 0; display: grid; place-items: center; width: 24px; height: 24px; margin-top: 1px; border-radius: 8px;
+  font-size: 13px; color: var(--muted); background: var(--card-2);
+}
+.thread-row__icon--working { color: var(--working); background: color-mix(in srgb, var(--working) 14%, transparent); }
+.thread-row__icon--waiting { color: var(--hl-ink); background: var(--accent-soft); }
+.thread-row__state { flex-shrink: 0; font-size: 11px; color: var(--working); }
+.thread-row__state--waiting { color: var(--hl-ink); font-weight: 600; }
+.thread-row .report-row__title-line { display: flex; align-items: baseline; gap: 6px; }
+.thread-row .report-row__meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.thread-row__count {
+  flex-shrink: 0; align-self: center; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 999px;
+  display: grid; place-items: center; background: var(--hl); color: #fff; font-size: 10.5px; font-weight: 700;
+}
+
+/* new thread */
+.new-thread { display: grid; gap: 12px; }
+.new-thread__row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 560px) { .new-thread__row { grid-template-columns: 1fr; } }
+
+/* the thread window: the chat beside what the topic made */
+.thread-modal .modal__body.thread-view { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; height: min(78vh, 760px); min-height: 0; padding-top: 4px; }
+.thread-modal.modal--full .modal__body.thread-view { height: 100%; }
+.thread-chat { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.thread-side { display: flex; flex-direction: column; gap: 10px; min-height: 0; border-left: 1px solid var(--line); padding-left: 14px; }
+.thread-side__tabs { flex-shrink: 0; }
+.thread-side__tabs button { display: inline-flex; align-items: center; gap: 5px; }
+.thread-side__count { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: color-mix(in srgb, currentColor 14%, transparent); font-size: 10.5px; display: inline-grid; place-items: center; }
+.thread-pane { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.thread-pane__add { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; }
+.thread-pane .empty { font-size: 12.5px; }
+
+.thread-head { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.thread-head__title {
+  all: unset; box-sizing: border-box; width: 100%; font-size: 16px; font-weight: 650; padding: 3px 6px; margin-left: -6px; border-radius: 8px;
+}
+.thread-head__title:hover { background: var(--card-2); }
+.thread-head__title:focus { background: var(--card-2); box-shadow: 0 0 0 2px var(--hl) inset; }
+.thread-head__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.thread-head__meta .rs { min-width: 150px; max-width: 240px; }
+.thread-head__state { font-size: 12px; color: var(--muted); }
+.thread-head__state--working { color: var(--working); }
+.thread-head__state--waiting { color: var(--hl-ink); font-weight: 600; }
+
+.thread-tasks { margin: 0; padding: 0; display: grid; gap: 2px; }
+.thread-tasks li { list-style: none; }
+.thread-task { all: unset; box-sizing: border-box; width: 100%; display: grid; gap: 3px; padding: 7px 8px; border-radius: 10px; cursor: pointer; }
+.thread-task:hover { background: var(--card-2); }
+.thread-task:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
+.thread-task__title { font-size: 13px; font-weight: 500; }
+.thread-task__meta { display: flex; align-items: center; gap: 8px; font-size: 12px; min-width: 0; }
+.thread-files { display: grid; gap: 4px; padding: 6px 0; border-top: 1px solid var(--line); }
+.thread-files__head.link { padding: 0; font-weight: 600; color: var(--text); text-align: left; }
+
+/* @: hand the message to an agent */
+.mention { position: relative; display: inline-flex; }
+.mention .chat__attach.is-on { color: var(--hl-ink); background: var(--accent-soft); }
+.popover.mention__menu {
+  position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 30; width: 240px; max-height: 300px; overflow-y: auto;
+  padding: 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; transform-origin: bottom left;
+}
+.mention__title { padding: 4px 8px 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.mention__item {
+  all: unset; box-sizing: border-box; display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13px;
+}
+.mention__item:hover, .mention__item:focus-visible { background: var(--card-2); }
+.mention__empty { padding: 6px 8px; font-size: 12.5px; }
+
+/* phones: one column, the chat or a list under the tabs */
+@media (max-width: 768px) {
+  .thread-modal .modal__body.thread-view--phone { display: flex; flex-direction: column; gap: 10px; height: auto; flex: 1; min-height: 0; }
+  .thread-view--phone .thread-chat { flex: 1; min-height: 0; }
+  .thread-view--phone .thread-pane { flex: 1; }
+  .thread-view--phone .thread-head__meta .rs { max-width: none; flex: 1; }
+}
+
+/* a report's thread (ui/Reports.tsx ThreadLink): opens it */
+button.report__thread { all: unset; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--hl-ink); }
+button.report__thread:hover { text-decoration: underline; }
+.stab--thread .stab__pick { display: inline-flex; align-items: center; gap: 5px; }
+/* inside its own thread, a report doesn't need to say which thread it's in */
+.thread-pane:not(.thread-pane--family) .report-row__thread { display: none; }
+.thread-pane { overflow-x: hidden; }
+.thread-pane .report-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* the thread drawer (like an agent's chat): its head holds the title, folder and tags */
+.thread-drawer__head { align-items: flex-start; }
+.thread-drawer__icon { display: grid; place-items: center; font-size: 18px; color: var(--muted); background: var(--card-2); flex-shrink: 0; }
+.thread-drawer__icon.thread-row__icon--working { color: var(--working); background: color-mix(in srgb, var(--working) 14%, transparent); }
+.thread-drawer__icon.thread-row__icon--waiting { color: var(--hl-ink); background: var(--accent-soft); }
+.thread-drawer__actions { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.thread-drawer .drawer__body:not(.drawer__body--flush) { display: flex; flex-direction: column; min-height: 0; }
+.thread-drawer .thread-pane { flex: 1; }
+@media (max-width: 768px) {
+  .thread-drawer__head { flex-wrap: wrap; }
+  .thread-drawer__actions { order: -1; margin-left: auto; }
+  .thread-drawer .thread-head { flex-basis: 100%; }
+  .thread-drawer__icon { display: none; }
+}
+
+/* @ in the message box: the box's own text is see-through, a copy behind it paints the mentioned names */
+.composer-field { position: relative; flex: 1; min-width: 0; display: flex; }
+.composer-field > textarea { flex: 1; min-width: 0; }
+.composer-field__input { color: transparent !important; caret-color: var(--text); -webkit-text-fill-color: transparent; }
+.composer-field__input::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
+.composer-field__mirror {
+  position: absolute; inset: 0 auto auto 0; width: 100%; box-sizing: border-box; overflow: hidden; pointer-events: none;
+  border-style: solid; border-color: transparent; white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word; color: var(--text);
+}
+.composer-field__mirror mark { background: none; color: var(--hl-ink); font-weight: 600; }
+.composer-mentions {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 30; width: min(280px, 100%); max-height: 260px; overflow-y: auto;
+  padding: 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;
+}
+.composer-mentions__item {
+  all: unset; box-sizing: border-box; display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13px;
+}
+.composer-mentions__item.is-active { background: var(--accent-soft); }
+.chat--mobile .chat__composer .composer-field { grid-column: 1 / -1; grid-row: 1; }
+.chat--mobile .chat__composer .composer-field > textarea { width: 100%; }
+
+/* sub-threads: under their thread in the list (foldable), and a way back up from one */
+.thread-row { position: relative; }
+.thread-row--sub { padding-left: 22px; }
+.thread-row--sub::before { content: ''; position: absolute; left: 17px; top: 0; bottom: 0; width: 1.5px; background: var(--line); }
+.thread-row--sub + .report-row:not(.thread-row--sub) { border-top: 1px solid var(--line); }
+.report-row.thread-row--sub { border-top: none; }
+.thread-row__fold {
+  all: unset; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); z-index: 1; display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 8px; color: var(--muted); font-size: 14px; cursor: pointer;
+}
+/* room for it on the right (the unread count moves left of it) */
+.thread-row--parent > .report-row__main { padding-right: 34px; }
+.thread-row__fold:hover { background: var(--card-2); color: var(--text); }
+.thread-row__fold svg { transition: transform .15s ease; }
+.thread-row__fold.is-folded svg { transform: rotate(-90deg); }
+.thread-head__parent {
+  all: unset; justify-self: start; display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  font-size: 12px; color: var(--muted); cursor: pointer; border-radius: 6px; padding: 1px 4px; margin-left: -4px;
+}
+.thread-head__parent:hover { color: var(--hl-ink); background: var(--card-2); }
+.thread-sub__when { flex-shrink: 0; margin-left: auto; }
+
+/* the thread's head: the tags box as tall as the folder button beside it */
+.thread-head__meta .rs--multi .rs__control { min-height: 24px !important; padding: 0 3px 0 9px; border-radius: 999px; font-size: 12px; }
+.thread-head__meta .rs--multi .rs__dropdown-indicator { padding: 2px; }
+.thread-head__meta .rs--multi .rs__value-container { gap: 3px; }
+.thread-head__meta .rs--multi .rs__multi-value { margin: 2px 0; }
+.thread-head__meta .rs--multi .rs__input-container, .thread-head__meta .rs--multi .rs__placeholder { margin: 0; padding: 0; }
+
+/* a sub-thread's place: its thread › itself */
+.thread-crumbs { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 12px; color: var(--muted); }
+.thread-crumbs__link {
+  all: unset; display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 45%; cursor: pointer; border-radius: 6px; padding: 1px 4px; margin-left: -4px;
+}
+.thread-crumbs__link:hover { color: var(--hl-ink); background: var(--card-2); }
+.thread-crumbs__sep { flex-shrink: 0; font-size: 12px; }
+.thread-crumbs__here { display: inline-flex; align-items: center; gap: 4px; color: var(--text); font-weight: 500; min-width: 0; }
+.thread-crumbs svg { flex-shrink: 0; }
+
+/* a new sub-thread, made inside its thread's drawer */
+.thread-new-sub { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); }
+.thread-new-sub__title { font-size: 13px; font-weight: 600; }
+.thread-new-sub textarea { resize: vertical; }
+.thread-new-sub__actions { display: flex; align-items: center; gap: 8px; }
+.thread-new-sub__actions .muted { flex: 1; font-size: 12px; }
+
+/* the new-thread form: the tags box as tall as the folder button beside it */
+.new-thread .rs--multi .rs__control { min-height: 30px !important; padding: 0 6px 0 11px; border-radius: 999px; }
+.new-thread .rs--multi .rs__dropdown-indicator { padding: 2px 4px; }
+.new-thread .rs--multi .rs__multi-value { margin: 2px 0; }
+.new-thread .rs--multi .rs__input-container, .new-thread .rs--multi .rs__placeholder { margin: 0; padding: 0; }
+.new-thread__row { align-items: start; }
+
+.thread-row .report-row__job { white-space: nowrap; flex-shrink: 0; }
+.thread-row .report-row__meta { flex-wrap: wrap; row-gap: 2px; }
+
+/* the folder button and the tags box: one height */
+.new-thread .folder-select { min-height: 32px; }
+.new-thread .rs--multi .rs__control { min-height: 32px !important; }
+.new-thread .folder-select__pick { min-height: 30px; }
+
+.threads-search { margin: 8px 0 4px; flex-shrink: 0; }
+
+/* the + : in the head on a computer, on the tabs' row in the phones' sheet */
+.threads-tabs { display: flex; align-items: center; gap: 8px; }
+.threads-tabs > .reports-panel__tabrow { flex: 1; min-width: 0; }
+.threads-tabs__add { display: none; flex-shrink: 0; }
+.dock-sheet .card--threads > .card__head { display: none; }
+.dock-sheet .threads-tabs__add { display: grid; }
+/* Threads: its three tabs share the row */
+.threads-tabs .reports-panel__tabrow button { flex: 1 0 auto; justify-content: center; }
+
+/* the list's places (ui/Threads.tsx Draggable): a thread with its sub-threads, dragged together */
+.thread-group, .thread-group__kid { list-style: none; touch-action: manipulation; }
+.thread-group + .thread-group { border-top: 1px solid var(--line); }
+.thread-group__kids { margin: 0; padding: 0; }
+.thread-group.is-dragging, .thread-group__kid.is-dragging {
+  position: relative; z-index: 3; opacity: 0.85; background: var(--card); border-radius: 10px; box-shadow: var(--shadow); cursor: grabbing;
+}
+.thread-row__pin { flex-shrink: 0; display: inline-grid; place-items: center; font-size: 11px; color: var(--hl-ink); }

@@ -24,6 +24,8 @@ import { ReportModal, ReportsModal } from './Reports'
 import { NoteModal, NotesModal } from './OwnerNotes'
 import { TaskDetailModal } from './TaskDetail'
 import { TasksModal } from './TasksModal'
+import { NewThreadModal } from './Threads'
+import { ThreadModal } from './ThreadView'
 
 // Every modal, shown from the address bar (state/url.ts). Stacking follows the order below: lists first, then what
 // is opened from them (a task, a report), then forms and settings on top.
@@ -67,6 +69,15 @@ export function UrlModals() {
       <MinimizedChips />
       {p.newfolder && (
         <NewFolderModal onClose={clear(['newfolder'])} onCreated={(folder) => setUrl({ newfolder: null, folder: folder.path }, 'push')} />
+      )}
+      {/* a thread (?thread=<id>), or a new one: tasks and reports opened from it go on top */}
+      {p.thread === 'new' && !p.tparent && <NewThreadModal onClose={clear(['thread'])} />}
+      {/* a new sub-thread: made inside its thread's drawer (which stays open) */}
+      {p.thread === 'new' && p.tparent && (
+        <ThreadModal key={p.tparent} id={p.tparent} newSub onClose={clear(['thread', 'tparent'])} onMinimize={(title) => (useMinimized.getState().addThread(p.tparent!, title), clear(['thread', 'tparent'])())} />
+      )}
+      {p.thread && p.thread !== 'new' && (
+        <ThreadModal key={p.thread} id={p.thread} onClose={clear(['thread'])} onMinimize={(title) => (useMinimized.getState().addThread(p.thread!, title), clear(['thread'])())} />
       )}
       {p.task && <TaskDetailModal key={p.task} taskId={p.task} onClose={clear(['task'])} />}
       {p.report && (
@@ -200,16 +211,18 @@ const STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
 function NewTaskFromUrl() {
   const p = useUrl((s) => s.params)
   const tagIds = useDashboard((s) => s.tags).map((t) => t.id)
-  const defaults: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus' | 'tags'>> = {
+  const defaults: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus' | 'tags' | 'threadId'>> = {
     ...(p.nt_agent ? { agentId: p.nt_agent } : {}),
     ...(p.nt_folder ? { folder: p.nt_folder } : {}),
     ...(STATUSES.includes(p.nt_status as TaskStatus) ? { status: p.nt_status as TaskStatus } : {}),
     // one of the owner's own statuses (a board column's "Add card")
     ...(p.nt_status && !STATUSES.includes(p.nt_status as TaskStatus) ? { customStatus: p.nt_status } : {}),
     // made from inside a tag (Tasks): it starts in that tag
-    ...(p.nt_tag && tagIds.includes(p.nt_tag) ? { tags: [p.nt_tag] } : {}),
+    ...(p.nt_tag ? { tags: p.nt_tag.split(',').filter((t) => tagIds.includes(t)) } : {}),
+    // made in a thread (its "New task here")
+    ...(p.nt_thread ? { threadId: p.nt_thread } : {}),
   }
-  return <TaskModal defaults={defaults} onClose={clear(['newtask', 'nt_agent', 'nt_folder', 'nt_status', 'nt_tag'])} />
+  return <TaskModal defaults={defaults} onClose={clear(['newtask', 'nt_agent', 'nt_folder', 'nt_status', 'nt_tag', 'nt_thread'])} />
 }
 
 function CronFromUrl({ id }: { id: string }) {

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { basename } from 'node:path'
 import { Hono } from 'hono'
 import type { CronJob, LiveMode, OfficeTask, TaskArchivePage, TaskPriority, TaskStatus, WorkReport } from '@after-office/shared'
-import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, ownerNotesRepo, reportsRepo, settingsRepo, tasksRepo, triggersRepo } from '../db'
+import { activityRepo, ARCHIVE_DAYS, agentsRepo, type ActivityFilter, commentsRepo, cronsRepo, ownerNotesRepo, reportsRepo, settingsRepo, tasksRepo, threadsRepo, triggersRepo } from '../db'
 import { diffSince } from '../work/git'
 import { addFolder, addFolderFile, folderOf, renameEntry, searchFolders, deleteOrphanFolder, folderFile, listFolder, readTextFile, writeTextFile, folderGit, gitBranches, gitCommit, gitDiscard, gitFetch, gitPull, gitPush, gitSwitch, setGitAs, addEmptyFile, UPLOAD_MAX, recentCommits, workspaces, zipFromFolder } from '../work/workspaces'
 import { fileResponse, reportFile, reportFiles } from '../agents/files'
@@ -17,6 +17,7 @@ import { listPreviews, stopPort, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
 import { createNote, deleteNote, reorderNotes, updateNote } from '../work/notes'
 import { cleanFolder } from '../work/folders'
+import { touchThread } from '../work/threads'
 import { toolsReport } from '../system/tools'
 import { endTerminal, runningReport } from '../system/running'
 import { taskFolder, addComment, endParallelSession, deliver, deliverToManager, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, startReportJob, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
@@ -84,6 +85,9 @@ function cleanTask(id: string, b: Partial<OfficeTask>, prev: OfficeTask | null):
     pendingCheck: prev?.pendingCheck,
     sessionKey: prev?.sessionKey,
     job: prev?.job,
+    managerSession: prev?.managerSession,
+    // made in a thread ("New task here"): it belongs there for good
+    threadId: prev ? prev.threadId : typeof b.threadId === 'string' && threadsRepo.get(b.threadId) ? b.threadId : undefined,
   }
 }
 
@@ -137,6 +141,13 @@ workRoutes.put('/tasks/:id', async (c) => {
   const next = cleanTask(id, await c.req.json(), prev)
   // the Activity log's "why": a task made here is the owner's, from this device
   next.origin = prev?.origin ?? { kind: 'owner', label: 'Made in the dashboard', ...requestWho(c), at: Date.now() }
+  // new in a thread: its report goes to the thread's manager session, like the manager's own tasks there
+  const thread = !prev && next.threadId ? threadsRepo.get(next.threadId) : null
+  if (thread) {
+    next.delegatedBy = thread.managerId
+    next.managerSession = thread.sessionKey
+    touchThread(thread.id)
+  }
   // waiting for other tasks again after it already fired: let it fire again once they finish
   if (next.blockedBy && prev?.autoStartedAt && next.status === 'todo' && JSON.stringify(prev.blockedBy) !== JSON.stringify(next.blockedBy)) next.autoStartedAt = undefined
   tasksRepo.put(next)

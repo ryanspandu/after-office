@@ -411,7 +411,8 @@ export function CronModal({ cron, onClose }: { cron?: CronJob; onClose: () => vo
 
 const TAB_KEY = 'after-office:task-panel-tab'
 
-export function TaskPanel() {
+/** `noFolders`: phones, where Folders has its own round button on the stage (ui/MobileDock.tsx FoldersFab). */
+export function TaskPanel({ noFolders = false }: { noFolders?: boolean } = {}) {
   const ready = useWorkReady()
   const { tasks, toggleTask } = useDashboard(useShallow((s) => ({ tasks: s.tasks, toggleTask: s.toggleTask })))
   // deleted ones fold away first (styles: .is-leaving)
@@ -426,7 +427,7 @@ export function TaskPanel() {
     openUrl({ tasks: '1' })
     useLaunch.getState().done()
   }, [launch])
-  const [tab, setTab] = useState<'tasks' | 'folders' | 'tags' | 'activity'>(() => {
+  const [savedTab, setTab] = useState<'tasks' | 'folders' | 'tags' | 'activity'>(() => {
     try {
       const saved = localStorage.getItem(TAB_KEY)
       // "projects": the same tab, from before it was called Folders
@@ -436,6 +437,7 @@ export function TaskPanel() {
       return 'tasks'
     }
   })
+  const tab = noFolders && savedTab === 'folders' ? 'tasks' : savedTab
   const pickTab = (t: 'tasks' | 'folders' | 'tags' | 'activity') => {
     setTab(t)
     try {
@@ -501,9 +503,11 @@ export function TaskPanel() {
           <button role="tab" aria-selected={tab === 'tasks'} className={tab === 'tasks' ? 'active' : ''} onClick={() => pickTab('tasks')}>
             <LuListTodo /> Tasks
           </button>
-          <button role="tab" aria-selected={tab === 'folders'} className={tab === 'folders' ? 'active' : ''} onClick={() => pickTab('folders')}>
-            <LuFolderGit2 /> Folders
-          </button>
+          {!noFolders && (
+            <button role="tab" aria-selected={tab === 'folders'} className={tab === 'folders' ? 'active' : ''} onClick={() => pickTab('folders')}>
+              <LuFolderGit2 /> Folders
+            </button>
+          )}
           <button role="tab" aria-selected={tab === 'tags'} className={tab === 'tags' ? 'active' : ''} onClick={() => pickTab('tags')}>
             <LuTag /> Tags
           </button>
@@ -582,7 +586,7 @@ export function TaskPanel() {
 }
 
 
-export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults?: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus' | 'description' | 'tags'>> }) {
+export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults?: Partial<Pick<OfficeTask, 'agentId' | 'folder' | 'status' | 'customStatus' | 'description' | 'tags' | 'threadId'>> }) {
   // started from one of the owner's own statuses (a board column): it counts as that status's built-in one
   const startDef = useStatuses().find((d) => d.id === defaults?.customStatus)
   const addTask = useDashboard((s) => s.addTask)
@@ -614,6 +618,8 @@ export function TaskModal({ onClose, defaults }: { onClose: () => void; defaults
       ...assigneePatch(agentId),
       description: description.trim() || undefined,
       ...(tags.length ? { tags } : {}),
+      // made in a thread: it belongs there (the server sends its report to the thread's manager session)
+      ...(defaults?.threadId ? { threadId: defaults.threadId } : {}),
       ...(mine ? {} : { ...(folder ? { folder } : {}), ...run, ...(blockedBy.length ? { blockedBy } : {}) }),
     })
     onClose()

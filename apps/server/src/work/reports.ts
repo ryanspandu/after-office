@@ -9,7 +9,7 @@ import { MAX_TAGS_PER_ITEM } from './tags'
 // Reports: the manager's notes to the owner, and marking reports read or tagged.
 
 /** Something the manager wants the user to see outside the chat: filed as an unread report. */
-export function notifyUser(managerId: string, title: string, text: string, tags?: string[], folder?: string, job?: WorkJob, outcome?: ReportOutcome) {
+export function notifyUser(managerId: string, title: string, text: string, tags?: string[], folder?: string, job?: WorkJob, outcome?: ReportOutcome, threadId?: string) {
   const now = Date.now()
   const report: WorkReport = {
     id: crypto.randomUUID(),
@@ -26,6 +26,7 @@ export function notifyUser(managerId: string, title: string, text: string, tags?
     ...(folder ? { folder } : {}),
     ...(job ? { job } : {}),
     ...(outcome ? { outcome } : {}),
+    ...(threadId ? { threadId } : {}),
   }
   // files it points at (its team's work, the office's folders) become the note's attachments
   const row = agentsRepo.get(managerId)

@@ -100,6 +100,7 @@ function sessionsOf(row: AgentRow): SideSessionInfo[] {
       key: s.key,
       ...(title ? { title } : {}),
       open: !s.closed_at,
+      ...(s.thread_id ? { threadId: s.thread_id } : {}),
       status: s.closed_at ? 'offline' : rt.status,
       ...(rt.waitingFor ? { waitingFor: rt.waitingFor } : {}),
       ...(rt.tool ? { tool: rt.tool } : {}),
@@ -233,7 +234,7 @@ export function setRateLimits(r: RateLimits) {
 }
 
 /** Filled in by work.ts (avoids an import cycle: work → manager → registry). */
-let workProvider: () => WorkState = () => ({ tasks: [], projects: [], crons: [], timezone: 'UTC', queued: {}, reports: [], archivedTasks: 0, settings: DEFAULT_SETTINGS, automation: { channels: [], quotaPaused: null }, tags: [], bossMode: null, publicAccess: { supported: false, public: false }, notes: [], statuses: [], reportJob: null })
+let workProvider: () => WorkState = () => ({ tasks: [], projects: [], crons: [], timezone: 'UTC', queued: {}, reports: [], archivedTasks: 0, settings: DEFAULT_SETTINGS, automation: { channels: [], quotaPaused: null }, tags: [], bossMode: null, publicAccess: { supported: false, public: false }, notes: [], statuses: [], reportJob: null, threads: [] })
 export const setWorkProvider = (fn: () => WorkState) => void (workProvider = fn)
 
 export function snapshot(): OfficeEvent {

@@ -1,6 +1,7 @@
+import { openUrl } from '../../state/url'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { LuCheck, LuHistory, LuLoader, LuPlus, LuTrash2, LuX } from 'react-icons/lu'
+import { LuMessagesSquare, LuCheck, LuHistory, LuLoader, LuPlus, LuTrash2, LuX } from 'react-icons/lu'
 import type { SideSessionInfo } from '@after-office/shared'
 import { liveApi } from '../../state/live'
 import type { OfficeAgent } from '../../state/store'
@@ -115,7 +116,16 @@ export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; cu
           {!!agent.unread && current !== '' && <span className="stab__badge">{agent.unread}</span>}
         </button>
         {open.map((s) =>
-          editing === s.key ? (
+          s.threadId ? (
+            // a thread's session (the manager's): it lives in its thread window, with its tasks and files
+            <span key={s.key} className="stab stab--thread" role="presentation">
+              <button className="stab__pick" onClick={() => openUrl({ thread: s.threadId! })} data-tip="A thread: opens in its own window">
+                <Dot status={s.status} waitingFor={s.waitingFor} />
+                <LuMessagesSquare />
+                <span className="truncate">{nameOf(s)}</span>
+              </button>
+            </span>
+          ) : editing === s.key ? (
             <NameInput key={s.key} value={nameOf(s)} onDone={(name) => rename(s, name)} />
           ) : (
           <span key={s.key} className={`stab${current === s.key ? ' is-on' : ''}`} role="presentation">
