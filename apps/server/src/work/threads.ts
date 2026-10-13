@@ -1,7 +1,7 @@
 import type { OfficeTask, OfficeThread } from '@after-office/shared'
 import { agentsRepo, sideSessionsRepo, tasksRepo, threadQueueRepo, threadsRepo } from '../db'
 import { AgentError } from '../agents/errors'
-import { closeSideSession, forgetSideSession, openSideSession, renameSideSession, reopenSideSession, sendChat, sendPrompt } from '../agents/manager'
+import { closeSideSession, compactSession, forgetSideSession, openSideSession, renameSideSession, reopenSideSession, sendChat, sendPrompt } from '../agents/manager'
 import { sideRuntimeOf } from '../agents/registry'
 import { tmux } from '../agents/tmux'
 
@@ -220,8 +220,10 @@ export async function drainThreads() {
 export function onThreadTurn(managerId: string, key: string, finalMessage?: string) {
   const t = threadOfSession(managerId, key)
   if (!t) return
+  const ctx = sideRuntimeOf(managerId, key).contextPct
   touchThread(t.id, {
     unread: (t.unread ?? 0) + 1,
+    ...(ctx != null ? { contextPct: ctx } : {}),
     ...(finalMessage?.trim() ? { lastMessage: finalMessage.replace(/\s+/g, ' ').trim().slice(0, 200) } : {}),
   })
   void drainThreads()
@@ -243,7 +245,8 @@ export async function closeIdleThreads(now = Date.now(), idleMs = THREAD_IDLE_MS
       idleSince.delete(t.id)
       continue
     }
-    const quiet = sideRuntimeOf(t.managerId, t.sessionKey).status === 'idle' && !threadQueueRepo.countFor(t.id)
+    const rt = sideRuntimeOf(t.managerId, t.sessionKey)
+    const quiet = rt.status === 'idle' && !rt.compactingSince && !threadQueueRepo.countFor(t.id)
     if (!quiet) {
       idleSince.delete(t.id)
       continue
@@ -252,6 +255,8 @@ export async function closeIdleThreads(now = Date.now(), idleMs = THREAD_IDLE_MS
     idleSince.set(t.id, since)
     if (now - since < idleMs) continue
     idleSince.delete(t.id)
+    // its context as last seen: shown while it rests
+    if (rt.contextPct != null && rt.contextPct !== t.contextPct) threadsRepo.put({ ...t, contextPct: rt.contextPct })
     await closeSideSession(t.managerId, t.sessionKey).catch(() => {})
     console.log(`[threads] "${t.title}" was quiet: its session closed (the conversation is kept)`)
   }
@@ -348,4 +353,11 @@ export function reorderThreads(ids: string[]) {
     if (t.order !== i) threadsRepo.put({ ...t, order: i })
   })
   publish()
+}
+
+/** Compact a thread's conversation (Claude Code's /compact): its session is opened again first if it rests. */
+export async function compactThread(id: string, focus = '') {
+  const t = getThread(id)
+  await ensureOpen(t)
+  await compactSession(t.managerId, t.sessionKey, focus)
 }

@@ -373,6 +373,7 @@ export const liveApi = {
   threadMessage: (id: string, b: { text: string; uploads?: string[]; mentions?: string[] }) =>
     call(`/api/threads/${id}/messages`, b) as Promise<{ ok: true; tasks: { id: string; agentId: string }[] }>,
   readThread: (id: string) => call(`/api/threads/${id}/read`, {}),
+  compactThread: (id: string) => call(`/api/threads/${id}/compact`, {}),
   archiveThread: (id: string, archived: boolean) => call(`/api/threads/${id}/${archived ? 'archive' : 'unarchive'}`, {}) as Promise<OfficeThread>,
   deleteThread: (id: string) => call(`/api/threads/${id}`, undefined, 'DELETE'),
   reviseTask: (taskId: string, feedback: string) => call(`/api/tasks/${taskId}/revise`, { feedback }) as Promise<{ result: 'sent' | 'queued' | 'parallel' }>,

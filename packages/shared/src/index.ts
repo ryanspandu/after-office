@@ -333,6 +333,8 @@ export interface OfficeThread {
   unread?: number
   /** the start of the manager's latest reply */
   lastMessage?: string
+  /** how full its session's context window was last seen (%): shown while the session rests */
+  contextPct?: number
   archivedAt?: number
 }
 

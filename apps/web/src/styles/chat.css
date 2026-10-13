@@ -386,3 +386,7 @@ span.stab { padding: 0 4px 0 10px; }
 .chat--mobile .chat__composer > .icon-btn:last-child { grid-column: 4; grid-row: 2; border-radius: 999px; }
 .chat--mobile .chat__composer .icon-btn { width: 38px; height: 38px; }
 .chat--drop.chat--mobile .chat__composer { border-color: var(--hl); }
+
+/* a message jumped to from elsewhere (a thread's Files): lit up for a moment */
+@keyframes msg-flash { 0%, 60% { box-shadow: 0 0 0 2px var(--hl); } 100% { box-shadow: 0 0 0 2px transparent; } }
+.msg--agent.msg--flash, .msg-user.msg--flash > .msg { animation: msg-flash 2.4s ease-out; }

@@ -9,6 +9,9 @@
 /* picked tags in a picker or filter: in their own colour */
 .rs__multi-value.tag-mv { color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); border-color: color-mix(in srgb, var(--c) 30%, transparent); font-weight: 600; }
 .rs__multi-value.tag-mv .rs__multi-value__remove { color: inherit; }
+/* picked tags are pills, like the box they sit in */
+.rs--multi .rs__multi-value.tag-mv { border-radius: 999px; padding-left: 8px; padding-right: 3px; }
+.rs__multi-value.tag-mv .rs__multi-value__remove { border-radius: 999px; }
 .tag-filter { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .tag-filter .rs { min-width: 150px; max-width: 280px; }
 .reports-modal__tags .rs { width: 170px; }

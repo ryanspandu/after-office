@@ -1,19 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { LuArchive, LuArchiveRestore, LuAtSign, LuChevronRight, LuCornerDownRight, LuGitBranch, LuFileText, LuFolderOpen, LuListTodo, LuMessagesSquare, LuMinus, LuPaperclip, LuPlus, LuTrash2, LuX } from 'react-icons/lu'
-import type { OfficeThread } from '@after-office/shared'
+import { LuArchive, LuArchiveRestore, LuAtSign, LuChevronRight, LuCornerDownRight, LuFolder, LuGitBranch, LuFileText, LuFolderOpen, LuListTodo, LuMessagesSquare, LuMinus, LuPaperclip, LuPlus, LuTrash2, LuX } from 'react-icons/lu'
+import type { ChatItem, OfficeThread, WorkReport } from '@after-office/shared'
+import { mentionedPaths } from '@after-office/shared'
 import { useShallow } from 'zustand/react/shallow'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
 import { liveApi, useLive } from '../state/live'
 import { useMinimized } from '../state/minimized'
 import { avatarStyle, useOffice, type OfficeAgent } from '../state/store'
-import { openUrl } from '../state/url'
+import { openUrl, setUrl, useParam } from '../state/url'
 import { MOBILE, onBackdropTap, useMediaQuery } from '../state/useMediaQuery'
 import { useSheetDrag } from '../state/useSheetDrag'
 import { usePresence } from '../state/usePresence'
-import { ChatView } from './agent/ChatTab'
-import { Attachments, reportUrl } from './Attachments'
+import { ChatView, type ChatJump } from './agent/ChatTab'
+import { Attachments, reportUrl, useAgentFiles } from './Attachments'
+import { FileBrowser } from './FileBrowser'
+import { splitAttachments } from './agent/chatAttachments'
+import { api } from '../state/auth'
 import { confirm } from './Confirm'
 import { ago } from './FollowUps'
 import { MaximizeButton, useMaximize } from './Maximize'
@@ -28,7 +32,7 @@ import { tip } from './Tooltip'
 // work/threads.ts); on the right what the topic made: its tasks, the files its reports carry, its reports. Phones:
 // one column, with tabs. An @ in the message box hands the message to that agent as a task (the manager hears).
 
-type Pane = 'chat' | 'subs' | 'tasks' | 'files' | 'reports'
+type Pane = 'chat' | 'subs' | 'tasks' | 'folder' | 'files' | 'reports'
 
 /** Agents named in a message ("@Kai …"), the manager left out. */
 function mentionsIn(text: string, agents: OfficeAgent[]) {
@@ -260,25 +264,116 @@ function TasksPane({ t, family }: { t: OfficeThread; family: Family }) {
   )
 }
 
-function FilesPane({ t, family }: { t: OfficeThread; family: Family }) {
+/** The thread's folder: the same file manager as an agent's Folder tab (with its git bar when it's a repo). */
+function FolderPane({ t }: { t: OfficeThread }) {
+  const [error, setError] = useState('')
+  if (!t.folder)
+    return (
+      <div className="thread-pane thread-folder--none">
+        <p className="muted">This thread has no folder yet. Pick the one its work goes into: tasks started here work there, and it shows up here with its files and git.</p>
+        <FolderSelect value={undefined} onChange={(folder) => folder && void liveApi.updateThread(t.id, { folder }).catch((e) => setError(e.message))} none="Pick a folder" />
+        {error && <p className="danger-text">{error}</p>}
+      </div>
+    )
+  return (
+    <div className="agent-folder thread-folder">
+      <code className="agent-folder__path truncate" data-tip={t.folder}>
+        {t.folder.replace(/^\/(Users|home)\/[^/]+/, '~')}
+      </code>
+      <FileBrowser key={t.folder} root={t.folder} />
+    </div>
+  )
+}
+
+/** Files in the chat: what the owner attached, and what the manager wrote or pointed to in its replies. */
+function ChatFiles({ t }: { t: OfficeThread }) {
+  const [items, setItems] = useState<ChatItem[] | null>(null)
+  useEffect(() => {
+    let gone = false
+    void api(`/api/agents/${t.managerId}/chat?limit=500&session=${t.sessionKey}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: ChatItem[]) => !gone && setItems(list))
+      .catch(() => !gone && setItems([]))
+    return () => void (gone = true)
+  }, [t.managerId, t.sessionKey, t.lastActivityAt])
+  const owner = useMemo(() => (items ?? []).flatMap((i) => (i.kind === 'user' ? splitAttachments(i.text).paths : [])), [items])
+  const made = useMemo(() => {
+    const out: string[] = []
+    for (const i of items ?? []) {
+      if (i.kind === 'tool' && /^(Write|Edit|MultiEdit|NotebookEdit)$/.test(i.tool)) {
+        const input = (i.input ?? {}) as { file_path?: unknown; notebook_path?: unknown }
+        const p = input.file_path ?? input.notebook_path
+        if (typeof p === 'string') out.push(p)
+      } else if (i.kind === 'assistant') out.push(...mentionedPaths(i.text))
+    }
+    return [...new Set(out)]
+  }, [items])
+  const ownerFiles = useAgentFiles(t.managerId, owner, true)
+  const madeFiles = useAgentFiles(t.managerId, made)
+  const sent = [...ownerFiles.values()].reverse()
+  const replies = [...madeFiles.values()].reverse()
+  if (items === null) return <p className="muted thread-files__note">Loading…</p>
+  return (
+    <>
+      {sent.length > 0 && (
+        <section className="thread-files">
+          <span className="thread-files__head">You sent</span>
+          <Attachments agentId={t.managerId} files={sent} />
+        </section>
+      )}
+      {replies.length > 0 && (
+        <section className="thread-files">
+          <span className="thread-files__head">In the replies</span>
+          <Attachments agentId={t.managerId} files={replies} />
+        </section>
+      )}
+      {!sent.length && !replies.length && <p className="empty muted">Files attached in this chat (yours, and the ones the manager writes or points to) show up here.</p>}
+    </>
+  )
+}
+
+/** A report in its thread's chat: a task's by its task id (the office's "Report from …" line), a note by its time. */
+const jumpToReport = (r: WorkReport) => openUrl({ thread: r.threadId!, tjump: r.kind === 'task' ? `task:${r.refId}` : `at:${r.finishedAt}` })
+
+/** Files of the thread's reports (its tasks', and its sub-threads' on a thread). */
+function ReportFiles({ family }: { family: Family }) {
   const reports = useDashboard(useShallow((s) => s.reports.filter((r) => !!r.threadId && family.ids.includes(r.threadId) && r.files?.length)))
   return (
-    <div className="thread-pane">
-      {t.folder && (
-        <button className="small thread-pane__add" onClick={() => openUrl({ folder: t.folder! })}>
-          <LuFolderOpen /> Open the folder
-        </button>
-      )}
+    <>
       {reports.map((r) => (
         <section key={r.id} className="thread-files">
-          <button className="thread-files__head link" onClick={() => openUrl({ report: r.id })}>
-            {r.title}
-            {family.subOf(r.threadId) && <span className="muted"> · {family.subOf(r.threadId)}</span>}
-          </button>
+          <span className="thread-files__row">
+            {/* to where it came up in the chat (its thread's, or a sub-thread's) */}
+            <button className="thread-files__head link" onClick={() => jumpToReport(r)} {...tip('Go to it in the chat')}>
+              {r.title}
+              {family.subOf(r.threadId) && <span className="muted"> · {family.subOf(r.threadId)}</span>}
+            </button>
+            <button className="icon-btn small ghost" onClick={() => openUrl({ report: r.id })} {...tip('Open the report')}>
+              <LuFileText />
+            </button>
+          </span>
           <Attachments agentId={r.agentId} files={r.files!} urlFor={reportUrl(r.id)} />
         </section>
       ))}
-      {!reports.length && <p className="empty muted">Files the work here produces (attached to its reports) show up here.</p>}
+      {!reports.length && <p className="empty muted">Files the tasks here produce (attached to their reports) show up here.</p>}
+    </>
+  )
+}
+
+/** Files, by where they came from: the chat, or the reports. */
+function FilesPane({ t, family }: { t: OfficeThread; family: Family }) {
+  const [from, setFrom] = useState<'chat' | 'reports'>('chat')
+  return (
+    <div className="thread-pane">
+      <div className="seg thread-files__tabs" role="tablist" aria-label="Files from">
+        <button role="tab" aria-selected={from === 'chat'} className={from === 'chat' ? 'active' : ''} onClick={() => setFrom('chat')}>
+          <LuMessagesSquare /> Chat
+        </button>
+        <button role="tab" aria-selected={from === 'reports'} className={from === 'reports' ? 'active' : ''} onClick={() => setFrom('reports')}>
+          <LuFileText /> Reports
+        </button>
+      </div>
+      {from === 'chat' ? <ChatFiles t={t} /> : <ReportFiles family={family} />}
     </div>
   )
 }
@@ -320,6 +415,15 @@ export function ThreadModal({ id, newSub, onClose: close, onMinimize: minimize }
   const { dragProps } = useSheetDrag(onClose, max.ref)
   // ?thread=new&tparent=<id>: the thread opens on its Sub-threads with a new one's form
   const [pane, setPane] = useState<Pane>(newSub ? 'subs' : 'chat')
+  // ?tjump=…: its chat, at a report's message (from Files)
+  const tjump = useParam('tjump')
+  const [jump, setJump] = useState<ChatJump | undefined>()
+  useEffect(() => {
+    if (!tjump) return
+    setPane('chat')
+    setJump({ key: tjump, n: Date.now() })
+    setUrl({ tjump: null }, 'replace')
+  }, [tjump])
   const family = useFamily(t ?? ({ id } as OfficeThread))
   const counts = useDashboard(
     useShallow((s) => ({
@@ -352,7 +456,7 @@ export function ThreadModal({ id, newSub, onClose: close, onMinimize: minimize }
   // the chat shows the thread session's own state; resting (closed) reads as ready: a message opens it again
   const view: OfficeAgent = side
     ? { ...manager, status: side.status, waitingFor: side.waitingFor, tool: side.tool, permissionMode: side.permissionMode, costUsd: side.costUsd, contextPct: side.contextPct, contextTokens: undefined, contextSize: undefined, compactingSince: side.compactingSince, lastMessage: side.lastMessage, unread: side.unread, error: undefined }
-    : { ...manager, status: 'idle', waitingFor: undefined, tool: undefined, contextPct: null, contextTokens: undefined, contextSize: undefined, compactingSince: undefined, unread: 0, error: undefined }
+    : { ...manager, status: 'idle', waitingFor: undefined, tool: undefined, contextPct: t.contextPct ?? null, contextTokens: undefined, contextSize: undefined, compactingSince: undefined, unread: 0, error: undefined }
   const archive = () => void liveApi.archiveThread(t.id, !t.archivedAt).then(() => !t.archivedAt && onClose())
   const remove = async () => {
     if (!(await confirm({ title: `Delete the thread “${t.title}”?`, message: 'Its conversation with the manager is forgotten. Its tasks and reports stay (in Tasks and Reports).', confirmLabel: 'Delete thread' }))) return
@@ -364,6 +468,7 @@ export function ThreadModal({ id, newSub, onClose: close, onMinimize: minimize }
     // sub-threads: a thread's own parts (one level: a sub-thread has none)
     ...(t.parentId ? [] : [{ id: 'subs' as const, label: 'Sub-threads', icon: <LuGitBranch />, count: subCount }]),
     { id: 'tasks', label: 'Tasks', icon: <LuListTodo />, count: counts.tasks },
+    { id: 'folder', label: 'Folder', icon: <LuFolder /> },
     { id: 'files', label: 'Files', icon: <LuPaperclip /> },
     { id: 'reports', label: 'Reports', icon: <LuFileText />, count: counts.reports },
   ]
@@ -407,18 +512,21 @@ export function ThreadModal({ id, newSub, onClose: close, onMinimize: minimize }
               agent={view}
               session={t.sessionKey}
               header={null}
+              jump={jump}
               thread={{
                 placeholder: mobile ? `Message ${manager.name}… (@ hands it to an agent)` : `Message ${manager.name} in this thread…  (@Name hands it to an agent · Enter to send)`,
                 send: async (text, uploads) => {
                   await liveApi.threadMessage(t.id, { text, uploads, mentions: mentionsIn(text, agents) })
                 },
                 mention: (insert) => <MentionButton onPick={insert} />,
+                compact: () => liveApi.compactThread(t.id).then(() => undefined),
                 names: agents.filter((a) => a.kind !== 'manager').map((a) => ({ name: a.name, role: a.role || a.profile.role, color: a.look.shirt })),
               }}
             />
           )}
           {pane === 'subs' && <SubThreadsPane t={t} startNew={newSub} />}
           {pane === 'tasks' && <TasksPane t={t} family={family} />}
+          {pane === 'folder' && <FolderPane t={t} />}
           {pane === 'files' && <FilesPane t={t} family={family} />}
           {pane === 'reports' && <ReportsPane family={family} />}
         </div>

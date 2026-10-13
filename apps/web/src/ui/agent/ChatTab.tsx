@@ -103,9 +103,17 @@ export interface ThreadChat {
   placeholder: string
   /** who an @ can name: offered while typing, shown in colour once named */
   names: Mentionable[]
+  /** /compact for the thread's session (opened again first if it rests) */
+  compact?: () => Promise<void>
 }
 
-export function ChatView({ agent, session, header, thread }: { agent: OfficeAgent; session: string; header: ReactNode; thread?: ThreadChat }) {
+/** A message to bring into view (a report's, by its task id; or the one nearest a time), asked again with a new `n`. */
+export interface ChatJump {
+  key: string
+  n: number
+}
+
+export function ChatView({ agent, session, header, thread, jump }: { agent: OfficeAgent; session: string; header: ReactNode; thread?: ThreadChat; jump?: ChatJump }) {
   // message times, in the office's timezone
   const timezone = useClock((s) => s.timezone)
   // the reports a message is, or names: links under it
@@ -146,7 +154,9 @@ export function ChatView({ agent, session, header, thread }: { agent: OfficeAgen
     const used = agent.contextPct != null ? ` (${Math.round(agent.contextPct)}% used)` : ''
     if (!(await confirm({ title: `Compact ${agent.name}'s conversation?`, message: `It's summarized to free the context window${used}. ${agent.name} keeps the gist of what was said, but the details of earlier messages are gone.`, confirmLabel: 'Compact', danger: false }))) return
     await run('compact', async () => {
-      await liveApi.compact(agent.id, sk)
+      // a thread: its own route, which opens the session again first if it rests
+      if (thread?.compact) await thread.compact()
+      else await liveApi.compact(agent.id, sk)
     })
   }
   const scroller = useRef<HTMLDivElement>(null)
@@ -432,6 +442,32 @@ export function ChatView({ agent, session, header, thread }: { agent: OfficeAgen
     stick.current = false
     scroller.current?.querySelector(`[data-mid="${CSS.escape(current)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [current])
+  // a jump from elsewhere (a thread's Files → a report's file): to that message, which lights up for a moment
+  const [flash, setFlash] = useState<string | null>(null)
+  const jumped = useRef(0)
+  useEffect(() => {
+    if (!jump || jumped.current === jump.n || !loaded) return
+    const [kind, value] = [jump.key.slice(0, jump.key.indexOf(':')), jump.key.slice(jump.key.indexOf(':') + 1)]
+    const said = items.filter((i) => i.kind === 'user' || i.kind === 'assistant')
+    const target =
+      kind === 'task'
+        ? [...said].reverse().find((i) => i.kind === 'user' && i.text.includes(`task id ${value}`))
+        : said.reduce<ChatItem | undefined>((best, i) => (!best || Math.abs(i.at - Number(value)) < Math.abs(best.at - Number(value)) ? i : best), undefined)
+    jumped.current = jump.n
+    if (!target) return
+    // straight there (a smooth scroll passes the bottom check on its way and the chat would snap back down)
+    stick.current = false
+    requestAnimationFrame(() => {
+      scroller.current?.querySelector(`[data-mid="${CSS.escape(target.id)}"]`)?.scrollIntoView({ block: 'center' })
+      stick.current = false
+    })
+    setFlash(target.id)
+  }, [jump, loaded, items])
+  useEffect(() => {
+    if (!flash) return
+    const tm = setTimeout(() => setFlash(null), 2400)
+    return () => clearTimeout(tm)
+  }, [flash])
   const step = (d: number) => hits.length && setHit((h) => (h + d + hits.length) % hits.length)
   const closeFind = () => {
     setFindOpen(false)
@@ -537,7 +573,7 @@ export function ChatView({ agent, session, header, thread }: { agent: OfficeAgen
             {Math.round(agent.contextPct)}%
           </span>
         )}
-        {agent.contextPct != null && !offline && (
+        {(agent.contextPct != null || !!thread?.compact) && !offline && (
           <button
             className="small ghost chat__compact"
             onClick={() => void compact()}
@@ -624,7 +660,7 @@ export function ChatView({ agent, session, header, thread }: { agent: OfficeAgen
             const { text: said, folder, tags } = splitContext(withCtx)
             const files = paths.map((p) => ownerFiles.get(p)).filter((f) => !!f)
             return (
-              <div key={i.id} data-mid={i.id} className={`msg-user${isNew(i.id)}`}>
+              <div key={i.id} data-mid={i.id} className={`msg-user${isNew(i.id)}${i.id === flash ? ' msg--flash' : ''}`}>
                 {files.length > 0 && (
                   <div className="msg-user__files">
                     <Attachments agentId={agent.id} files={files} />
@@ -644,7 +680,7 @@ export function ChatView({ agent, session, header, thread }: { agent: OfficeAgen
             const files = (attachmentPaths.get(i.id) ?? []).map((p) => agentFiles.get(p)).filter((f) => !!f)
             return (
               <Fragment key={i.id}>
-                <div data-mid={i.id} className={`msg msg--agent${isNew(i.id)}${i.id === current ? ' msg--hit' : ''}`}>
+                <div data-mid={i.id} className={`msg msg--agent${isNew(i.id)}${i.id === current ? ' msg--hit' : ''}${i.id === flash ? ' msg--flash' : ''}`}>
                   <FileLinksProvider agentId={agent.id} files={files}>
                     {/* a plan-limit notice's reset time in the office's timezone, not the server's */}
                     <Markdown text={localizeResets(i.text, timezone, i.at)} />

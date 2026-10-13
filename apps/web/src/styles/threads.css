@@ -203,3 +203,23 @@ button.report__thread:hover { text-decoration: underline; }
   position: relative; z-index: 3; opacity: 0.85; background: var(--card); border-radius: 10px; box-shadow: var(--shadow); cursor: grabbing;
 }
 .thread-row__pin { flex-shrink: 0; display: inline-grid; place-items: center; font-size: 11px; color: var(--hl-ink); }
+
+/* the thread's Folder tab (an agent's Folder tab, for the thread's folder) and its Files, by where they came from */
+.thread-folder { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; }
+.thread-folder--none { gap: 10px; align-items: flex-start; }
+.thread-folder--none p { margin: 0; font-size: 13px; }
+.thread-files__tabs { align-self: flex-start; }
+.thread-files__tabs button { display: inline-flex; align-items: center; gap: 5px; }
+.thread-files__head { font-size: 12.5px; font-weight: 600; }
+.thread-files__note { font-size: 12.5px; }
+
+/* the thread's head: its tags stay on one line (sideways when there are many), the box never grows taller */
+.thread-head__meta .rs--multi { min-width: 150px; max-width: min(360px, 100%); }
+.thread-head__meta .rs--multi .rs__value-container { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.thread-head__meta .rs--multi .rs__value-container::-webkit-scrollbar { display: none; }
+.thread-head__meta .rs--multi .rs__multi-value { flex-shrink: 0; }
+.thread-head__meta .rs--multi .rs__input-container { min-width: 40px; }
+
+/* a report's line in Files: its title goes to the chat, the icon opens the report */
+.thread-files__row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.thread-files__row .thread-files__head { flex: 1; min-width: 0; text-align: left; }

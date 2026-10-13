@@ -6,7 +6,7 @@ import { requestWho } from '../auth'
 import { noteOwnerMessage } from '../work/activity'
 import { cleanFolder } from '../work/folders'
 import { cleanTagIds } from '../work/tags'
-import { archiveThread, createThread, reorderThreads, deleteThread, getThread, listThreads, markThreadRead, mentionTask, sendToThread, updateThread } from '../work/threads'
+import { archiveThread, compactThread, createThread, reorderThreads, deleteThread, getThread, listThreads, markThreadRead, mentionTask, sendToThread, updateThread } from '../work/threads'
 
 // /api/threads: the owner's topics with the manager (work/threads.ts). Every change reaches the dashboards as work state.
 
@@ -81,6 +81,13 @@ threadRoutes.post('/threads/:id/messages', async (c) => {
     await sendToThread(t.id, withAttachments(text, paths))
   }
   return c.json({ ok: true, tasks })
+})
+
+// /compact in the thread's session (opened again first if it rests)
+threadRoutes.post('/threads/:id/compact', async (c) => {
+  const b = await c.req.json<{ focus?: unknown }>().catch(() => ({}) as { focus?: unknown })
+  await compactThread(c.req.param('id'), typeof b.focus === 'string' ? b.focus.replace(/\s+/g, ' ').trim().slice(0, 300) : '')
+  return c.json({ ok: true })
 })
 
 threadRoutes.post('/threads/:id/read', (c) => {
