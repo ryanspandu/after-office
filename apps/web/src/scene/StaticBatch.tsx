@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import { BufferAttribute, BufferGeometry, Group, Matrix4, Mesh, MeshStandardMaterial, type Material, type Object3D } from 'three'
+import { BufferAttribute, BufferGeometry, Group, Matrix4, Mesh, MeshStandardMaterial, MeshToonMaterial, type Material, type Object3D } from 'three'
+import { toonRamp } from './toon'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 // Draw-call reducer for the static parts of the office. The scene is built from hundreds of small boxes (a desk is
@@ -24,10 +25,10 @@ interface Bucket {
   sources: Mesh[]
 }
 
-function plainColour(m: Material): m is MeshStandardMaterial {
+function plainColour(m: Material): m is MeshStandardMaterial | MeshToonMaterial {
   const s = m as MeshStandardMaterial
   return (
-    s.isMeshStandardMaterial &&
+    (s.isMeshStandardMaterial || (m as MeshToonMaterial).isMeshToonMaterial) &&
     !m.userData.live &&
     !s.map &&
     !s.vertexColors &&
@@ -37,7 +38,7 @@ function plainColour(m: Material): m is MeshStandardMaterial {
 
 function keyFor(m: Material, cast: boolean, receive: boolean) {
   const flags = `${cast}|${receive}|${m.side}|${m.toneMapped}`
-  if (plainColour(m)) return `vc|${m.roughness}|${m.metalness}|${flags}`
+  if (plainColour(m)) return `vc|${m.type}|${(m as MeshStandardMaterial).roughness ?? ''}|${(m as MeshStandardMaterial).metalness ?? ''}|${flags}`
   // materials animated globally (lamp bulbs, window glass) are shared instances: keep them by identity
   if (m.userData.live) return `live:${m.uuid}|${flags}`
   const s = m as MeshStandardMaterial
@@ -55,7 +56,7 @@ function collect(obj: Object3D, out: Mesh[]) {
 }
 
 /** World-baked, non-indexed copy with position + normal (+ uv for textured, + colour for vertex-colour buckets). */
-function prepare(mesh: Mesh, toLocal: Matrix4, colour: MeshStandardMaterial | null) {
+function prepare(mesh: Mesh, toLocal: Matrix4, colour: MeshStandardMaterial | MeshToonMaterial | null) {
   const src = mesh.geometry
   if (!src.attributes.position || !src.attributes.normal) return null
   const keepUv = !!(mesh.material as MeshStandardMaterial).map && !!src.attributes.uv
@@ -97,8 +98,11 @@ export function StaticBatch({ children, version }: { children: ReactNode; versio
       if (!g) continue
       let b = buckets.get(key)
       if (!b) {
+        // toon-shaded shapes stay toon-shaded once merged (scene/toon.ts)
         const shared = plain
-          ? new MeshStandardMaterial({ vertexColors: true, roughness: material.roughness, metalness: material.metalness, side: material.side })
+          ? (material as MeshToonMaterial).isMeshToonMaterial
+            ? new MeshToonMaterial({ vertexColors: true, gradientMap: toonRamp, side: material.side })
+            : new MeshStandardMaterial({ vertexColors: true, roughness: (material as MeshStandardMaterial).roughness, metalness: (material as MeshStandardMaterial).metalness, side: material.side })
           : material
         if (plain) shared.toneMapped = material.toneMapped
         buckets.set(key, (b = { material: shared, owned: plain, cast: mesh.castShadow, receive: mesh.receiveShadow, parts: [], sources: [] }))

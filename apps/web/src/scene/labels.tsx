@@ -78,13 +78,18 @@ function AgentTag({ id }: { id: string }) {
           </span>
         ))}
       </div>
-      {/* a small card: who, and what they're doing (like a status line) */}
+      {/* a small dark plate, like an isometric game's: who, their role, and what they're doing (a coloured square
+          for the state) */}
       <div className="tag__name">
         <span className="tag__who">
-          {agent.kind === 'manager' ? <LuCrown className="tag__crown" /> : <span className="tag__dot" style={{ background: agent.look.shirt }} />}
+          {agent.kind === 'manager' && <LuCrown className="tag__crown" />}
           {agent.name}
         </span>
-        <span className="tag__doing">{activityOf(agent)}</span>
+        {agent.role && <span className="tag__role">{agent.role}</span>}
+        <span className="tag__doing">
+          <i className="tag__state" />
+          {activityOf(agent)}
+        </span>
       </div>
     </div>
   )

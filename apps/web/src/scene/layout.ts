@@ -43,6 +43,12 @@ export const DESK_LAMP: Vec2 = [0.78, -0.3]
 export const deskPos = (i: number): Vec2 => [-1 - DESK_COL_GAP * Math.floor(i / DESK_ROWS.length), DESK_ROWS[i % DESK_ROWS.length]]
 export const colsForDesks = (highestDesk: number) => Math.max(MIN_DESK_COLS, Math.ceil((highestDesk + 1) / DESK_ROWS.length))
 
+/** The work corner (scene/furniture/WorkCorner.tsx): the kanban board and a counter (espresso, printer) on the back
+ *  wall, in the gap between the first two desk columns' windows. */
+export const WORK_CORNER: Rect = { x: -3, z: MIN_Z + 0.3, w: 1.5, d: 0.6 }
+/** The bell on the back wall, under the clock (x). */
+export const BELL_X = 0.8
+
 // ── Meeting room (glass box, back-middle) ──
 export const MEETING = {
   bounds: { minX: 1.5, maxX: 12, minZ: MIN_Z, maxZ: -1.5 },
@@ -309,6 +315,7 @@ export function getLayout(cols: number): Layout {
     LOUNGE.billiards,
     { x: LOUNGE.floorLamp[0], z: LOUNGE.floorLamp[1], w: 0.4, d: 0.4 },
     bookshelf,
+    WORK_CORNER,
     { x: waterCooler[0], z: waterCooler[1], w: 0.5, d: 0.5 },
     ...plants.map(([x, z]) => ({ x, z, w: 0.6, d: 0.6 })),
   ]

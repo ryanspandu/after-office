@@ -17,6 +17,9 @@ import { Parking } from './Parking'
 import { Workstation } from './furniture/Workstation'
 import { MEETING, openPlanCenter } from './layout'
 import { BossOffice } from './furniture/BossOffice'
+import { Outline } from './Outline'
+import { City } from './City'
+import { WorkCorner } from './furniture/WorkCorner'
 import { useQuality, useRenderConfig } from './quality'
 import { useLayout } from './useLayout'
 
@@ -93,12 +96,17 @@ export function Office() {
           bounds={() => [cfg.fps * 0.7, cfg.fps * 2 + 10]}
           onDecline={() => {
             if (document.visibilityState !== 'visible') return
+            // the user asked for advanced render: neither its resolution (a blurred office) nor the render itself is
+            // lowered for them
+            if (advanced) return
             if (dpr > cfg.dpr[0]) setDpr(cfg.dpr[0])
-            else if (!advanced) setTier('low') // the user asked for advanced render: don't switch it off for them
+            else setTier('low')
           }}
         />
       )}
       <FrameCap fps={fps} />
+      {/* draws each frame: the office, then its dark outlines (scene/Outline.tsx) */}
+      <Outline />
       <DayNight layout={layout} />
       <FitCamera layout={layout} />
       {/* drag pans; right-drag (two fingers on a phone) turns the view around the office and tilts it, from nearly
@@ -118,6 +126,8 @@ export function Office() {
 
       <Room layout={layout} />
       <Parking layout={layout} slots={agents.length + departing.length} />
+      {/* the town around it: roads, office blocks, the coffee shop and the warung across the road */}
+      <City layout={layout} />
       {/* desks are static except their screens, LEDs and lamps; rebuilt only when a desk's owner changes */}
       <StaticBatch version={deskVersion}>
         {layout.desks.map((at, i) => (
@@ -128,6 +138,7 @@ export function Office() {
       <BossOffice room={layout.boss} manager={agents.find((a) => a.kind === 'manager')} />
       <MeetingRoom />
       <Pantry />
+      <WorkCorner />
       <Lounge />
       <Cat />
       {/* one list keyed by id, so a removed agent keeps its component (and position) while it walks out. The

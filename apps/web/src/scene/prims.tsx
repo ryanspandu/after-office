@@ -1,6 +1,7 @@
 import { forwardRef, useMemo } from 'react'
 import type { ThreeElements } from '@react-three/fiber'
 import { Vector2, type Mesh } from 'three'
+import { toonRamp } from './toon'
 
 // Low-poly building blocks. Everything in the office is made from these.
 
@@ -15,11 +16,13 @@ interface MatProps {
   roughness?: number
 }
 
+// flat, toon-shaded colours (scene/toon.ts); `roughness` stays in the props (the merged batches still group by it)
 function Mat({ color, emissive, emissiveIntensity = 1, opacity, roughness = 0.85 }: MatProps) {
   return (
-    <meshStandardMaterial
+    <meshToonMaterial
       color={color}
-      roughness={roughness}
+      gradientMap={toonRamp}
+      userData={{ roughness }}
       emissive={emissive ?? '#000000'}
       emissiveIntensity={emissive ? emissiveIntensity : 0}
       transparent={opacity !== undefined}

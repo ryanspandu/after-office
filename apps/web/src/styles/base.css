@@ -19,8 +19,10 @@
   --hl-ink: #b85a0b;
   --hl-2: #f5b914;
   --hl-soft: #fff3e3;
-  --stage-a: #f9f8f5;
-  --stage-b: #ebe9e4;
+  /* the 3D stage: neutral, like the town's buildings (a soft warm grey, a little darker at the edges) */
+  --stage-a: #f6f4f0;
+  --stage-b: #e7e4de;
+  --stage-c: #d6d2ca;
   /* a hairline ring, so cards stand off the light background */
   --shadow: 0 0 0 1px rgba(60, 45, 25, 0.07), 0 1px 2px rgba(60, 45, 25, 0.05), 0 8px 24px rgba(60, 45, 25, 0.06);
 
@@ -54,8 +56,9 @@
   --hl-ink: #ff8a2e;
   --hl-2: #f7c233;
   --hl-soft: rgba(255, 138, 46, 0.14);
-  --stage-a: #1b1b1b;
-  --stage-b: #0a0a0a;
+  --stage-a: #26252a;
+  --stage-b: #18171b;
+  --stage-c: #0e0d10;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.3);
 
   --working: #5fd49a;
@@ -117,7 +120,7 @@ svg { flex-shrink: 0; }
   min-height: 0;
   border-radius: 20px;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 40%, var(--stage-a), var(--stage-b));
+  background: radial-gradient(ellipse at 50% 40%, var(--stage-a), var(--stage-b) 70%, var(--stage-c));
 }
 .side { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 /* ── generic ────────────────────────────────────────────────────────── */

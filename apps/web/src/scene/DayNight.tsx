@@ -24,6 +24,13 @@ export const lampBulb = new MeshStandardMaterial({ color: '#fff4dc', emissive: n
 windowGlass.userData.live = true
 lampBulb.userData.live = true
 
+/** Where the sun shines from (towards the office's middle), how far away it stands, and its shadow box over the
+ *  whole town (half its width) once the view is zoomed out to it (camera.zoom below TOWN_SHADOW_ZOOM). */
+const SUN_DIR = [10 / 21.1, 18 / 21.1, 4 / 21.1] as const
+const SUN_DIST = 90
+const TOWN_SHADOW_ZOOM = 19
+const TOWN_SHADOW_HALF = 88
+
 const SKY_DAY = new Color('#bfe3f5')
 const SKY_NIGHT = new Color('#0e1528')
 const GLOW_DAY = new Color('#a9dcf5')
@@ -126,13 +133,30 @@ export function DayNight({ layout }: { layout: Layout }) {
   const cx = (Math.min(layout.floor.minX, layout.lot.minX) + Math.max(layout.floor.maxX, layout.lot.maxX)) / 2
   const half = (Math.max(layout.floor.maxX, layout.lot.maxX) - Math.min(layout.floor.minX, layout.lot.minX)) / 2 + 6
 
-  useFrame((_, dt) => {
+  const shadowWide = useRef(false)
+  useFrame(({ camera }, dt) => {
     // ease toward the target so switching modes fades instead of snapping
     current.current += (target - current.current) * Math.min(1, dt * 2)
     const d = current.current
     env.night = 1 - d
     sun.current.target.position.set(cx, 0, 4)
     sun.current.target.updateMatrixWorld()
+    // far from the sun along its own direction, so the town's tallest towers are inside its shadow box too
+    sun.current.position.set(cx + SUN_DIR[0] * SUN_DIST, SUN_DIR[1] * SUN_DIST, 4 + SUN_DIR[2] * SUN_DIST)
+    // the shadow box: the office (sharp) while the view is on it; the whole town (scene/City.tsx) once zoomed out to it
+    const wide = camera.zoom < TOWN_SHADOW_ZOOM
+    if (wide !== shadowWide.current) {
+      shadowWide.current = wide
+      const h = wide ? TOWN_SHADOW_HALF : half
+      const cam = sun.current.shadow.camera
+      cam.left = -h
+      cam.right = h
+      cam.top = h
+      cam.bottom = -h
+      cam.near = 1
+      cam.far = SUN_DIST * 2.5
+      cam.updateProjectionMatrix()
+    }
     sun.current.intensity = 0.45 + d * 1.45
     sun.current.color.lerpColors(MOON, SUN_DAY, d)
     hemi.current.intensity = 0.55 + d * 0.57 + env.night * cfg.nightBoost
@@ -185,7 +209,9 @@ export function DayNight({ layout }: { layout: Layout }) {
       <directionalLight
         key={`${layout.cols}:${cfg.shadowMap}`}
         ref={sun}
-        position={[cx + 10, 18, 8]}
+        position={[cx + SUN_DIR[0] * SUN_DIST, SUN_DIR[1] * SUN_DIST, 4 + SUN_DIR[2] * SUN_DIST]}
+        shadow-camera-near={1}
+        shadow-camera-far={SUN_DIST * 2.5}
         intensity={1.9}
         color="#fff1dc"
         castShadow={cfg.shadowMap > 0}

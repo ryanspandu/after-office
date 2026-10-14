@@ -33,7 +33,8 @@ export const TIERS: Record<Tier | 'advanced', TierConfig> = {
 
 const ADVANCED_KEY = 'after-office:advanced-render'
 /** What this device settled on last time (tier + pixel ratio), so a new visit starts there instead of adjusting on screen. */
-const SETTLED_KEY = 'after-office:render-settled'
+// v2: the outlines (scene/Outline.tsx) came in; a resolution lowered before them is forgotten once
+const SETTLED_KEY = 'after-office:render-settled-v2'
 /** A device that fell back to the low tier gets another chance at high after a week. */
 const LOW_TIER_TTL_MS = 7 * 24 * 60 * 60_000
 
@@ -63,11 +64,14 @@ function initialTier(): Tier {
   return s.tier === 'low' && s.lowAt && Date.now() - s.lowAt < LOW_TIER_TTL_MS ? 'low' : 'high'
 }
 
-function initialDpr(tier: Tier) {
+const deviceDpr = () => (typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1)
+
+function initialDpr(tier: Tier, advanced = false) {
+  // advanced render: the screen's own sharpness (up to 2×), never a lowered one
+  if (advanced) return Math.min(TIERS.advanced.dpr[1], deviceDpr())
   const [lo, hi] = TIERS[tier].dpr
-  const device = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1
   const settled = loadSettled().dpr
-  return Math.min(hi, device, Math.max(lo, settled ?? hi))
+  return Math.min(hi, deviceDpr(), Math.max(lo, settled ?? hi))
 }
 
 function loadAdvanced() {
@@ -95,7 +99,7 @@ export const useQuality = create<QualityStore>((set) => {
   return {
     tier,
     advanced: loadAdvanced(),
-    dpr: initialDpr(tier),
+    dpr: initialDpr(tier, loadAdvanced()),
     setTier: (tier) => {
       saveSettled(tier === 'low' ? { tier, lowAt: Date.now(), dpr: TIERS.low.dpr[0] } : { tier })
       set({ tier, dpr: TIERS[tier].dpr[0] })
@@ -106,7 +110,7 @@ export const useQuality = create<QualityStore>((set) => {
       } catch {
         // private mode: just not remembered
       }
-      set({ advanced })
+      set((s) => ({ advanced, dpr: initialDpr(s.tier, advanced) }))
     },
     setDpr: (dpr) => {
       saveSettled({ dpr })

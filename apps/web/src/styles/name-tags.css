@@ -43,3 +43,26 @@
 /* the office seen from afar (scene/Office.tsx LabelDetail): names only, except the selected agent's */
 .labels--far .tag:not(.tag--selected) .tag__doing { display: none; }
 .labels--far .tag:not(.tag--selected) .tag__name { padding: 2px 8px 2px 6px; border-radius: 999px; }
+
+/* ── the plate look (an isometric game's name plates): dark, square-ish, a role line, a coloured square for the state ── */
+.tag__name {
+  align-items: center; padding: 3px 9px 4px; border-radius: 4px;
+  background: #1f1a16; color: #fbf3e4;
+  border: 1.5px solid #0d0a08; box-shadow: inset 0 0 0 1px #4a3f35, 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+.tag__who { gap: 4px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.01em; }
+.tag__crown { color: #f2b632; }
+.tag__role, .tag__doing { font-family: ui-monospace, 'SF Mono', Menlo, monospace; text-transform: uppercase; letter-spacing: 0.06em; }
+.tag__role { max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-size: 8.5px; font-weight: 600; line-height: 1.3; color: #c9bba6; }
+.tag__doing { display: flex; align-items: center; gap: 4px; padding-left: 0; font-size: 8.5px; font-weight: 700; color: #f2b632; }
+.tag__state { flex: none; width: 6px; height: 6px; background: currentColor; box-shadow: 0 0 0 1px #0d0a08; }
+/* the state's colour: idle (a break) amber, working blue, in a meeting violet, waiting for you orange, away grey */
+.tag--working .tag__doing { color: #6cb6ff; }
+.tag--meeting .tag__doing { color: #b99bff; }
+.tag--waiting .tag__doing { color: #ff8a4c; }
+.tag--offline .tag__doing, .tag--asleep .tag__doing { color: #9a8f82; }
+.tag--waiting .tag__name { border-color: #ff8a4c; }
+.tag--selected .tag__name { background: #2a221c; color: #fff; box-shadow: inset 0 0 0 1px #4a3f35, 0 0 0 2px var(--hl), 0 6px 18px rgba(0, 0, 0, 0.3); }
+.tag--selected .tag__doing { opacity: 1; }
+.labels--far .tag:not(.tag--selected) .tag__role { display: none; }
+.labels--far .tag:not(.tag--selected) .tag__name { padding: 2px 7px; border-radius: 4px; }

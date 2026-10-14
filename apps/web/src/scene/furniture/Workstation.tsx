@@ -13,6 +13,8 @@ import { DeskLamp } from './Lamps'
 // video: idle at its own desk on purpose (spot `pc-<desk>`): a cartoon playing, with a player's progress bar
 type ScreenMode = 'off' | 'work' | 'wait' | 'sleep' | 'play' | 'video'
 
+/** The laptop's body: space grey, darker than the desk so it stands out from it. */
+const LAPTOP = '#5d626c'
 const SYNTAX = ['#f78c6c', '#82aaff', '#c3e88d', '#c792ea', '#ffcb6b', '#89ddff']
 const LINES = 7
 // the game: Pac-Man eats a row of dots left to right, a ghost behind him; one run takes RUN seconds, then again
@@ -109,18 +111,19 @@ function Computer({ mode, accent }: { mode: ScreenMode; accent: string }) {
 
   return (
     <group position={[0, DESK_SIZE.h, 0.1]}>
-      {/* the laptop's base: aluminium, its keyboard and trackpad */}
-      <Box size={[0.7, 0.03, 0.46]} position={[0, 0.015, 0]} color="#c9ccd2" roughness={0.45} />
-      <Box size={[0.6, 0.006, 0.2]} position={[0, 0.032, -0.06]} color="#2f323a" noShadow />
-      <Box size={[0.2, 0.004, 0.11]} position={[0, 0.031, 0.15]} color="#b4b8bf" noShadow />
+      {/* the laptop's base: space grey (a light one disappears on the light desk), its keyboard and trackpad */}
+      <Box size={[0.7, 0.03, 0.46]} position={[0, 0.015, 0]} color={LAPTOP} roughness={0.45} />
+      <Box size={[0.6, 0.006, 0.2]} position={[0, 0.032, -0.06]} color="#24262c" noShadow />
+      <Box size={[0.2, 0.004, 0.11]} position={[0, 0.031, 0.15]} color="#8a8f98" noShadow />
       {/* the lid, tilted back from the hinge; the screen inside is the monitor's, at the lid's size */}
       <group position={[0, 0.03, -0.225]} rotation={[-0.3, 0, 0]}>
-        <Box size={[0.7, 0.46, 0.025]} position={[0, 0.23, 0]} color="#c9ccd2" roughness={0.45} />
-        <Box size={[0.66, 0.42, 0.004]} position={[0, 0.23, 0.0125]} color="#16181e" noShadow />
+        <Box size={[0.7, 0.46, 0.025]} position={[0, 0.23, 0]} color={LAPTOP} roughness={0.45} />
+        <Box size={[0.66, 0.42, 0.004]} position={[0, 0.23, 0.0125]} color="#000000" noShadow />
         <group position={[0, 0.23 - 0.5 * LID, 0.004]} scale={LID}>
       <mesh ref={face} position={[0, 0.5, 0.027]} userData={{ dynamic: true }}>
         <planeGeometry args={[0.9, 0.52]} />
-        <meshStandardMaterial color="#0d0f16" emissive="#000" roughness={0.4} />
+        {/* black: a lamp beside it never lights it up (brown); only its own glow (emissive) shows */}
+        <meshStandardMaterial color="#000000" emissive="#000" roughness={1} />
       </mesh>
       {Array.from({ length: LINES }, (_, i) => (
         <mesh key={i} ref={(m) => void (lines.current[i] = m)} position={[0, 0.7 - i * 0.065, 0.03]} userData={{ dynamic: true }}>
