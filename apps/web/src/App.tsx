@@ -35,6 +35,7 @@ import { BossModeBadge } from './ui/BossMode'
 import { PublicAccessBadge } from './ui/PublicAccess'
 import { AppReload } from './ui/AppReload'
 import { FoldersFab, MobileDock } from './ui/MobileDock'
+import { StageDock } from './ui/StageDock'
 
 export function App() {
   useLiveSync()
@@ -52,6 +53,8 @@ export function App() {
   // wide enough: the owner's own arrangement of the panels (ui/DeskLayout.tsx); narrower, the fixed stack
   const narrow = useMediaQuery('(max-width: 960px)')
   const desk = !mobile && !narrow && !fullscreen
+  // desktop "Fullscreen office": the stage alone, the panels as round buttons on it (ui/StageDock.tsx)
+  const full = fullscreen && !mobile
   const update = useAppUpdate()
   // app shortcut "Manager chat": open the manager's panel once the manager is known (live data arrives first)
   const launch = useLaunch((s) => s.open)
@@ -70,6 +73,7 @@ export function App() {
       <ViewReset />
       <AppReload />
       <FocusCard />
+      {full && <StageDock />}
       {/* phones: Boss mode and Public access float at the stage's top left (in the navbar they'd push it onto more lines) */}
       {/* phones: threads, a round button above the menu button */}
       {mobile && <FoldersFab />}
@@ -84,7 +88,7 @@ export function App() {
   )
 
   return (
-    <div className={`app${fullscreen && !mobile ? ' app--full' : ''}${mobile ? ' app--mobile' : ''}${desk ? ' app--desk' : ''}`}>
+    <div className={`app${full ? ' app--full' : ''}${mobile ? ' app--mobile' : ''}${desk ? ' app--desk' : ''}`}>
       <Navbar />
       {desk ? (
         <DeskLayout
@@ -106,11 +110,12 @@ export function App() {
         />
       ) : (
         <>
-          {!mobile && <LeftSidebar />}
+          {/* fullscreen: the panels open from the stage's buttons instead (the stage keeps its place: no new 3D view) */}
+          {!mobile && !full && <LeftSidebar />}
           {stage}
           {mobile ? (
             <MobileDock />
-          ) : (
+          ) : full ? null : (
             <>
               <AgentsPanel />
               <FollowUps />

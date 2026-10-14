@@ -411,7 +411,7 @@ export function CronModal({ cron, onClose }: { cron?: CronJob; onClose: () => vo
 
 const TAB_KEY = 'after-office:task-panel-tab'
 
-/** `noFolders`: phones, where Folders has its own round button on the stage (ui/MobileDock.tsx FoldersFab). */
+/** `noFolders`: phones and desktop's fullscreen office, where Folders has its own round button on the stage (ui/MobileDock.tsx FoldersFab, ui/StageDock.tsx). */
 export function TaskPanel({ noFolders = false }: { noFolders?: boolean } = {}) {
   const ready = useWorkReady()
   const { tasks, toggleTask } = useDashboard(useShallow((s) => ({ tasks: s.tasks, toggleTask: s.toggleTask })))

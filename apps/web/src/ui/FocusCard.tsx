@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { LuChevronDown, LuChevronUp, LuCrown, LuLocateFixed, LuMessageSquare, LuMinus, LuPlus, LuRotateCcw, LuRotateCw, LuX } from 'react-icons/lu'
 import { useView } from '../scene/focus'
+import { useDashboard } from '../state/dashboard'
 import { avatarStyle, useOffice } from '../state/store'
+import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { activityOf } from './agentActivity'
 import { STATUS_META } from './AgentsPanel'
 import { tip } from './Tooltip'
@@ -59,32 +61,37 @@ export function ViewReset() {
   const zoomBy = useView((s) => s.zoomBy)
   const tilt = useView((s) => s.tilt)
   const select = useOffice((s) => s.select)
+  // tips point in, toward the stage's middle: the buttons sit on its right edge, on the left in the desktop's
+  // fullscreen office (styles/stage-dock.css)
+  const fullscreen = useDashboard((s) => s.fullscreen)
+  const mobile = useMediaQuery(MOBILE)
+  const side = fullscreen && !mobile ? 'right' : 'left'
   return (
     <div className="view-controls" role="toolbar" aria-label="Camera">
-      <button {...tip('Turn left')} onClick={() => turn(-Math.PI / 4)}>
+      <button {...tip('Turn left', side)} onClick={() => turn(-Math.PI / 4)}>
         <LuRotateCcw />
       </button>
-      <button {...tip('Turn right')} onClick={() => turn(Math.PI / 4)}>
+      <button {...tip('Turn right', side)} onClick={() => turn(Math.PI / 4)}>
         <LuRotateCw />
       </button>
-      <button {...tip('Look from lower down')} onClick={() => tilt(0.25)}>
+      <button {...tip('Look from lower down', side)} onClick={() => tilt(0.25)}>
         <LuChevronDown />
       </button>
-      <button {...tip('Look from higher up')} onClick={() => tilt(-0.25)}>
+      <button {...tip('Look from higher up', side)} onClick={() => tilt(-0.25)}>
         <LuChevronUp />
       </button>
       <span className="view-controls__sep" />
-      <button {...tip('Zoom in')} onClick={() => zoomBy(1.35)}>
+      <button {...tip('Zoom in', side)} onClick={() => zoomBy(1.35)}>
         <LuPlus />
       </button>
-      <button {...tip('Zoom out')} onClick={() => zoomBy(1 / 1.35)}>
+      <button {...tip('Zoom out', side)} onClick={() => zoomBy(1 / 1.35)}>
         <LuMinus />
       </button>
       {moved && (
         <>
           <span className="view-controls__sep" />
           <button
-            {...tip('Back to the whole office')}
+            {...tip('Back to the whole office', side)}
             onClick={() => {
               select(null)
               reset()

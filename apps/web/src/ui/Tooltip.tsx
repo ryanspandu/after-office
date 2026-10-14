@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react'
 import { flip, offset, shift } from '@floating-ui/dom'
-import { Tooltip, type TooltipRefProps } from 'react-tooltip'
+import { Tooltip, type PlacesType, type TooltipRefProps } from 'react-tooltip'
 import { useMediaQuery } from '../state/useMediaQuery'
 
 // One tooltip for the whole app (react-tooltip). Any element with `data-tip="…"` gets it, including elements inside
@@ -10,6 +10,8 @@ import { useMediaQuery } from '../state/useMediaQuery'
 //   doesn't trigger the button, and the tooltip fades a moment later.
 // A long tip can be hovered and scrolled (it stays open while the pointer is on it).
 // Icon-only buttons should also carry an aria-label; `tip()` sets both.
+// A column of buttons at an edge (the stage's floating ones) can ask for its tips beside it instead:
+// `tip(label, 'right')` (the library reads the anchor's `data-tooltip-place`).
 
 // Above the element, or below it when there's no room above: never beside it (the library's default may flip a tip
 // to the left or right, where it covers what's next to it).
@@ -106,7 +108,7 @@ function TouchTooltip() {
         clearTimeout(hide)
         close()
         target.setAttribute('data-tip-active', '')
-        ref.current?.open({ anchorSelect: '[data-tip-active]', content: target.getAttribute('data-tip') })
+        ref.current?.open({ anchorSelect: '[data-tip-active]', content: target.getAttribute('data-tip'), place: (target.getAttribute('data-tooltip-place') as PlacesType | null) ?? undefined })
         shown = true
         pressOpened = true
       }, HOLD_MS)
@@ -170,5 +172,5 @@ function TouchTooltip() {
   )
 }
 
-/** Props for an icon-only control: visible tooltip + accessible name. */
-export const tip = (label: string) => ({ 'data-tip': label, 'aria-label': label })
+/** Props for an icon-only control: visible tooltip + accessible name; `place` puts the tip on that side (default: above). */
+export const tip = (label: string, place?: 'left' | 'right') => ({ 'data-tip': label, 'aria-label': label, ...(place && { 'data-tooltip-place': place }) })

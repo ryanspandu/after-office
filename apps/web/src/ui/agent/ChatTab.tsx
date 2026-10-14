@@ -26,7 +26,7 @@ import { tip } from '../Tooltip'
 import { AsleepBanner, OfflineBanner } from './OfflineBanner'
 import { ChatContextBar, ContextChips, splitContext, useChatContext } from './chatContext'
 import { SessionTabs } from './SessionTabs'
-import { setUrl, useUrl } from '../../state/url'
+import { dropStep, forgetStep, pushStep, setUrl, useUrl } from '../../state/url'
 
 // Chat with one agent. Messages come from its Claude Code transcript; what you send is typed into its tmux session.
 
@@ -133,6 +133,48 @@ export interface ChatJump {
   n: number
 }
 
+/**
+ * Phones: typing a message takes the whole sheet (the tabs step aside, styles/phones-chat.css) and is a step of its own
+ * in the history: the Back gesture, or the keyboard going down, puts the keyboard away first instead of closing the
+ * chat.
+ */
+function useTypingStep(on: boolean) {
+  const box = useRef<HTMLDivElement>(null)
+  const step = useRef<string | null>(null)
+  const typing = () => !!box.current?.contains(document.activeElement)
+  useEffect(() => {
+    if (!on) return
+    // the keyboard went down by its own key: the message box lets go too
+    let open = document.documentElement.classList.contains('kb-open')
+    const watch = new MutationObserver(() => {
+      const now = document.documentElement.classList.contains('kb-open')
+      if (open && !now && typing()) (document.activeElement as HTMLElement).blur()
+      open = now
+    })
+    watch.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => {
+      watch.disconnect()
+      if (step.current) forgetStep(step.current), (step.current = null)
+    }
+  }, [on])
+  const onFocus = () => {
+    if (!on || step.current) return
+    step.current = pushStep(() => {
+      step.current = null
+      if (typing()) (document.activeElement as HTMLElement).blur()
+    })
+  }
+  const onBlur = () =>
+    setTimeout(() => {
+      // focus moving within (the + menu, Send): still typing
+      if (typing() || !step.current) return
+      const id = step.current
+      step.current = null
+      dropStep(id)
+    }, 0)
+  return { box, onFocus, onBlur }
+}
+
 export function ChatView({ agent, session, header, thread, jump }: { agent: OfficeAgent; session: string; header: ReactNode; thread?: ThreadChat; jump?: ChatJump }) {
   // message times, in the office's timezone
   const timezone = useClock((s) => s.timezone)
@@ -188,6 +230,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
   const [sentAt, setSentAt] = useState<number | null>(null)
   // messages already on screen when the tab opened don't animate in
   const mobile = useMediaQuery(MOBILE)
+  const typingStep = useTypingStep(mobile)
   const [infoOpen, setInfoOpen] = useState(false)
   const seen = useRef<Set<string> | null>(null)
   const lastBody = useRef('')
@@ -871,7 +914,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
         <SpeakingChip />
       </div>
       {/* typing: the model / mode panel makes way for the keyboard */}
-      <div className="chat__composer" onFocusCapture={() => infoOpen && setInfoOpen(false)}>
+      <div className="chat__composer" ref={typingStep.box} onFocusCapture={() => infoOpen && setInfoOpen(false)} onFocus={typingStep.onFocus} onBlur={typingStep.onBlur}>
         <input
           ref={fileInput}
           type="file"

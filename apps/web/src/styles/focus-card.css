@@ -31,3 +31,9 @@
   .focus-card__role { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .focus-card { animation: none; } }
+/* desktop, fullscreen office: the minimized windows' chips float at the window's bottom centre too, over the stage
+   (ui/MinimizedChips.tsx sets --fmin-room, how far up they reach, while they show): the card stands 10px above them
+   (the stage itself ends 12px above the window's bottom, the app's padding in base.css) */
+@media (min-width: 769px) {
+  .app--full .focus-card { bottom: max(14px, calc(var(--fmin-room, 0px) - 2px)); transition: bottom 0.18s ease; }
+}

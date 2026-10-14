@@ -396,11 +396,16 @@ function useReportFeed(filter: Filter) {
   return { items: all.slice(0, limit), more, loading: paging.loading, page: paging.page, end: limit >= all.length && exhausted, total: all.length }
 }
 
-export function ReportsPanel() {
+/**
+ * `only`: just one of the two, without the Reports | Notes tabs (desktop's fullscreen office: each has its own button
+ * on the stage, ui/StageDock.tsx, and the modal's title names it).
+ */
+export function ReportsPanel({ only }: { only?: PanelView } = {}) {
   const ready = useWorkReady()
   const reports = useDashboard((s) => s.reports)
   const now = useNow(60_000).getTime()
-  const [view, setView] = useState<PanelView>(() => remembered(VIEW_KEY, ['reports', 'notes'] as const, 'reports'))
+  const [picked, setView] = useState<PanelView>(() => remembered(VIEW_KEY, ['reports', 'notes'] as const, 'reports'))
+  const view = only ?? picked
   const pickView = (v: PanelView) => (setView(v), remember(VIEW_KEY, v))
   // which kind of report: one tab each (remembered)
   const [tab, setTab] = useState<Filter>(() => remembered(PANEL_TAB_KEY, FILTERS.map((f) => f.id), 'all'))
@@ -430,18 +435,20 @@ export function ReportsPanel() {
   return (
     <section className="card card--reports">
       <header className="card__head">
-        <div className="card__titletabs" role="tablist" aria-label="Reports or notes">
-          <button role="tab" aria-selected={view === 'reports'} className={view === 'reports' ? 'is-on' : ''} onClick={() => pickView('reports')}>
-            <LuFileText /> <span className="card__titletabs-label">Reports</span>
-            {unread > 0 && <span className="badge badge--accent reports-tabs__count">{unread}</span>}
-          </button>
-          <span className="card__titletabs-sep" aria-hidden>
-            |
-          </span>
-          <button role="tab" aria-selected={view === 'notes'} className={view === 'notes' ? 'is-on' : ''} onClick={() => pickView('notes')}>
-            <LuNotebookPen /> <span className="card__titletabs-label">Notes</span>
-          </button>
-        </div>
+        {!only && (
+          <div className="card__titletabs" role="tablist" aria-label="Reports or notes">
+            <button role="tab" aria-selected={view === 'reports'} className={view === 'reports' ? 'is-on' : ''} onClick={() => pickView('reports')}>
+              <LuFileText /> <span className="card__titletabs-label">Reports</span>
+              {unread > 0 && <span className="badge badge--accent reports-tabs__count">{unread}</span>}
+            </button>
+            <span className="card__titletabs-sep" aria-hidden>
+              |
+            </span>
+            <button role="tab" aria-selected={view === 'notes'} className={view === 'notes' ? 'is-on' : ''} onClick={() => pickView('notes')}>
+              <LuNotebookPen /> <span className="card__titletabs-label">Notes</span>
+            </button>
+          </div>
+        )}
         <span className="grow" />
         <span className="card__actions">
           {view === 'notes' && (

@@ -9,6 +9,8 @@ import { Vehicle } from './Vehicle'
 import { placeLabel } from './labels'
 import { agentPose, agentWorld, setAgentWorld } from './focus'
 import { findPath } from './pathing'
+import { freeSeat, outingKind, outings, seatAt, takeSeat } from './outings'
+import { Driver, Headlights, streets } from './Traffic'
 import { useLayout } from './useLayout'
 import { dampAngle } from './math'
 import { Cyl } from './prims'
@@ -128,7 +130,12 @@ function poseFor(kind: SpotKind, status: OfficeAgent['status']): Pose {
 const SPEED = 2.4
 const HIP = 0.55 + LEG_EXTRA
 
-type Phase = 'driving-in' | 'walking-in' | 'present' | 'walking-out' | 'driving-out' | 'gone'
+/** …, and off (asleep): walking to a seat in town and sitting there, or riding round the streets and back */
+type Phase = 'driving-in' | 'walking-in' | 'present' | 'walking-out' | 'driving-out' | 'gone' | 'to-seat' | 'seated' | 'riding' | 'riding-home'
+type Nav = { phase: Phase; pos: Vec2; rotY: number; path: Vec2[]; arrived: boolean; seatRot?: number }
+type Ride = { pos: Vec2; path: Vec2[]; rotY: number; total: number }
+/** Cruising pace of an agent out for a ride (the town's own traffic: scene/Traffic.tsx). */
+const RIDE_SPEED = { car: 4.6, moto: 5.6 }
 
 const CAR_SPEED = 6
 const PARK_SPEED = 2.2
@@ -149,7 +156,11 @@ function advance(state: { pos: Vec2; path: Vec2[] }, step: number): number | nul
   return dist > 0.001 ? Math.atan2(dx, dz) : null
 }
 
-export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?: boolean }) {
+/**
+ * `leaving`: removed or gone offline: walks out (and drives off, or, asleep, goes out in town). `out`: asleep and not
+ * in the office: drawn out in town (a seat, or a ride) from the start.
+ */
+export function Agent({ agent, leaving = false, out = false }: { agent: OfficeAgent; leaving?: boolean; out?: boolean }) {
   const selected = useOffice((s) => s.selectedId === agent.id)
   const select = useOffice((s) => s.select)
   const spot = useMemo(() => spotById(agent.spotId), [agent.spotId])
@@ -179,22 +190,70 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
   const layoutRef = useRef(layout)
   layoutRef.current = layout
 
-  const nav = useRef({
-    phase: (agent.arriving ? 'driving-in' : 'present') as Phase,
-    pos: (agent.arriving ? doorPos(agent.desk) : (agent.spawn ?? [spot.x, spot.z])) as Vec2,
-    rotY: agent.arriving ? Math.PI : spot.rotY,
-    path: [] as Vec2[],
-    arrived: !agent.arriving,
-  })
-  // the agent's own car/scooter: drives in on arrival, waits in its slot, drives off on departure
-  const car = useRef(
-    agent.arriving
-      ? (() => {
-          const route = driveInRoute(agent.desk, layout.lot.maxX)
-          return { pos: route[0], path: route.slice(1), rotY: -Math.PI / 2, total: route.length - 1 }
-        })()
-      : { pos: slotPos(agent.desk), path: [] as Vec2[], rotY: Math.PI, total: 0 },
-  )
+  // out for a ride (asleep): its car on the streets; going out for one when it has walked out to it
+  const ride = useRef<Driver | null>(null)
+  const rideOut = useRef(false)
+
+  /** Where it starts: back from town (woken), out in town (asleep), driving in, or at its spot. */
+  const startAt = (): { nav: Nav; car: Ride } => {
+    const parked: Ride = { pos: slotPos(agent.desk), path: [], rotY: Math.PI, total: 0 }
+    const there = outings.get(agent.id)
+    const riding = (d: Driver, phase: Phase): { nav: Nav; car: Ride } => {
+      ride.current = d
+      return { nav: { phase, pos: doorPos(agent.desk), rotY: Math.PI, path: [], arrived: false }, car: { pos: [d.x, d.z], path: [], rotY: d.heading, total: 0 } }
+    }
+    const seated = (n: number): { nav: Nav; car: Ride } | null => {
+      const s = seatAt(n)
+      return s ? { nav: { phase: 'seated', pos: [s.x, s.z], rotY: s.rotY, path: [], arrived: true, seatRot: s.rotY }, car: parked } : null
+    }
+    // woken while out: back on foot from its seat, or by the streets from its ride
+    if (agent.arriving && there) {
+      outings.delete(agent.id)
+      if (there.kind === 'ride') {
+        there.driver.goHome()
+        return riding(there.driver, 'riding-home')
+      }
+      const s = seatAt(there.seat)
+      freeSeat(there.seat)
+      if (s) {
+        const path = [...[...s.walk].reverse().slice(1), ...findPath(layout, ENTRANCE, [spot.x, spot.z])]
+        return { nav: { phase: 'walking-in', pos: [s.x, s.z], rotY: s.rotY + Math.PI, path, arrived: false }, car: parked }
+      }
+    }
+    // asleep already (on load, or after a reconnect): out in town now
+    if (out && !agent.arriving) {
+      if (there?.kind === 'ride') return riding(there.driver, 'riding')
+      if (there?.kind === 'sit') {
+        const at = seated(there.seat)
+        if (at) return at
+      }
+      if (outingKind(agent.desk) === 'ride' && streets) {
+        const driver = new Driver(streets, RIDE_SPEED[kind]).placeRandom()
+        outings.set(agent.id, { kind: 'ride', driver })
+        return riding(driver, 'riding')
+      }
+      const n = takeSeat(agent.id, agent.desk)
+      const at = n === null ? null : seated(n)
+      if (at && n !== null) {
+        outings.set(agent.id, { kind: 'sit', seat: n })
+        return at
+      }
+    }
+    if (agent.arriving) {
+      // the agent's own car/scooter: drives in on arrival, waits in its slot, drives off on departure
+      const route = driveInRoute(agent.desk, layout.lot.maxX)
+      return {
+        nav: { phase: 'driving-in', pos: doorPos(agent.desk), rotY: Math.PI, path: [], arrived: false },
+        car: { pos: route[0], path: route.slice(1), rotY: -Math.PI / 2, total: route.length - 1 },
+      }
+    }
+    return { nav: { phase: 'present', pos: agent.spawn ?? [spot.x, spot.z], rotY: spot.rotY, path: [], arrived: true }, car: parked }
+  }
+  const start = useRef<ReturnType<typeof startAt> | null>(null)
+  if (!start.current) start.current = startAt()
+  const nav = useRef<Nav>(start.current.nav)
+  const car = useRef<Ride>(start.current.car)
+  const lights = useRef<Group>(null!)
 
   // New destination → plan a route (only once the agent is inside and not on its way out).
   useEffect(() => {
@@ -218,6 +277,26 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
   useEffect(() => {
     if (!leaving) return
     const n = nav.current
+    // asleep: out in town instead of home (already out: stays where it is)
+    if (agent.status === 'asleep' && (n.phase === 'to-seat' || n.phase === 'seated' || n.phase === 'riding')) return
+    if (agent.status === 'asleep' && n.phase !== 'driving-in') {
+      if (outingKind(agent.desk) === 'sit') {
+        const k = takeSeat(agent.id, agent.desk)
+        const s = k === null ? undefined : seatAt(k)
+        if (s && k !== null) {
+          outings.set(agent.id, { kind: 'sit', seat: k })
+          const indoor = n.pos[1] < ENTRANCE[1] + 0.2 ? findPath(layoutRef.current, n.pos, ENTRANCE) : []
+          n.path = [...indoor, ...s.walk.slice(1)]
+          n.seatRot = s.rotY
+          n.phase = 'to-seat'
+          n.arrived = false
+          return
+        }
+      } else if (streets) {
+        // to its car as usual, then off round the streets instead of home
+        rideOut.current = true
+      }
+    }
     if (n.phase === 'driving-in') {
       // never got out: just turn around
       n.phase = 'driving-out'
@@ -238,7 +317,19 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
     const c = car.current
 
     // ── vehicle ──
-    if (c.path.length) {
+    const d = ride.current
+    if (d && (n.phase === 'riding' || n.phase === 'riding-home')) {
+      d.step(dt, t)
+      c.pos = [d.x, d.z]
+      c.rotY = d.heading
+      // back at the car park's crossroads: off the streets and in to its slot
+      if (n.phase === 'riding-home' && d.home) {
+        d.leave()
+        ride.current = null
+        c.path = driveInRoute(agent.desk, layoutRef.current.lot.maxX).slice(1)
+        n.phase = 'driving-in'
+      }
+    } else if (c.path.length) {
       const parking = c.path.length <= 2
       const heading = advance(c, (parking ? PARK_SPEED : CAR_SPEED) * dt)
       // reversing out of the slot keeps the nose pointing at the building
@@ -249,6 +340,7 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
     vehicle.current.position.set(c.pos[0], 0, c.pos[1])
     vehicle.current.rotation.y = c.rotY
     vehicle.current.visible = n.phase !== 'gone'
+    lights.current.visible = n.phase === 'driving-in' || n.phase === 'driving-out' || n.phase === 'riding' || n.phase === 'riding-home'
 
     if (n.phase === 'driving-in' && !c.path.length) {
       // parked: get out and walk to the office, then on to the desk/spot
@@ -257,10 +349,20 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
       n.path = [...walkInRoute(agent.desk), ...findPath(layoutRef.current, ENTRANCE, [spotRef.current.x, spotRef.current.z])]
     }
     if (n.phase === 'driving-out' && !c.path.length) {
-      n.phase = 'gone'
-      finishDeparture(agent.id)
+      if (rideOut.current && streets) {
+        // out of the car park at its crossroads, heading on east: off round town (still asleep)
+        const [hi, hj] = streets.home
+        const driver = hi + 1 < streets.xs.length ? new Driver(streets, RIDE_SPEED[kind]).start(hi + 1, hj, 0, c.pos) : new Driver(streets, RIDE_SPEED[kind]).placeRandom()
+        outings.set(agent.id, { kind: 'ride', driver })
+        ride.current = driver
+        rideOut.current = false
+        n.phase = 'riding'
+      } else {
+        n.phase = 'gone'
+        finishDeparture(agent.id)
+      }
     }
-    const shown = n.phase === 'walking-in' || n.phase === 'present' || n.phase === 'walking-out'
+    const shown = n.phase === 'walking-in' || n.phase === 'present' || n.phase === 'walking-out' || n.phase === 'to-seat' || n.phase === 'seated'
     root.current.visible = shown
     const rider = vehicle.current.getObjectByName('rider')
     if (rider) rider.visible = !shown && n.phase !== 'gone'
@@ -286,6 +388,8 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
               n.path = findPath(layoutRef.current, n.pos, [sp.x, sp.z])
               n.arrived = false
             }
+          } else if (n.phase === 'to-seat') {
+            n.phase = 'seated'
           } else if (n.phase === 'walking-out') {
             // hop in and drive off (backing out of the slot first)
             n.phase = 'driving-out'
@@ -299,10 +403,10 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
       moving = n.path.length > 0 || dist > step
       if (dist > 0.01) n.rotY = dampAngle(n.rotY, Math.atan2(dx, dz), 12, dt)
     } else if (n.arrived) {
-      n.rotY = dampAngle(n.rotY, spot.rotY, 8, dt)
+      n.rotY = dampAngle(n.rotY, n.phase === 'seated' ? (n.seatRot ?? n.rotY) : spot.rotY, 8, dt)
     }
 
-    const pose: Pose = moving ? 'walk' : n.arrived && n.phase === 'present' ? poseFor(spot.kind, agent.status) : 'stand'
+    const pose: Pose = moving ? 'walk' : n.phase === 'seated' ? 'eat' : n.arrived && n.phase === 'present' ? poseFor(spot.kind, agent.status) : 'stand'
     const target = poseJoints(pose, t, seed, spot.id)
     const j = joints.current
     const k = pose === 'walk' || pose === 'billiards' ? 18 : 9
@@ -331,7 +435,7 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
     const tag = placeLabel(agent.id, anchor.set(tagAt[0], shown ? 2.3 + j.rootY : 1.9, tagAt[1]), camera, size.width, size.height)
     if (tag) {
       // only what changed is written (every write makes the browser redo the page's layout)
-      const opacity = n.phase === 'gone' ? '0' : leaving ? '0.6' : '1'
+      const opacity = n.phase === 'gone' ? '0' : leaving || out ? '0.6' : '1'
       if (tag.style.opacity !== opacity) tag.style.opacity = opacity
       if (tag.dataset.pose !== pose) tag.dataset.pose = pose
       const bubble = tag.firstElementChild as HTMLElement
@@ -345,7 +449,12 @@ export function Agent({ agent, leaving = false }: { agent: OfficeAgent; leaving?
   const lookKey = `${look.seed}-${look.figure}`
   return (
     <>
-    <Vehicle ref={vehicle} kind={kind} color={look.shirt} riderColor={look.shirt} />
+    <group ref={vehicle}>
+      <Vehicle kind={kind} color={look.shirt} riderColor={look.shirt} />
+      <group ref={lights} visible={false}>
+        <Headlights kind={kind} />
+      </group>
+    </group>
     <group
       ref={root}
       onClick={(e) => {

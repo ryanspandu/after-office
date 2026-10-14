@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { dropStep, forgetStep, pushStep } from '../state/url'
 import { flushSync } from 'react-dom'
 import { LuMaximize2, LuMinimize2 } from 'react-icons/lu'
 
@@ -41,7 +42,8 @@ export function MaximizeButton({ full, onToggle }: { full: boolean; onToggle: ()
 /**
  * The same for a modal (file preview, report): its card grows to the whole window and back, width and height
  * animated. Put `bodyRef` on an element inside the modal; pass width / className / actions to <Modal>. Phones: the
- * bottom sheet takes the whole screen. `remember`: a key to keep the choice in this browser (the dock's sheets).
+ * bottom sheet takes the whole screen, and that's a step in the history: the Back gesture makes it smaller first, the
+ * next one closes it. `remember`: a key to keep the choice in this browser (the dock's sheets).
  */
 export function useModalMaximize(width: number, remember?: string) {
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -52,7 +54,37 @@ export function useModalMaximize(width: number, remember?: string) {
       return false
     }
   })
+  // phones: full size is a step of its own (state/url.ts pushStep)
+  const step = useRef<string | null>(null)
+  const forget = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const phone = () => window.matchMedia('(max-width: 768px)').matches
+  const flipRef = useRef(() => {})
+  const enterStep = () => {
+    step.current = pushStep(() => {
+      step.current = null
+      flipRef.current()
+    })
+  }
+  // opened at full size (remembered): the step from the start
+  useEffect(() => {
+    // remounted at once (React's dev check): the same step stays
+    if (forget.current) clearTimeout(forget.current), (forget.current = null)
+    else if (full && phone() && !step.current) enterStep()
+    return () => {
+      forget.current = setTimeout(() => {
+        forget.current = null
+        if (step.current) forgetStep(step.current), (step.current = null)
+      }, 0)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const toggle = () => {
+    // smaller with the button: the step goes back out (its Back makes it smaller)
+    if (full && step.current) return dropStep(step.current)
+    flip()
+    if (!full && phone()) enterStep()
+  }
+  const flip = () => {
     if (remember)
       try {
         localStorage.setItem(remember, full ? '0' : '1')
@@ -75,6 +107,7 @@ export function useModalMaximize(width: number, remember?: string) {
       { duration: 260, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
     )
   }
+  flipRef.current = flip
   return {
     bodyRef,
     full,

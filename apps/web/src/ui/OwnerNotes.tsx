@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { LuArrowLeft, LuFolder, LuLoader, LuMinus, LuNotebookPen, LuPin, LuPinOff, LuUsers, LuPlus, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
+import { LuArrowLeft, LuFolder, LuLoader, LuMinus, LuNotebookPen, LuPencil, LuPin, LuPinOff, LuUsers, LuPlus, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
 import type { OwnerNote, OwnerNoteSummary } from '@after-office/shared'
 import { api } from '../state/auth'
 import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -507,6 +507,59 @@ function PinButton({ note }: { note: NoteState }) {
   )
 }
 
+/**
+ * The note's name: shown in full (up to three lines, then "…") with a pencil to rename it; a new or untitled note
+ * starts in the box. Enter or leaving the box puts it back.
+ */
+function NoteTitle({ note, autoFocus }: { note: NoteState; autoFocus: boolean }) {
+  const [editing, setEditing] = useState(autoFocus || !note.title.trim())
+  // opened by the pencil: the box takes the focus once it's there, the cursor at the end
+  const box = useRef<HTMLTextAreaElement>(null)
+  const [renaming, setRenaming] = useState(false)
+  useEffect(() => {
+    const el = box.current
+    if (!renaming || !el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [renaming])
+  const done = () => {
+    note.flushTitle()
+    if (!note.title.trim()) return
+    setEditing(false)
+    setRenaming(false)
+  }
+  if (editing)
+    return (
+      <textarea
+        ref={box}
+        className="note-modal__title"
+        value={note.title}
+        onChange={(e) => note.changeTitle(e.target.value.replace(/\n/g, ' '))}
+        onBlur={done}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter') return
+          e.preventDefault()
+          done()
+        }}
+        placeholder="Title"
+        aria-label="Title"
+        maxLength={200}
+        rows={1}
+        autoFocus={autoFocus}
+      />
+    )
+  return (
+    <div className="note-modal__name">
+      <h2 className="note-modal__name-text" title={note.title}>
+        {note.title}
+      </h2>
+      <button type="button" className="icon-btn small ghost" data-tip="Rename" aria-label="Rename" onClick={() => (setEditing(true), setRenaming(true))}>
+        <LuPencil />
+      </button>
+    </div>
+  )
+}
+
 /** The note itself: title, folder, tags, Share with agents, and the rich text. */
 function NoteFields({ note, autoFocus }: { note: NoteState; autoFocus: boolean }) {
   if (note.error && !note.loaded) return <div className="row__error">{note.error}</div>
@@ -520,15 +573,7 @@ function NoteFields({ note, autoFocus }: { note: NoteState; autoFocus: boolean }
     <>
       {note.error && <div className="row__error">{note.error}</div>}
       <div className="note-modal__fields">
-        <input
-          className="note-modal__title"
-          value={note.title}
-          onChange={(e) => note.changeTitle(e.target.value)}
-          placeholder="Title"
-          aria-label="Title"
-          maxLength={200}
-          autoFocus={autoFocus}
-        />
+        <NoteTitle note={note} autoFocus={autoFocus} />
         <div className="note-modal__meta">
           <NotePlaceButton note={note} />
           <TagPicker size="sm" value={note.tags} onChange={note.setTags} />
@@ -557,6 +602,7 @@ function NoteFields({ note, autoFocus }: { note: NoteState; autoFocus: boolean }
           initial={note.loaded.html}
           initialAt={note.loaded.updatedAt || null}
           autofocus={false}
+          viewFirst
           placeholder="Write your note: ideas, decisions, todos, links…"
           save={(html) => note.persist({ html })}
           onEdit={(empty) => ((note.editorEmpty.current = empty), (note.typedAt.current = Date.now()))}
@@ -610,6 +656,7 @@ export function NoteModal({
       open
       onClose={close}
       title={note.title.trim() || (id === 'new' ? 'New note' : 'Note')}
+      hideTitle
       {...max.modalProps}
       hidden={hidden}
       // a click beside it puts it aside instead of closing it (like a folder's window)

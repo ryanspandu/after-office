@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { dateTime } from './when'
+import { getParam, openUrl, setUrl, useParam } from '../state/url'
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { TaskList } from '@tiptap/extension-task-list'
@@ -18,6 +19,7 @@ import {
   LuBaseline,
   LuBold,
   LuCheck,
+  LuPencil,
   LuChevronsDownUp,
   LuHeading3,
   LuGripVertical,
@@ -54,6 +56,7 @@ export function RichNotes({
   save: store,
   autofocus = true,
   onEdit,
+  viewFirst = false,
 }: {
   initial: string
   initialAt: number | null
@@ -62,7 +65,10 @@ export function RichNotes({
   autofocus?: boolean
   /** every change, right away (the save waits a moment): whether the text is empty now */
   onEdit?: (empty: boolean) => void
+  /** opens to read (scrolls, can't be changed) with Edit to write; an empty one opens to write */
+  viewFirst?: boolean
 }) {
+  const [editing, setEditing] = useState(!viewFirst || !initial.trim())
   const [state, setState] = useState<'saved' | 'saving' | 'error'>('saved')
   // when they were last saved (none yet: nothing written)
   const [savedAt, setSavedAt] = useState(initialAt)
@@ -104,6 +110,7 @@ export function RichNotes({
       }),
     ],
     content: initial,
+    editable: editing,
     autofocus: autofocus && !initial.trim() ? 'end' : false,
     onUpdate: ({ editor: e }) => {
       // an empty editor is "<p></p>": nothing
@@ -126,10 +133,31 @@ export function RichNotes({
     [],
   )
 
+  useEffect(() => editor?.setEditable(editing), [editor, editing])
+  // right in the tap (a phone opens its keyboard only for a focus made there)
+  const startEditing = () => {
+    editor?.setEditable(true)
+    editor?.commands.focus('end')
+    setEditing(true)
+  }
+  // back to reading (viewFirst only): Done on a computer; ✓, Back or leaving the editor on a phone
+  const stopEditing = () => {
+    if (!viewFirst) return
+    editor?.commands.blur()
+    setEditing(false)
+  }
+  const writing = useWritingStep(stopEditing)
+
   return (
-    <div className="fnotes">
+    <div className={`fnotes${editing ? '' : ' fnotes--view'}`} ref={writing.ref} onFocus={writing.onFocus} onBlur={writing.onBlur}>
       <div className="fnotes__meta">
-        {editor && <History editor={editor} />}
+        {editing ? (
+          editor && <History editor={editor} />
+        ) : (
+          <button type="button" className="small fnotes__edit" onMouseDown={(e) => e.preventDefault()} onClick={startEditing}>
+            <LuPencil /> Edit
+          </button>
+        )}
         <span className="grow" />
         <span className={`fnotes__state muted${state === 'error' ? ' danger-text' : ''}`}>
           {state === 'saving' ? (
@@ -144,22 +172,18 @@ export function RichNotes({
             </>
           )}
         </span>
-        {/* phones, while typing (the editor takes the whole screen): put the keyboard away and go back */}
-        <button
-          type="button"
-          className="small fnotes__done"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => (editor?.commands.blur(), (document.activeElement as HTMLElement | null)?.blur())}
-        >
-          Done
-        </button>
+        {viewFirst && editing && (
+          <button type="button" className="small ghost fnotes__stop" onMouseDown={(e) => e.preventDefault()} onClick={stopEditing}>
+            Done
+          </button>
+        )}
       </div>
       {/* the toolbar sits right on top of the text box, as one piece */}
       <div className="fnotes__box">
-        <div className="fnotes__bar">{editor && <Toolbar editor={editor} />}</div>
+        {editing && <div className="fnotes__bar">{editor && <Toolbar editor={editor} onDone={stopEditing} />}</div>}
         <div className="fnotes__editor">
           {/* like Notion: a grip beside the block under the pointer drags it (a paragraph, a list item, a section…) */}
-          {editor && (
+          {editor && editing && (
             <DragHandle editor={editor}>
               <div className="fnotes__grip" aria-label="Drag to move">
                 <LuGripVertical />
@@ -173,7 +197,7 @@ export function RichNotes({
   )
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, onDone }: { editor: Editor; onDone: () => void }) {
   // re-render the buttons as the selection's marks change
   const on = useEditorState({
     editor,
@@ -276,7 +300,7 @@ function Toolbar({ editor }: { editor: Editor }) {
       {btn('Link', <LuLink />, on.link, link)}
     </>,
   ]
-  return <FittingToolbar groups={groups} />
+  return <FittingToolbar groups={groups} onDone={() => (editor.commands.blur(), onDone())} />
 }
 
 /** Undo / redo, outside the formatting toolbar. */
@@ -302,15 +326,45 @@ function History({ editor }: { editor: Editor }) {
 }
 
 /**
+ * Phones: writing takes the whole screen (the window steps aside, projects.css), and that's a step of its own in the
+ * history (?nwrite=1): the Back gesture ends the writing and goes back to the note, instead of closing the note's
+ * window. ✓, or leaving the editor some other way, takes the step back out.
+ */
+function useWritingStep(onEnd: () => void) {
+  const ref = useRef<HTMLDivElement>(null)
+  const step = useParam('nwrite')
+  const phone = () => window.matchMedia('(max-width: 768px)').matches
+  // Back while writing: the step is gone, the editor lets go
+  useEffect(() => {
+    const el = ref.current
+    const focused = document.activeElement as HTMLElement | null
+    if (!step && el && focused && el.contains(focused)) focused.blur()
+  }, [step])
+  const onFocus = () => {
+    if (phone() && !getParam('nwrite')) openUrl({ nwrite: 1 })
+  }
+  const onBlur = () => {
+    // focus moving within (a toolbar menu): still writing
+    setTimeout(() => {
+      if (ref.current?.contains(document.activeElement)) return
+      if (getParam('nwrite')) setUrl({ nwrite: null })
+      if (phone()) onEnd()
+    }, 0)
+  }
+  return { ref, onFocus, onBlur }
+}
+
+/**
  * One row, never wrapped: the groups that fit the width are shown, the rest open from "⋯" at the end (a narrow
  * window or a phone). Widths are measured as they're shown, and kept for when they're tucked away.
  */
-function FittingToolbar({ groups }: { groups: React.ReactNode[] }) {
+function FittingToolbar({ groups, onDone }: { groups: React.ReactNode[]; onDone: () => void }) {
   const bar = useRef<HTMLDivElement>(null)
   const widths = useRef<number[]>([])
   const [fit, setFit] = useState(groups.length)
   const [open, setOpen] = useState(false)
   const more = useRef<HTMLSpanElement>(null)
+  const done = useRef<HTMLButtonElement>(null)
 
   const measure = useRef(() => {})
   measure.current = () => {
@@ -322,7 +376,8 @@ function FittingToolbar({ groups }: { groups: React.ReactNode[] }) {
     })
     // a group never measured yet: show them all once, to measure
     if (widths.current.filter(Boolean).length < groups.length) return setFit(groups.length)
-    const room = el.clientWidth - 8
+    // ✓ (phones, while writing) takes its room first
+    const room = el.clientWidth - 8 - (done.current?.offsetWidth ? done.current.offsetWidth + 2 : 0)
     let n = 0
     let used = 0
     for (; n < groups.length; n++) {
@@ -338,6 +393,7 @@ function FittingToolbar({ groups }: { groups: React.ReactNode[] }) {
     if (!el) return
     const ro = new ResizeObserver(() => measure.current())
     ro.observe(el)
+    if (done.current) ro.observe(done.current)
     return () => ro.disconnect()
   }, [])
   // after showing more or fewer: measured again (settles at once)
@@ -388,6 +444,18 @@ function FittingToolbar({ groups }: { groups: React.ReactNode[] }) {
           )}
         </span>
       )}
+      {/* phones, while writing (the editor takes the whole screen): put the keyboard away and go back */}
+      <button
+        type="button"
+        ref={done}
+        className="fnotes__btn fnotes__done"
+        aria-label="Done"
+        data-tip="Done"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => (onDone(), (document.activeElement as HTMLElement | null)?.blur())}
+      >
+        <LuCheck />
+      </button>
     </div>
   )
 }

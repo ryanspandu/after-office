@@ -1,0 +1,27 @@
+/* ── desktop, fullscreen office (ui/StageDock.tsx): the panels as round buttons stacked on the stage's right edge;
+   "Advanced render" and the camera's buttons (styles/render-switch.css, focus-card.css) move over to the left one ── */
+.stage-dock {
+  position: absolute; z-index: 5; top: 10px; right: 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px;
+  border-radius: 999px; border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 88%, transparent);
+  backdrop-filter: blur(6px); box-shadow: var(--shadow);
+}
+.stage-dock__btn {
+  position: relative; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: var(--text); font-size: 16px; cursor: pointer;
+}
+.stage-dock__btn:hover { background: var(--accent-soft); }
+.stage-dock__btn.is-active { background: var(--accent); color: var(--accent-fg); }
+.stage-dock__btn:focus-visible { outline: 2px solid var(--hl); outline-offset: 1px; }
+.stage-dock__sep { width: 16px; height: 1px; margin: 2px 0; background: var(--line); }
+/* the count the panel shows in its header: orange when it's something to look at, gray when it's just how many */
+.stage-dock__count {
+  position: absolute; top: -2px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 999px;
+  display: grid; place-items: center; background: var(--card-2); color: var(--muted); border: 1px solid var(--line);
+  font-size: 10px; font-weight: 700; line-height: 1; pointer-events: none;
+}
+.stage-dock__count--hot { background: var(--hl); color: #fff; border-color: var(--hl); }
+@media (min-width: 769px) {
+  .app--full .render-switch, .app--full .view-controls { right: auto; left: 10px; }
+}
+/* phones have their own dock (ui/MobileDock.tsx) */
+@media (max-width: 768px) { .stage-dock { display: none; } }

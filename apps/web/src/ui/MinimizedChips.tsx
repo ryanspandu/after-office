@@ -123,6 +123,24 @@ export function MinimizedChips({ docked = false }: { docked?: boolean }) {
     ro.observe(el)
     return () => ro.disconnect()
   }, [docked, sig, box])
+  // floating: how far up from the window's bottom the chips reach (--fmin-room on <html>), so what else sits at the
+  // stage's bottom centre (the clicked agent's card, styles/focus-card.css) stands above them, not under them
+  useLayoutEffect(() => {
+    const el = box
+    if (docked || !el) return
+    const root = document.documentElement
+    // its height plus its offset from the bottom (not its box on screen: that moves while it slides in)
+    const measure = () => root.style.setProperty('--fmin-room', `${el.offsetHeight + (parseFloat(getComputedStyle(el).bottom) || 0)}px`)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    window.addEventListener('resize', measure)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', measure)
+      root.style.removeProperty('--fmin-room')
+    }
+  }, [docked, box])
   if (!folders.length) return null
   if (mobile) return docked ? null : <MinimizedMenu folders={folders} remove={remove} />
   if (!docked && dockedHere) return null

@@ -103,8 +103,8 @@ export function MobileDock() {
 }
 
 
-/** Phones: the office's folders, from their own round button on the stage. */
-function FoldersSheet() {
+/** The office's folders, from their own round button on the stage (phones; desktop's fullscreen office, ui/StageDock.tsx). */
+export function FoldersSheet() {
   const [q, setQ] = useState('')
   return (
     <section className="card card--grow folders-sheet">

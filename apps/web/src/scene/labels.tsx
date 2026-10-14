@@ -108,8 +108,8 @@ function CatTag() {
 }
 
 export function LabelLayer() {
-  // departing agents keep their tag until they've driven off
-  const ids = useOffice((s) => [...s.agents.filter((a) => !isAway(a.status)), ...s.departing].map((a) => a.id).join(','))
+  // departing agents keep their tag until they've driven off; asleep ones are out in town (scene/outings.ts): tagged there
+  const ids = useOffice((s) => [...new Set([...s.agents.filter((a) => !isAway(a.status) || a.status === 'asleep'), ...s.departing].map((a) => a.id))].join(','))
   return (
     <div className="labels">
       <CatTag />

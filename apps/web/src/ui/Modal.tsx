@@ -8,6 +8,8 @@ import { LuX } from 'react-icons/lu'
 interface Props {
   open: boolean
   title: string
+  /** the title names the dialog (screen readers) but isn't shown: the body shows it its own way */
+  hideTitle?: boolean
   description?: string
   onClose: () => void
   children: ReactNode
@@ -26,7 +28,7 @@ interface Props {
   onGrow?: () => void
 }
 
-export function Modal({ open, title, description, onClose, children, width = 460, className, actions, hidden, onBackdrop, onShrink, onGrow }: Props) {
+export function Modal({ open, title, hideTitle, description, onClose, children, width = 460, className, actions, hidden, onBackdrop, onShrink, onGrow }: Props) {
   const backdrop = useRef<HTMLDivElement | null>(null)
   const shownAt = useRef(0)
   const setBackdrop = useCallback((el: HTMLDivElement | null) => {
@@ -103,7 +105,7 @@ export function Modal({ open, title, description, onClose, children, width = 460
         <div className="modal__grab" aria-hidden="true" {...dragProps} />
         <header className="modal__head" {...dragProps}>
           <div>
-            <h3>{title}</h3>
+            {!hideTitle && <h3>{title}</h3>}
             {description && <p className="muted">{description}</p>}
           </div>
           <span className="modal__actions">

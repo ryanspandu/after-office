@@ -51,3 +51,17 @@
 @media (max-width: 768px) {
   .drawer.is-dragging, .drawer[data-sheet-h] { top: auto; }
 }
+/* phones, typing a message: the sheet takes the whole screen; the profile header and its ✕ stay, the tabs, the
+   sessions and the floating buttons step aside (ui/agent/ChatTab.tsx useTypingStep: Back puts the keyboard away).
+   Its open animation is left alone: switched off and back on, it would replay (a bounce on the way out) */
+@media (max-width: 768px) {
+  .drawer:has(.chat__composer:focus-within) {
+    top: 0 !important; bottom: 0; height: auto !important; border-radius: 0; padding-top: env(safe-area-inset-top);
+  }
+  .drawer:has(.chat__composer:focus-within) :is(.drawer__grab, .drawer__tabs, .stabs-wrap, .chat__float, .chat__bar--sheet) { display: none; }
+  .drawer:has(.chat__composer:focus-within) .chat--mobile .chat__log { padding-top: 8px; }
+  /* a thread: where it sits (its breadcrumb), its name and ✕ stay; its state and the other buttons step aside */
+  .thread-drawer:has(.chat__composer:focus-within) :is(.thread-head__meta, .thread-drawer__actions > :not(:last-child)) { display: none; }
+  /* the message box's hint on one line ("…" when it's longer) */
+  .chat__composer textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

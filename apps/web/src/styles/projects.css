@@ -211,6 +211,10 @@
 .fnotes__box { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .fnotes__box .fnotes__tools { border-radius: 12px 12px 0 0; border-bottom: 0; }
 .fnotes__box .fnotes__editor { border-radius: 0 0 12px 12px; }
+/* reading a note (viewFirst): no toolbar above the text, it scrolls; Edit to write */
+.fnotes--view .fnotes__editor { border-radius: 12px; }
+.fnotes__edit { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 768px) { .fnotes__stop { display: none; } }
 .fnotes__history { display: inline-flex; gap: 2px; }
 .fnotes__at { opacity: .8; }
 .fnotes__state { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; }
@@ -351,21 +355,25 @@
 }
 @media (max-width: 768px) { .hide-phone { display: none; } }
 
-/* ── notes on phones while typing: the window gives the editor the whole screen (header, sections and buttons step
-   aside), and it all comes back when the keyboard goes down (html.kb-open, state/visualViewport.ts) ── */
+/* ── notes on phones while writing (the editor has the focus): the window gives the editor the whole screen (header,
+   sections and buttons step aside), and it all comes back with ✓ at the toolbar's end (or a tap that leaves the
+   editor). Not tied to the keyboard: some phones don't report it ── */
 .fnotes__done { display: none; }
 @media (max-width: 768px) {
-  .kb-open .modal-backdrop:has(.fnotes:focus-within) { padding-top: 0; }
-  .kb-open .modal:has(.fnotes:focus-within) {
+  .modal-backdrop:has(.fnotes:focus-within) { padding-top: 0; }
+  .modal:has(.fnotes:focus-within) {
     height: var(--vvh, 100dvh) !important; max-height: var(--vvh, 100dvh) !important; border-radius: 0;
-    padding-top: env(safe-area-inset-top); box-sizing: border-box; animation: none;
+    padding-top: env(safe-area-inset-top); box-sizing: border-box;
   }
-  .kb-open .modal:has(.fnotes:focus-within) :is(.modal__grab, .modal__head, .fd__nav, .fd__actions) { display: none; }
-  .kb-open .modal:has(.fnotes:focus-within) .modal__body { padding: 10px 12px; }
-  .kb-open .modal:has(.fnotes:focus-within) .fd { grid-template-rows: minmax(0, 1fr); height: calc(var(--vvh, 100dvh) - 20px - env(safe-area-inset-top)); padding-top: 0; gap: 0; }
-  .kb-open .fnotes:focus-within { gap: 8px; }
-  .kb-open .fnotes:focus-within .fnotes__done { display: inline-flex; }
-  .kb-open .fnotes:focus-within .fnotes__editor { min-height: 0; }
+  .modal:has(.fnotes:focus-within) :is(.modal__grab, .modal__head, .fd__nav, .fd__actions) { display: none; }
+  .modal:has(.fnotes:focus-within) .modal__body { padding: 10px 12px; }
+  .modal:has(.fnotes:focus-within) .fd { grid-template-rows: minmax(0, 1fr); height: calc(var(--vvh, 100dvh) - 20px - env(safe-area-inset-top)); padding-top: 0; gap: 0; }
+  .fnotes:focus-within { gap: 8px; }
+  /* undo / redo / Saved step aside too: the toolbar and the text take it all */
+  .modal:has(.fnotes:focus-within) .fnotes__meta { display: none; }
+  .modal:has(.fnotes:focus-within) .fnotes__done { display: inline-flex; margin-left: auto; color: var(--hl-ink); }
+  .modal:has(.fnotes:focus-within) .modal__body { padding-top: 6px; }
+  .fnotes:focus-within .fnotes__editor { min-height: 0; }
 }
 /* a minimized window's chip grows in when it's put aside and shrinks away when it opens again or closes */
 @keyframes fmin-chip-in { from { opacity: 0; transform: translateY(8px) scale(0.92); } }

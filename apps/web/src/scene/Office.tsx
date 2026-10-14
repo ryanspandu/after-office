@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { MapControls, PerformanceMonitor } from '@react-three/drei'
 import { MathUtils, Spherical, Vector3 } from 'three'
@@ -29,6 +29,9 @@ const WARM_UP_MS = 8000
 export function Office() {
   const agents = useOffice((s) => s.agents)
   const departing = useOffice((s) => s.departing)
+  // asleep, not in the office: out in town (a seat at the café, a ride round the streets: scene/outings.ts), unless
+  // it's still on its way out (then it's drawn from `departing`)
+  const outInTown = useMemo(() => agents.filter((a) => a.status === 'asleep' && !a.lingering && !departing.some((d) => d.id === a.id)), [agents, departing])
   const select = useOffice((s) => s.select)
   const layout = useLayout()
   const { advanced, dpr, setDpr, setTier } = useQuality()
@@ -144,8 +147,8 @@ export function Office() {
       {/* one list keyed by id, so a removed agent keeps its component (and position) while it walks out. The
           generation changes when an agent comes back after leaving, so it mounts fresh instead of reusing the
           component that already walked away. */}
-      {[...agents.filter((a) => !isAway(a.status) || a.lingering), ...departing].map((a) => (
-        <Agent key={`${a.id}:${a.gen ?? 0}`} agent={a} leaving={departing.includes(a)} />
+      {[...agents.filter((a) => !isAway(a.status) || a.lingering), ...departing, ...outInTown].map((a) => (
+        <Agent key={`${a.id}:${a.gen ?? 0}`} agent={a} leaving={departing.includes(a)} out={outInTown.includes(a)} />
       ))}
     </Canvas>
   )

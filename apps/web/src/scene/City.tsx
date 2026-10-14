@@ -2,10 +2,15 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { AdditiveBlending, BoxGeometry, DoubleSide, BufferGeometry, Float32BufferAttribute, CanvasTexture, CircleGeometry, Color, MathUtils, MeshBasicMaterial, MeshToonMaterial, SRGBColorSpace, type Group, type Material, type Mesh, type Vector3 } from 'three'
 import { env, lampBulb, windowGlass } from './DayNight'
-import type { Layout } from './layout'
+import { ENTRANCE, OUTSIDE, type Layout, type Vec2 } from './layout'
 import { useRenderConfig } from './quality'
 import { Box, Cyl } from './prims'
 import { StaticBatch } from './StaticBatch'
+import poplinkLogo from '../assets/brands/poplink.png'
+import orenjusLogo from '../assets/brands/orenjus.svg'
+import driftlessLogo from '../assets/brands/driftless.svg'
+import { setSeats, type Seat } from './outings'
+import { setStreets, Traffic, type Streets } from './Traffic'
 import { toonRamp } from './toon'
 
 // The town around the office: a grid of streets (the front one, with the parking lot, is one of them) and city blocks
@@ -702,11 +707,21 @@ function VideoScreen({
 
 // ── the mall: its brands on screens ──
 
+/** A logo for a brand's screen, loaded once (drawn as soon as it's in: the screens redraw on their own). */
+const logo = (src: string) => {
+  const img = new Image()
+  // an SVG without a size of its own reads 0 wide: loaded is what counts
+  img.onload = () => void (img.dataset.ok = '1')
+  img.src = src
+  return img
+}
+
 /**
- * The brands the mall's screens advertise, in turn (the owner's tools; add or change them here): the name, a line under
- * it, and their colours. Text only, no logos.
+ * The brands the mall's screens advertise, in turn (the owner's tools and products; add or change them here): the
+ * name, a line under it, their colours, and a logo beside the name for those that have one.
  */
-export const MALL_BRANDS: { name: string; line: string; bg: string; fg: string }[] = [
+export const MALL_BRANDS: { name: string; line: string; bg: string; fg: string; logo?: HTMLImageElement }[] = [
+  { name: 'Poplink.id', line: 'One link for everything', bg: '#17604e', fg: '#ffffff', logo: logo(poplinkLogo) },
   { name: 'Node.js', line: 'JavaScript everywhere', bg: '#3c873a', fg: '#ffffff' },
   { name: 'PostgreSQL', line: 'The database you trust', bg: '#336791', fg: '#ffffff' },
   { name: 'Redis', line: 'Fast. Really fast.', bg: '#d82c20', fg: '#ffffff' },
@@ -714,7 +729,9 @@ export const MALL_BRANDS: { name: string; line: string; bg: string; fg: string }
   { name: 'React', line: 'Build the UI', bg: '#20232a', fg: '#61dafb' },
   { name: 'TypeScript', line: 'Types that help', bg: '#3178c6', fg: '#ffffff' },
   { name: 'Docker', line: 'Ship it in a box', bg: '#1d63ed', fg: '#ffffff' },
+  { name: 'Orenjus', line: 'Fresh every day', bg: '#fff4e6', fg: '#c2410c', logo: logo(orenjusLogo) },
   { name: 'Claude', line: 'Your office, working', bg: '#d97757', fg: '#ffffff' },
+  { name: 'Driftless', line: 'Go with the flow', bg: '#1d199b', fg: '#ffffff', logo: logo(driftlessLogo) },
 ]
 const BRAND_SLIDE_S = 4
 
@@ -736,17 +753,22 @@ function brandShow(start: number) {
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       const tall = h > w
-      const size = Math.min(tall ? w * 0.34 : h * 0.42, (w * 0.9) / Math.max(4, b.name.length) * 1.7)
+      // with a logo: the logo on the left, the name and its line centred in the rest
+      const icon = !tall && b.logo?.dataset.ok ? h * 0.56 : 0
+      const room = w - (icon ? icon + h * 0.18 : 0)
+      const cx = w - room / 2 - (icon ? h * 0.06 : 0)
+      const size = Math.min(tall ? w * 0.34 : h * 0.42, (room * 0.9) / Math.max(4, b.name.length) * 1.7)
       ctx.font = `900 ${size}px Inter, "Arial Black", Arial, sans-serif`
       if (tall) {
         ctx.translate(w / 2, h / 2)
         ctx.rotate(-Math.PI / 2)
         ctx.fillText(b.name, 0, 0)
       } else {
-        ctx.fillText(b.name, w / 2, h * 0.44)
+        if (icon) ctx.drawImage(b.logo!, h * 0.14, (h - icon) / 2, icon, icon)
+        ctx.fillText(b.name, cx, h * 0.44)
         ctx.font = `700 ${size * 0.32}px Inter, Arial, sans-serif`
         ctx.globalAlpha = 0.85
-        ctx.fillText(b.line, w / 2, h * 0.76)
+        ctx.fillText(b.line, cx, h * 0.76)
       }
       ctx.restore()
     }
@@ -834,6 +856,171 @@ function Mall({ w, d, name: title = 'AFTER MALL', H = 12.6, first = 0 }: { w: nu
             <Box size={[1.4, 0.45, 1.7]} position={[0, 0.9, -0.2]} color="#3a3e48" />
           </group>
         ))}
+    </group>
+  )
+}
+
+// ── the café behind the office ──
+
+/** A round café table with four stools round it (seats for the agents who are off, later). */
+function CafeTable({ position, umbrella }: { position: [number, number, number]; umbrella?: string }) {
+  return (
+    <group position={position}>
+      <Cyl r={0.5} h={0.05} position={[0, 0.76, 0]} color="#e9dfcf" />
+      <Cyl r={0.05} h={0.74} position={[0, 0.37, 0]} color="#2a2a2a" />
+      <Cyl r={0.22} h={0.03} position={[0, 0.015, 0]} color="#2a2a2a" noShadow />
+      {STOOLS.map(([sx, sz], k) => (
+        <group key={k} position={[sx, 0, sz]}>
+          <Cyl r={0.2} h={0.06} position={[0, 0.48, 0]} color="#6b4a33" />
+          <Cyl r={0.03} h={0.46} position={[0, 0.23, 0]} color="#2a2a2a" />
+        </group>
+      ))}
+      <Cyl r={0.05} h={0.08} position={[0.14, 0.83, 0.06]} color="#fbf7f0" />
+      {umbrella && (
+        <>
+          <Cyl r={0.025} h={2.3} position={[0, 1.15, 0]} color="#d9d5cc" />
+          <Cyl r={0.05} rBottom={1.25} h={0.4} position={[0, 2.35, 0]} color={umbrella} seg={10} />
+          <Bulb position={[0, 2.08, 0]} />
+        </>
+      )}
+    </group>
+  )
+}
+
+/** The café's terrace: its tables (relative to the block's middle) in rows from the café's front to the street. */
+function cafeTables(w: number, d: number) {
+  const t0 = -d / 2 + 0.8 + CAFE_DEPTH + 2.4
+  const t1 = d / 2 - 1.4
+  const cols = Math.max(2, Math.floor((w - 3) / 3.2))
+  const rows = Math.max(1, Math.floor((t1 - t0) / 3) + 1)
+  const step = (w - 3.2) / cols
+  const list: { x: number; z: number; r: number; c: number }[] = []
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) list.push({ x: -w / 2 + 1.6 + (c + 0.5) * step, z: t0 + r * 3, r, c })
+  return { t0, t1, cols, step, list }
+}
+const CAFE_DEPTH = 7
+/** The stools round a café table: their offsets from it. */
+const STOOLS = [0, 1, 2, 3].map((k): Vec2 => {
+  const a = (k * Math.PI) / 2 + Math.PI / 4
+  return [Math.cos(a) * 0.82, Math.sin(a) * 0.82]
+})
+
+/**
+ * The town's seats for the agents who are off (scene/outings.ts): every stool at the café's terrace and the coffee
+ * shop's chairs, each with the walk to it from the office's door (along the pavements: out to the side road, then up
+ * it to the café, or across it to the coffee shop).
+ */
+function townSeats(cafe: { x: number; z: number; w: number; d: number }, coffee: { x: number; zs: number[] }, sideX: number): Seat[] {
+  const out: Vec2[] = [ENTRANCE, [ENTRANCE[0], OUTSIDE.sidewalkZ], [sideX, OUTSIDE.sidewalkZ]]
+  const face = (sx: number, sz: number, tx: number, tz: number) => Math.atan2(tx - sx, tz - sz)
+  const seats: Seat[] = []
+  const { list, cols, step } = cafeTables(cafe.w, cafe.d)
+  const pave = cafe.z + cafe.d / 2 + 0.35
+  for (const t of list) {
+    const tx = cafe.x + t.x
+    const tz = cafe.z + t.z
+    // in by the aisle beside its column, along the gap in front of its row
+    const aisle = tx + (t.c < cols - 1 ? step / 2 : -step / 2)
+    const lane = tz - 1.5
+    for (const [ox, oz] of STOOLS) {
+      const sx = tx + ox
+      const sz = tz + oz
+      seats.push({ x: sx, z: sz, rotY: face(sx, sz, tx, tz), walk: [...out, [sideX, pave], [aisle, pave], [aisle, lane], [sx, lane], [sx, sz]] })
+    }
+  }
+  // the coffee shop's chairs, on the far side of the side road (its tables face the road)
+  for (const tz of coffee.zs) {
+    for (const oz of [-0.75, 0.75]) {
+      const sx = coffee.x
+      const sz = tz + oz
+      seats.push({ x: sx, z: sz, rotY: face(sx, sz, coffee.x, tz), walk: [...out, [coffee.x + 0.9, OUTSIDE.sidewalkZ], [coffee.x + 0.9, sz], [sx, sz]] })
+    }
+  }
+  return seats
+}
+
+/**
+ * "After Cafe", the block behind the office: a low two-storey café at the back (dark green, a glass front lit warm at
+ * night, a striped awning, its sign), a big terrace in front of it full of tables (strings of bulbs over it, light on
+ * the paving at night) and more tables on its roof. Somewhere for the agents to hang out when they're off.
+ */
+function Cafe({ w, d }: { w: number; d: number }) {
+  const sign = useMemo(() => signTexture(1024, 220, '#24302a', [{ text: 'AFTER CAFE', size: 124, color: P.yellow, y: 118 }], P.orange), [])
+  const BW = Math.min(w - 2, 20)
+  const BD = CAFE_DEPTH
+  const H = 6.4
+  const back = -d / 2 + 0.8
+  const front = back + BD
+  // the terrace: from the café's front to the street, tables in rows
+  const { t0, t1, list: tables } = cafeTables(w, d)
+  const umbrellas = ['#fff3dc', P.orange, '#2f6b4f', P.red]
+  const roofTables = Math.max(2, Math.floor((BW - 2) / 3.4))
+  return (
+    <group>
+      {/* the terrace's paving (warm wood decking) and planters at its street corners */}
+      <Box size={[w, 0.06, d - BD - 1]} position={[0, 0.03, front + (d - BD - 1) / 2 - 0.2]} color="#b98a5e" noShadow />
+      {[-1, 1].map((sx) => (
+        <Box key={sx} size={[1.6, 0.5, 0.5]} position={[sx * (w / 2 - 1.1), 0.25, d / 2 - 0.5]} color="#3d4a42" />
+      ))}
+      {[-1, 1].map((sx) => (
+        <mesh key={`p${sx}`} position={[sx * (w / 2 - 1.1), 0.75, d / 2 - 0.5]} scale={[0.8, 0.35, 0.3]}>
+          <icosahedronGeometry args={[1, 0]} />
+          <meshToonMaterial color="#4f9a5a" gradientMap={toonRamp} />
+        </mesh>
+      ))}
+      {/* the café: two storeys, a glass front lit inside at night */}
+      <group position={[0, 0, back + BD / 2]}>
+        <Box size={[BW, H, BD]} position={[0, H / 2, 0]} color="#3d4a42" />
+        <Box size={[BW + 0.3, 0.35, BD + 0.3]} position={[0, H + 0.17, 0]} color={N.charcoal} />
+        <Box size={[BW + 0.1, 0.2, 0.3]} position={[0, H / 2, BD / 2 + 0.1]} color="#b98a5e" />
+        {[0, 1].map((f) => (
+          <group key={f} position={[0, f * (H / 2), 0]}>
+            <mesh position={[0, 1.55, BD / 2 - 0.1]} material={shopGlow}>
+              <boxGeometry args={[BW - 1.4, 2.3, 0.05]} />
+            </mesh>
+            <mesh position={[0, 1.55, BD / 2 + 0.02]} material={windowGlass}>
+              <boxGeometry args={[BW - 1.2, 2.4, 0.05]} />
+            </mesh>
+            {Array.from({ length: Math.round(BW / 2.4) + 1 }, (_, k) => (
+              <Box key={k} size={[0.12, 2.5, 0.1]} position={[-(BW - 1.2) / 2 + k * ((BW - 1.2) / Math.round(BW / 2.4)), 1.5, BD / 2 + 0.05]} color="#1f2622" noShadow />
+            ))}
+          </group>
+        ))}
+        {/* the striped awning over the ground floor, the sign above it */}
+        <group position={[0, 3.0, BD / 2 + 0.75]} rotation={[0.32, 0, 0]}>
+          {Array.from({ length: 12 }, (_, k) => (
+            <Box key={k} size={[(BW - 1) / 12, 0.06, 1.6]} position={[-(BW - 1) / 2 + (k + 0.5) * ((BW - 1) / 12), 0, 0]} color={k % 2 ? '#fff3dc' : '#2f6b4f'} />
+          ))}
+        </group>
+        <Sign texture={sign} w={7} h={7 * (220 / 1024)} glow position={[0, H - 0.6, BD / 2 + 0.08]} />
+        {/* the roof terrace: a rail, tables, bulbs */}
+        {[-1, 1].map((sz) => (
+          <Box key={sz} size={[BW, 0.5, 0.06]} position={[0, H + 0.55, sz * (BD / 2 - 0.05)]} color={N.charcoal} noShadow />
+        ))}
+        {[-1, 1].map((sx) => (
+          <Box key={`r${sx}`} size={[0.06, 0.5, BD]} position={[sx * (BW / 2 - 0.05), H + 0.55, 0]} color={N.charcoal} noShadow />
+        ))}
+        {Array.from({ length: roofTables }, (_, k) =>
+          [-1.4, 1.4].map((dz) => <CafeTable key={`${k}${dz}`} position={[-(BW - 3) / 2 + (k * (BW - 3)) / (roofTables - 1), H + 0.3, dz]} />),
+        )}
+        {Array.from({ length: 12 }, (_, k) => (
+          <Bulb key={`b${k}`} position={[-BW / 2 + 0.4 + k * ((BW - 0.8) / 11), H + 1.6, 0]} />
+        ))}
+      </group>
+      {/* the terrace: rows of tables, some under umbrellas; strings of bulbs on posts over them */}
+      {tables.map(({ x, z, r, c }) => (
+        <CafeTable key={`${r}-${c}`} position={[x, 0, z]} umbrella={(r + c) % 3 === 0 ? umbrellas[(r * 3 + c) % umbrellas.length] : undefined} />
+      ))}
+      {[-1, 1].map((sx) => (
+        <group key={`post${sx}`}>
+          {[t0 - 1, t1].map((z) => (
+            <Cyl key={z} r={0.06} h={3.2} position={[sx * (w / 2 - 0.6), 1.6, z]} color="#2a2a2a" />
+          ))}
+        </group>
+      ))}
+      {[t0 - 1, t1].map((z) => Array.from({ length: 14 }, (_, k) => <Bulb key={`s${z}${k}`} position={[-w / 2 + 0.6 + k * ((w - 1.2) / 13), 3.05 - Math.sin((k / 13) * Math.PI) * 0.35, z]} />))}
+      <LightPool r={Math.min(w, d) * 0.32} position={[-w / 4, 0.07, (t0 + t1) / 2]} />
+      <LightPool r={Math.min(w, d) * 0.32} position={[w / 4, 0.07, (t0 + t1) / 2]} />
     </group>
   )
 }
@@ -1261,7 +1448,6 @@ export function City({ layout }: { layout: Layout }) {
       ...block(cols.l, rows.bb, [7, 12], 2),
       ...block(cols.r, rows.bb, [6, 10], 4),
       ...block(cols.ll, rows.b, [5, 10], 5),
-      ...block(mid, rows.b, [5, 9], 7),
       ...block(cols.r, rows.b, [4, 7], 8),
     ]
     const left = [
@@ -1315,6 +1501,8 @@ export function City({ layout }: { layout: Layout }) {
     // the mall: the whole block behind-left of the office
     const S = 1.6
     const mall = { x: (cols.l[0] + cols.l[1]) / 2, z: (rows.b[0] + rows.b[1]) / 2, w: cols.l[1] - cols.l[0] - 2 * S, d: rows.b[1] - rows.b[0] - 2 * S }
+    // the café: the block right behind the office (low: the plaza shows over it)
+    const cafe = { x: (mid[0] + mid[1]) / 2, z: (rows.b[0] + rows.b[1]) / 2, w: mid[1] - mid[0] - 2 * S, d: rows.b[1] - rows.b[0] - 2 * S }
     // and a bigger one, the whole block behind the office's (as wide as the office's)
     const plaza = { x: (mid[0] + mid[1]) / 2, z: (rows.bb[0] + rows.bb[1]) / 2, w: mid[1] - mid[0] - 2 * S, d: rows.bb[1] - rows.bb[0] - 2 * S }
     // across the front road from the office: one storey only (nothing hides the office's car park), and the one
@@ -1332,7 +1520,7 @@ export function City({ layout }: { layout: Layout }) {
     const split = <T extends number[]>(list: T[]) => [list.filter(([x, z]) => inFront(x, z)), list.filter(([x, z]) => !inFront(x, z))] as const
     const [frontTrees, otherTrees] = split(trees)
     const [frontLamps, otherLamps] = split(lamps)
-    return { cols, rows, mid, behind, left, front, aside, near, leftScreen, frontTrees, otherTrees, frontLamps, otherLamps, mall, plaza, mart: martAt }
+    return { cols, rows, mid, behind, left, front, aside, near, leftScreen, frontTrees, otherTrees, frontLamps, otherLamps, mall, plaza, cafe, mart: martAt }
   }, [X0, X1, Z0, Z1, xRoads, zRoads, L, R, lot.minX, lot.maxX])
 
   // lit windows, signs and shop lights at night; the town faded while the view is on the office
@@ -1350,12 +1538,29 @@ export function City({ layout }: { layout: Layout }) {
     for (const m of glowing) m.emissiveIntensity = env.night * 0.9
   })
 
+  // the streets the cars drive (the agents who are off too), and the seats in town they sit at
+  const streets = useMemo<Streets>(
+    () => ({
+      xs: [xRoads.l2, xRoads.l1, xRoads.r1, xRoads.r2].map(([a, b]) => (a + b) / 2),
+      zs: [zRoads.b2, zRoads.b1, zRoads.f1, zRoads.f2].map(([a, b]) => (a + b) / 2),
+      // not along the office's car park (the agents' way in): it's where they leave the streets
+      closed: [2, 1],
+      home: [2, 2],
+    }),
+    [xRoads, zRoads],
+  )
+  setStreets(streets)
+  const shopX = town.cols.l[1] - 3.2
+  useMemo(
+    () => setSeats(townSeats(town.cafe, { x: shopX + 2.6, zs: [-3, 0, 3].map((dx) => town.rows.o[1] - 6 + dx) }, xRoads.l1[1] + 1)),
+    [town, shopX, xRoads],
+  )
+
   const v = `${L}:${R}`
   const { cols, rows } = town
   // the roads along x run the town's width, but the front one only beyond the lot (the lot draws its own stretch)
   const roadsX = [zRoads.b2, zRoads.b1, zRoads.f2]
   const roadsZ = [xRoads.l2, xRoads.l1, xRoads.r1, xRoads.r2]
-  const shopX = cols.l[1] - 3.2
   return (
     <group>
       <StaticBatch version={v}>
@@ -1381,12 +1586,17 @@ export function City({ layout }: { layout: Layout }) {
             <Minimart w={town.mart.w} d={town.mart.d} />
           </group>
         )}
+        <group position={[town.cafe.x, 0, town.cafe.z]}>
+          <Cafe w={town.cafe.w} d={town.cafe.d} />
+        </group>
         {/* the coffee shop and the warung on the left road, facing it (+x: towards the usual view) */}
         <group position={[shopX, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
           <CoffeeShop x={rows.o[1] - 6} z={3} />
           <WarungPecelLele x={rows.o[0] + 6} z={2.1} />
         </group>
       </StaticBatch>
+      {/* a few cars and motorbikes about town (not on the office's own stretch of the front road: the agents' way in) */}
+      <Traffic net={streets} cars={6} motos={5} />
       {/* the street furniture: trees and lamp posts in front of the office fade with the buildings there */}
       <Fade>
         {/* painted shadows only where the sun casts none (the low render tier): real ones fall on the buildings too */}
