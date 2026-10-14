@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from './auth'
 import { useOffice } from './store'
+import { getParam, setUrl, useUrl } from './url'
 import type { Tag, CronJob, FollowUp, OfficeTask, SystemMetrics, TaskPriority, TaskStatus, TokenUsage, WorkReport } from '@after-office/shared'
 
 // Dashboard data (cron jobs, tasks, follow-ups, metrics, token usage). Mock for now; Phase 2 loads it from Hono.
@@ -153,6 +154,7 @@ interface DashboardStore {
   usage: TokenUsage[]
   metrics: SystemMetrics
   range: { preset: RangePreset; from: string; to: string }
+  /** "Fullscreen office" (desktop): kept in the address (?full=1), so it stays on a reload */
   fullscreen: boolean
 
   addCron: (c: Omit<CronJob, 'id'>) => void
@@ -260,7 +262,7 @@ export const useDashboard = create<DashboardStore>((set, get) => {
     usage: demo ? mockUsage(now) : [],
     metrics: demo ? { cpu: 34, memUsedGb: 5.8, memTotalGb: 16 } : { cpu: 0, memUsedGb: 0, memTotalGb: 0 },
     range: { preset: 'today', from: today(), to: today() },
-    fullscreen: false,
+    fullscreen: getParam('full') === '1',
     syncError: null,
     leaving: {},
     olderReports: {},
@@ -336,7 +338,8 @@ export const useDashboard = create<DashboardStore>((set, get) => {
     resolveReview: (id) => set((s) => ({ reviews: s.reviews.filter((r) => r.id !== id) })),
     setRange: (range) => set((s) => ({ range: { ...s.range, ...range } })),
     setMetrics: (metrics) => set({ metrics }),
-    toggleFullscreen: () => set((s) => ({ fullscreen: !s.fullscreen })),
+    // the address is the switch (state/url.ts): the store follows it (below)
+    toggleFullscreen: () => setUrl({ full: get().fullscreen ? null : 1 }),
     loadDemoWork: () => {
       const t = Date.now()
       set({ crons: INITIAL_CRONS, tasks: initialTasks(t), reviews: initialReviews(t), reports: initialReports(t), usage: mockUsage(t), syncError: null })
@@ -368,3 +371,9 @@ export function formatTokens(n: number) {
 
 /** This one was just deleted and is on its way out (give its row .is-leaving). */
 export const useLeaving = (id: string) => useDashboard((s) => !!s.leaving[id])
+
+// fullscreen follows the address: the button, a reload, Back
+useUrl.subscribe((u) => {
+  const full = u.params.full === '1'
+  if (useDashboard.getState().fullscreen !== full) useDashboard.setState({ fullscreen: full })
+})

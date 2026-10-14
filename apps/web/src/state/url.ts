@@ -9,6 +9,7 @@ import { create } from 'zustand'
 //   ?agent=<id>&tab=<tab>  ?manager=1&mtab=chat|team  ?automation=1  ?profile=1  ?settings=1 (office branding)  ?tools=1 (proxy, API keys)  ?password=1  ?twofa=1  ?activity=1
 //   reports view also: &tag=<id,id>
 //   ?thread=<id>|new (ui/ThreadView.tsx, ui/Threads.tsx)  ?newtask=1&nt_thread=<id> (a task made in a thread)
+//   desktop: ?full=1 (the office fullscreen, panels as round buttons on it: ui/StageDock.tsx)
 //   phones: ?nwrite=1 (writing a note on the whole screen: Back ends it, ui/FolderNotes.tsx)
 //   phones: ?sheet=attention|cron|tasks|reports|agents|threads (the dock's bottom sheets, ui/MobileDock.tsx; threads: the stage's button)
 
