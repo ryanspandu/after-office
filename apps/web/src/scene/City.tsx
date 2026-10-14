@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { AdditiveBlending, BoxGeometry, DoubleSide, BufferGeometry, Float32BufferAttribute, CanvasTexture, CircleGeometry, Color, MathUtils, MeshBasicMaterial, MeshToonMaterial, SRGBColorSpace, type Group, type Material, type Mesh, type Vector3 } from 'three'
+import { AdditiveBlending, BoxGeometry, DoubleSide, BufferGeometry, Float32BufferAttribute, CanvasTexture, CircleGeometry, Color, MathUtils, MeshBasicMaterial, MeshToonMaterial, SRGBColorSpace, type Group, type PointLight, type Material, type Mesh, type Vector3 } from 'three'
 import { env, lampBulb, windowGlass } from './DayNight'
 import { ENTRANCE, OUTSIDE, type Layout, type Vec2 } from './layout'
 import { useRenderConfig } from './quality'
@@ -887,6 +887,17 @@ function CafeTable({ position, umbrella }: { position: [number, number, number];
   )
 }
 
+/**
+ * A real light for a place people sit at night (the café's terrace and roof, the coffee shop's tables): it lights the
+ * tables and whoever sits there, not just a painted pool. Only on the tiers with real lamps (scene/quality.ts), so
+ * the light count, and the shaders, stay fixed per tier; its strength follows the night.
+ */
+function NightLight({ position, power, distance }: { position: [number, number, number]; power: number; distance: number }) {
+  const light = useRef<PointLight>(null)
+  useFrame(() => void (light.current && (light.current.intensity = env.night * power)))
+  return <pointLight ref={light} position={position} color="#ffc47a" intensity={0} distance={distance} decay={1.3} />
+}
+
 /** The café's terrace: its tables (relative to the block's middle) in rows from the café's front to the street. */
 function cafeTables(w: number, d: number) {
   const t0 = -d / 2 + 0.8 + CAFE_DEPTH + 2.4
@@ -899,6 +910,11 @@ function cafeTables(w: number, d: number) {
   return { t0, t1, cols, step, list }
 }
 const CAFE_DEPTH = 7
+/** The middle of the café's terrace, front to back (relative to the block's middle). */
+const cafeTerraceZ = (w: number, d: number) => {
+  const { t0, t1 } = cafeTables(w, d)
+  return (t0 + t1) / 2
+}
 /** The stools round a café table: their offsets from it. */
 const STOOLS = [0, 1, 2, 3].map((k): Vec2 => {
   const a = (k * Math.PI) / 2 + Math.PI / 4
@@ -1595,6 +1611,16 @@ export function City({ layout }: { layout: Layout }) {
           <WarungPecelLele x={rows.o[0] + 6} z={2.1} />
         </group>
       </StaticBatch>
+      {/* the café's terrace and roof, and the coffee shop's tables: lit for real at night */}
+      {cfg.fixedLights !== 'none' && (
+        <group>
+          {[-1 / 3, 0, 1 / 3].map((k) => (
+            <NightLight key={k} position={[town.cafe.x + k * town.cafe.w, 3.2, town.cafe.z + cafeTerraceZ(town.cafe.w, town.cafe.d)]} power={7} distance={10} />
+          ))}
+          <NightLight position={[town.cafe.x, 9, town.cafe.z - town.cafe.d / 2 + 0.8 + CAFE_DEPTH / 2]} power={5} distance={10} />
+          <NightLight position={[shopX + 2.6, 3, town.rows.o[1] - 6]} power={6} distance={8} />
+        </group>
+      )}
       {/* a few cars and motorbikes about town (not on the office's own stretch of the front road: the agents' way in) */}
       <Traffic net={streets} cars={6} motos={5} />
       {/* the street furniture: trees and lamp posts in front of the office fade with the buildings there */}
