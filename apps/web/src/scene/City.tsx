@@ -138,7 +138,9 @@ function rng(seed: number) {
 }
 
 /** Light greys, nearly white (the colour is in the signs); now and then a yellow one. */
-const FACADES = ['#f5f5f3', '#efefec', '#e9e9e6', '#e2e2df', '#f2f1ee', '#e6e6e3', '#dcdcd9', '#f5f5f3', '#ececea', P.yellow]
+// light greys a touch cool: the warm grade (scene/Outline.tsx) pulls light colours towards cream, which is the office's
+// own wall colour; a cool grey comes out of it still grey
+const FACADES = ['#d4d8de', '#cdd1d8', '#dadde2', '#c6cad1', '#d0d4da', '#dfe2e6', '#c9cdd4', '#d6d9df', '#ccd0d6', P.yellow]
 const ROOFS = ['#a3a4a9', '#9a9ba0', '#b3b4b8', '#8f9096']
 
 /** What the banners and billboards say (made up: a town's shops, not real brands), and their colours. */
@@ -753,45 +755,24 @@ function brandShow(start: number) {
   }
 }
 
-/** The pennant banners along the mall's front: the brands' colours with their names, read top to bottom. */
-const pennantTextures = new Map<number, CanvasTexture>()
-function pennantTexture(i: number) {
-  const hit = pennantTextures.get(i)
-  if (hit) return hit
-  const b = MALL_BRANDS[i % MALL_BRANDS.length]
-  const canvas = document.createElement('canvas')
-  canvas.width = 160
-  canvas.height = 620
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = b.bg
-  ctx.fillRect(0, 0, 160, 620)
-  ctx.fillStyle = b.fg
-  ctx.translate(80, 310)
-  ctx.rotate(Math.PI / 2)
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.font = `900 ${Math.min(96, 900 / b.name.length)}px Inter, "Arial Black", Arial, sans-serif`
-  ctx.fillText(b.name.toUpperCase(), 0, 6)
-  const t = new CanvasTexture(canvas)
-  t.colorSpace = SRGBColorSpace
-  pennantTextures.set(i, t)
-  return t
-}
-
 /**
  * The mall: a whole block, low and wide (not an office tower), with rounded corners; a shop-window ground floor all
  * round, white cladding above with an orange stripe, a tall glass drum with a dome at the front, a big canopy over the
- * entrance with its name, a car park on the roof. And screens everywhere: a wide one on the front, tall ones on the
- * corners, a billboard on the roof, pennant banners along the front, all advertising MALL_BRANDS.
+ * entrance with its name, a car park on the roof. And screens, all landscape: a wide one on the front, one on the right
+ * side, a billboard on the roof, all advertising MALL_BRANDS.
  */
 /** The mall's glass: the office's (its colour follows day and night) but its own, so it fades with the town. */
 const mallGlass = windowGlass.clone()
 mallGlass.userData.live = true
 
+/** Parking bays across a mall roof this wide (2.6 each, inside a 2-unit margin), and the cars' colours. */
+const BAYS = (w: number) => Math.floor((w - 4) / 2.6)
+const CARS = ['#f24f13', '#8082a6', '#f2c230', '#efefec', '#46334f']
+
 function Mall({ w, d, name: title = 'AFTER MALL', H = 12.6, first = 0 }: { w: number; d: number; name?: string; H?: number; first?: number }) {
   const R = 3.5
   const name = useMemo(() => signTexture(1400, 260, '#ffffff', [{ text: title, size: Math.min(190, 2100 / title.length), color: P.red, y: 140 }]), [title])
-  const CLAD = '#f3f1ec'
+  const CLAD = '#d9dce1'
   const front = d / 2
   const right = w / 2
   return (
@@ -831,31 +812,28 @@ function Mall({ w, d, name: title = 'AFTER MALL', H = 12.6, first = 0 }: { w: nu
         ))}
         <Sign texture={name} w={8.4} h={8.4 * (260 / 1400)} glow position={[0, 4.4, 4.03]} />
       </group>
-      {/* pennant banners along the front, between the canopy and the drum */}
-      {Array.from({ length: 6 }, (_, i) => (
-        <Sign key={i} texture={pennantTexture(i + first)} w={1.1} h={4.2} glow position={[-w / 2 + R + 1 + i * 1.6, 7.2, front + 0.08]} />
-      ))}
-      {/* the screens: a wide one on the front, tall ones on the right side, the roof's billboard */}
+      {/* the screens, all landscape: a wide one on the front, one on the right side, the roof's billboard */}
       <VideoScreen w={Math.min(14, w * 0.4)} aspect={0.42} draw={brandShow(first)} lights={false} position={[w * 0.18, 8.4, front + 0.2]} />
-      <VideoScreen w={3} aspect={2.6} draw={brandShow(first + 3)} lights={false} position={[right + 0.2, 6.6, front - R - 2.5]} rotation={[0, Math.PI / 2, 0]} />
-      <VideoScreen w={3} aspect={2.6} draw={brandShow(first + 5)} lights={false} position={[right + 0.2, 6.6, -front + R + 2.5]} rotation={[0, Math.PI / 2, 0]} />
+      <VideoScreen w={Math.min(10, (d - 2 * R) * 0.75)} aspect={0.42} draw={brandShow(first + 3)} lights={false} position={[right + 0.2, 8.4, 0]} rotation={[0, Math.PI / 2, 0]} />
       <group position={[w * 0.15, H, -d * 0.1]}>
         {[-3, 3].map((px) => (
           <Box key={px} size={[0.2, 2.4, 0.2]} position={[px, 1.2, 0]} color={N.charcoal} />
         ))}
         <VideoScreen w={9} aspect={0.36} draw={brandShow(first + 6)} offset={2} position={[0, 4, 0]} />
       </group>
-      {/* the roof: a car park, a few cars */}
+      {/* the roof: a car park at the back half (clear of the glass drum and the billboard), a car in some bays */}
       <Box size={[w - 1.6, 0.06, d - 1.6]} position={[0, H + 0.03, 0]} color="#8f9096" noShadow />
-      {Array.from({ length: Math.floor((w - 4) / 2.6) }, (_, i) => (
-        <Box key={i} size={[0.08, 0.02, 4.2]} position={[-w / 2 + 2 + i * 2.6, H + 0.07, d * 0.25]} color="#f3f0ea" noShadow />
+      {Array.from({ length: BAYS(w) + 1 }, (_, i) => (
+        <Box key={i} size={[0.08, 0.02, 4.2]} position={[-w / 2 + 2 + i * 2.6, H + 0.07, -d * 0.25]} color="#f3f0ea" noShadow />
       ))}
-      {['#f24f13', '#8082a6', '#f2c230', '#efefec'].map((c, i) => (
-        <group key={c} position={[-w / 2 + 3.3 + i * 5.2, H + 0.06, d * 0.25]}>
-          <Box size={[1.6, 0.6, 3.4]} position={[0, 0.4, 0]} color={c} />
-          <Box size={[1.4, 0.45, 1.7]} position={[0, 0.9, -0.2]} color="#3a3e48" />
-        </group>
-      ))}
+      {Array.from({ length: BAYS(w) }, (_, i) => i)
+        .filter((i) => (i * 5 + first) % 3 !== 1)
+        .map((i, k) => (
+          <group key={i} position={[-w / 2 + 2 + 1.3 + i * 2.6, H + 0.06, -d * 0.25]}>
+            <Box size={[1.6, 0.6, 3.4]} position={[0, 0.4, 0]} color={CARS[k % CARS.length]} />
+            <Box size={[1.4, 0.45, 1.7]} position={[0, 0.9, -0.2]} color="#3a3e48" />
+          </group>
+        ))}
     </group>
   )
 }
