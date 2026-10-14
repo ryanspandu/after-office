@@ -55,12 +55,15 @@ const dogCwd = `/tmp/ao-delivery-dog-${process.pid}`
 const dogTranscripts = join(CLAUDE_PROJECTS_DIR, dogCwd.replace(/[^a-zA-Z0-9]/g, '-'))
 const ids = ['dl-wake', 'dl-clear', 'dl-retry', 'dl-fail', 'dl-busy', 'dl-dog']
 
+// tests share one process: the real timing again for the files after this one
+const realTiming = { ...deliveryTiming }
 beforeAll(() => {
   fastGate()
   Object.assign(deliveryTiming, { confirmMs: 1_500, pollMs: 100 })
   for (const id of ids) agentsRepo.insert(id === 'dl-dog' ? { ...agent(id), cwd: dogCwd } : agent(id))
 })
 afterAll(() => {
+  Object.assign(deliveryTiming, realTiming)
   for (const id of ids) tmux('kill-session', '-t', `=ao-${id}`)
 })
 

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path'
 import type { OfficeTask } from '@after-office/shared'
-import { agentsRepo, queueRepo, sideSessionsRepo, tasksRepo } from '../db'
+import { agentsRepo, cronsRepo, queueRepo, sideSessionsRepo, tasksRepo } from '../db'
 import { closeSideSession, grantFolder, interrupt, openSideSession, renameSideSession, sendPrompt } from '../agents/manager'
 import { runtimeOf, sideRuntimeOf } from '../agents/registry'
 import { isAsleep } from '../agents/sleep'
@@ -172,12 +172,18 @@ function reapOrphans(now = Date.now()) {
 /** What the agent is told when its turn was cut by an API error. */
 export const CONTINUE_PROMPT =
   'Your previous turn was cut off by an API error (connection lost / overloaded), not by anyone. Continue the task from where you stopped; don\'t start over. When you are done, give the short summary as asked.'
+/** What a daily job's agent is told when its run was cut by an API error. */
+export const CRON_CONTINUE_PROMPT =
+  'Your previous turn (the daily job) was cut off by an API error (connection lost / overloaded), not by anyone. Carry on with the job from where you stopped; don\'t start over. End with the result as the job asks.'
 /** Waits before each try again (then it counts as failed). */
-export const API_RETRY_MS = [60_000, 5 * 60_000]
+export const API_RETRY_MS = [60_000, 3 * 60_000, 10 * 60_000, 20 * 60_000]
 const API_TRANSIENT = /api error|connection|overloaded|server[_ ]error|internal server|bad gateway|service unavailable|timed? ?out|\b5\d\d\b|econnreset|socket|network/i
 /** Errors that waiting won't fix: the plan's limits, a full context, a bad request. */
 const API_FINAL = /usage limit|rate.?limit|limit reached|out of (?:extra )?usage|prompt is too long|context (?:window|length)|invalid|unauthori[sz]ed|forbidden|credit/i
 export const isTransientApiError = (msg?: string) => !!msg && API_TRANSIENT.test(msg) && !API_FINAL.test(msg)
+/** A turn whose whole answer is Claude Code's API error ("API Error: Connection error…"), even when it ended with a
+ *  normal Stop: a failed turn, not the work's result. */
+export const isApiErrorReply = (msg?: string) => !!msg && /^\s*(?:API Error|API connection|Request failed|Connection error)\b/i.test(msg) && msg.trim().length < 600
 
 const apiRetries = new Map<string, number>()
 /** Tasks waiting to carry on after an API error: no other turn's end counts as theirs meanwhile. */
@@ -188,30 +194,55 @@ export const retrying = new Set<string>()
  * times, with a note on the task. False: not one of those (or out of tries), the failure is handled as usual.
  */
 export function retryAfterApiError(t: OfficeTask, finalMessage: string | undefined, resume: () => Promise<unknown>) {
-  const n = apiRetries.get(t.id) ?? 0
-  if (!isTransientApiError(finalMessage) || n >= API_RETRY_MS.length) {
-    apiRetries.delete(t.id)
-    return false
-  }
-  apiRetries.set(t.id, n + 1)
-  retrying.add(t.id)
-  const wait = API_RETRY_MS[n]
-  const why = (finalMessage ?? '').split('\n')[0].slice(0, 160)
-  addComment({ taskId: t.id, author: 'system', text: `The turn was cut by an API error (${why}). Trying again in ${Math.round(wait / 60_000)} min (${n + 1}/${API_RETRY_MS.length}).` })
-  const timer = setTimeout(() => {
-    retrying.delete(t.id)
-    const now = tasksRepo.get(t.id)
+  return retryLater(t.id, finalMessage, {
+    note: (text) => addComment({ taskId: t.id, author: 'system', text }),
     // stopped, deleted or moved on meanwhile: nothing to carry on
-    if (!now || now.status !== 'in_progress') return
-    void resume().catch((e) => {
+    wanted: () => tasksRepo.get(t.id)?.status === 'in_progress',
+    resume,
+    onError: (e) => {
       console.warn(`[task] ${t.title}: could not carry on after the API error: ${e instanceof Error ? e.message : e}`)
       addComment({ taskId: t.id, author: 'system', text: 'Could not carry on after the API error: back in To do.' })
       markTask(t.id, { status: 'todo', sessionKey: undefined })
-    })
+    },
+  })
+}
+
+/**
+ * A daily job's run cut by an API error that may pass: the agent carries on with it later, like a task (no report
+ * meanwhile). False: not one of those (or out of tries): the run failed.
+ */
+export function retryCronAfterApiError(cronId: string, agentId: string, finalMessage: string | undefined, resume: () => Promise<unknown>) {
+  const job = cronsRepo.get(cronId)?.name ?? 'a daily job'
+  return retryLater(`cron:${cronId}`, finalMessage, {
+    note: (text) => void import('./activity').then((m) => m.logSystem(agentId, `"${job}": ${text}`)).catch(() => {}),
+    wanted: () => !!cronsRepo.get(cronId),
+    resume,
+    onError: (e) => console.warn(`[cron] ${job}: could not carry on after the API error: ${e instanceof Error ? e.message : e}`),
+  })
+}
+
+/** How many times the work behind `key` was tried again after API errors so far. */
+export const apiRetriesOf = (key: string) => apiRetries.get(key) ?? 0
+
+function retryLater(key: string, finalMessage: string | undefined, how: { note: (text: string) => void; wanted: () => boolean; resume: () => Promise<unknown>; onError: (e: unknown) => void }) {
+  const n = apiRetries.get(key) ?? 0
+  if (!isTransientApiError(finalMessage) || n >= API_RETRY_MS.length) {
+    apiRetries.delete(key)
+    return false
+  }
+  apiRetries.set(key, n + 1)
+  retrying.add(key)
+  const wait = API_RETRY_MS[n]
+  const why = (finalMessage ?? '').split('\n')[0].slice(0, 160)
+  how.note(`The turn was cut by an API error (${why}). Trying again in ${Math.round(wait / 60_000)} min (${n + 1}/${API_RETRY_MS.length}).`)
+  const timer = setTimeout(() => {
+    retrying.delete(key)
+    if (!how.wanted()) return
+    void how.resume().catch(how.onError)
   }, wait)
   // a pending try doesn't keep the process up (a restart drops it: the task then goes the usual stuck way)
   timer.unref?.()
   return true
 }
-/** A turn that ended normally: the next API error starts counting again. */
-export const clearApiRetries = (taskId: string) => apiRetries.delete(taskId)
+/** A turn that ended normally: the next API error starts counting again (a task's id, or cron:<id>). */
+export const clearApiRetries = (key: string) => apiRetries.delete(key)

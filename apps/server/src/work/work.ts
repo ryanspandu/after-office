@@ -27,7 +27,7 @@ import { endBossMode } from './bossMode'
 import { publicAccess, watchPublicAccess } from './publicAccess'
 import { chatReport, putChatReport, type ChatContext } from './chatContext'
 import { moveProjectsToFolders } from './folders'
-import { clearApiRetries, CONTINUE_PROMPT, endParallelSession, isTransientApiError, mainBusy, noteParallelFile, onParallelStopped, PARALLEL_NOTE, parallelBlocker, retryAfterApiError, retrying, startParallel, tidyParallel } from './parallel'
+import { clearApiRetries, CONTINUE_PROMPT, CRON_CONTINUE_PROMPT, endParallelSession, isApiErrorReply, isTransientApiError, retryCronAfterApiError, API_RETRY_MS, mainBusy, noteParallelFile, onParallelStopped, PARALLEL_NOTE, parallelBlocker, retryAfterApiError, retrying, startParallel, tidyParallel } from './parallel'
 
 
 // Tasks, cron jobs and the prompt queue. Handing work to an agent is just typing a prompt into its session; if the
@@ -484,6 +484,8 @@ export async function handleStop(agentId: string, finalMessage?: string, failed 
 }
 
 export function onAgentStopped(agentId: string, finalMessage?: string, failed = false) {
+  // Claude Code's API error as the whole answer (it can come with a normal Stop): a failed turn, not the work's result
+  if (!failed && isApiErrorReply(finalMessage)) failed = true
   const a = active.get(agentId)
   // background subagents still working: this is an update, not the result; it wakes up again when they're done
   if (a?.background && !failed) {
@@ -498,7 +500,15 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
     void drainQueues()
     return
   }
+  // a daily job's run cut the same way: the agent carries on with it later, no report meanwhile
+  const cronId = !a?.taskId ? a?.cronId : null
+  if (failed && cronId && retryCronAfterApiError(cronId, agentId, finalMessage, () => deliver(agentId, CRON_CONTINUE_PROMPT, { cronId }))) {
+    active.delete(agentId)
+    void drainQueues()
+    return
+  }
   if (a?.taskId && !failed) clearApiRetries(a.taskId)
+  if (cronId && !failed) clearApiRetries(`cron:${cronId}`)
   if (!a) carryOnChat(agentId, '', finalMessage, failed)
   active.delete(agentId)
   const asked = replyTo.get(agentId)
@@ -517,7 +527,10 @@ export function onAgentStopped(agentId: string, finalMessage?: string, failed = 
     void runGate(t.id, agentId, cmd, report).catch((e) => console.error('[check]', e))
   } else {
     if (t && t.status === 'in_progress') markTask(t.id, { status: 'review' })
-    if (ref) fileReport(agentId, ref, finalMessage, !failed)
+    // a daily job the API kept cutting (every try used): the manager runs it again (or tells the owner), so it isn't
+    // one of the owner's reports
+    const gaveUp = !!cronId && failed && isTransientApiError(finalMessage) && cronGaveUp(agentId, cronId, finalMessage)
+    if (ref) fileReport(agentId, ref, finalMessage, !failed, gaveUp ? { viaManager: true } : {})
   }
   // an answer to the manager's message (not a task's report, which reaches it anyway)
   if (manager && !(ref?.taskId && tasksRepo.get(ref.taskId)?.delegatedBy === manager)) forwardReply(agentId, manager, finalMessage, asked?.session)
@@ -548,6 +561,7 @@ function fileChatTurn(agentId: string, key: string, finalMessage: string | undef
  * ever theirs. Only a chat answer the owner asked to keep (folder / tags) becomes a report.
  */
 export function onSideStopped(agentId: string, key: string, finalMessage?: string, failed = false) {
+  if (!failed && isApiErrorReply(finalMessage)) failed = true
   // a parallel task's session: the task's report (parallel.ts)
   if (onParallelStopped(agentId, key, finalMessage, failed)) return
   // a thread's manager session: its answer is new for the owner, and what waits for it goes in next
@@ -629,7 +643,26 @@ export function managerFollowsUp(taskId: string | null | undefined) {
   return !!by && agentsRepo.get(by)?.kind === 'manager'
 }
 
-export function fileReport(agentId: string, ref: Omit<Active, 'restoreMode' | 'submitted' | 'promptHead'>, text: string | undefined, ok: boolean, opts: { forward?: boolean } = {}) {
+/** A daily job's run that API errors cut every time: told to the manager with the job's prompt, to run it again. False:
+ *  no manager to tell (the owner gets the report as usual). */
+function cronGaveUp(agentId: string, cronId: string, finalMessage?: string) {
+  const manager = agentsRepo.all().find((r) => r.kind === 'manager')
+  const cron = cronsRepo.get(cronId)
+  if (!manager || manager.id === agentId || !cron) return false
+  const who = agentsRepo.get(agentId)?.name ?? 'its agent'
+  const why = (finalMessage ?? '').split('\n')[0].slice(0, 200)
+  const text = [
+    `[After Office] The daily job "${cron.name}" (${who}) didn't run: API errors cut its turn ${API_RETRY_MS.length + 1} times in a row (last: ${why}).`,
+    `Run it again with delegate_task (to ${who}, or someone else if ${who} keeps failing), or tell the owner if it can wait for its next run. Its prompt, as the owner wrote it:`,
+    '<<<JOB',
+    cron.prompt.replaceAll('JOB>>>', 'JOB >>>'),
+    'JOB>>>',
+  ].join('\n')
+  void deliverToManager(manager.id, text).catch((e) => console.error('[cron] could not tell the manager:', e instanceof Error ? e.message : e))
+  return true
+}
+
+export function fileReport(agentId: string, ref: Omit<Active, 'restoreMode' | 'submitted' | 'promptHead'>, text: string | undefined, ok: boolean, opts: { forward?: boolean; viaManager?: boolean } = {}) {
   // attachments: files written during the run, then files the report points to (only ones the agent may share)
   const row = agentsRepo.get(agentId)
   const files = row ? agentFiles(row, [...(ref.files ?? []), ...mentionedPaths(text ?? '')]) : []
@@ -643,8 +676,8 @@ export function fileReport(agentId: string, ref: Omit<Active, 'restoreMode' | 's
     ok,
     startedAt: ref.startedAt,
     finishedAt: Date.now(),
-    read: managerFollowsUp(ref.taskId),
-    ...(managerFollowsUp(ref.taskId) ? { viaManager: true } : {}),
+    read: opts.viaManager || managerFollowsUp(ref.taskId),
+    ...(opts.viaManager || managerFollowsUp(ref.taskId) ? { viaManager: true } : {}),
     ...(files.length ? { files } : {}),
     // the task's tags come along, so the report is found under them too
     ...(ref.taskId && tasksRepo.get(ref.taskId)?.tags?.length ? { tags: tasksRepo.get(ref.taskId)!.tags } : {}),
