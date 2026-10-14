@@ -1,9 +1,13 @@
-import { forwardRef, useMemo } from 'react'
+import { createContext, forwardRef, useContext, useMemo } from 'react'
 import type { ThreeElements } from '@react-three/fiber'
 import { Vector2, type Mesh } from 'three'
 import { toonRamp } from './toon'
 
 // Low-poly building blocks. Everything in the office is made from these.
+
+/** Inside it, boxes and cylinders cast no shadow (the vehicles: many of them move about, each would cost the shadow
+ *  pass every frame, and nobody misses their shadows). */
+export const NoShadows = createContext(false)
 
 type MeshProps = ThreeElements['mesh']
 type Tuple3 = [number, number, number]
@@ -36,8 +40,9 @@ export const Box = forwardRef<Mesh, MeshProps & MatProps & { size: Tuple3; noSha
   { size, color, emissive, emissiveIntensity, opacity, roughness, noShadow, ...props },
   ref,
 ) {
+  const off = useContext(NoShadows)
   return (
-    <mesh ref={ref} castShadow={!noShadow} receiveShadow {...props}>
+    <mesh ref={ref} castShadow={!noShadow && !off} receiveShadow {...props}>
       <boxGeometry args={size} />
       <Mat {...{ color, emissive, emissiveIntensity, opacity, roughness }} />
     </mesh>
@@ -48,8 +53,9 @@ export const Cyl = forwardRef<
   Mesh,
   MeshProps & MatProps & { r: number; h: number; rBottom?: number; seg?: number; noShadow?: boolean }
 >(function Cyl({ r, h, rBottom, seg = 16, color, emissive, emissiveIntensity, opacity, roughness, noShadow, ...props }, ref) {
+  const off = useContext(NoShadows)
   return (
-    <mesh ref={ref} castShadow={!noShadow} receiveShadow {...props}>
+    <mesh ref={ref} castShadow={!noShadow && !off} receiveShadow {...props}>
       <cylinderGeometry args={[r, rBottom ?? r, h, seg]} />
       <Mat {...{ color, emissive, emissiveIntensity, opacity, roughness }} />
     </mesh>

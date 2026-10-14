@@ -1,7 +1,7 @@
 import { forwardRef } from 'react'
 import { Color, MeshStandardMaterial, type Group } from 'three'
 import type { VehicleKind } from './layout'
-import { Box, Cyl } from './prims'
+import { Box, Cyl, NoShadows } from './prims'
 import { StaticBatch } from './StaticBatch'
 
 // Low-poly car and scooter. Both face +z at rotY = 0. Positioned by the owning Agent each frame.
@@ -89,11 +89,14 @@ function Moto({ color, rider }: { color: string; rider?: string }) {
 const SCALE: Record<VehicleKind, number> = { car: 1.65, moto: 1.55 }
 
 export const Vehicle = forwardRef<Group, { kind: VehicleKind; color: string; riderColor?: string }>(function Vehicle({ kind, color, riderColor }, ref) {
-  // the body is rigid: one batch (a car is ~19 meshes otherwise); the rider is shown/hidden, so it stays separate
+  // the body is rigid: one batch (a car is ~19 meshes otherwise); the rider is shown/hidden, so it stays separate. No
+  // shadows (scene/prims.tsx NoShadows)
   return (
     <group ref={ref}>
       <group scale={SCALE[kind]}>
-        <StaticBatch version={`${kind}:${color}`}>{kind === 'car' ? <Car color={color} /> : <Moto color={color} rider={riderColor} />}</StaticBatch>
+        <NoShadows.Provider value>
+          <StaticBatch version={`${kind}:${color}`}>{kind === 'car' ? <Car color={color} /> : <Moto color={color} rider={riderColor} />}</StaticBatch>
+        </NoShadows.Provider>
       </group>
     </group>
   )

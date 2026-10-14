@@ -148,6 +148,14 @@ export function DayNight({ layout }: { layout: Layout }) {
     if (wide !== shadowWide.current) {
       shadowWide.current = wide
       const h = wide ? TOWN_SHADOW_HALF : half
+      // the town from afar: a coarser shadow map (half the tier's) is plenty, and much cheaper to draw every frame
+      const size = cfg.shadowMap ? (wide ? Math.max(1024, cfg.shadowMap / 2) : cfg.shadowMap) : 1024
+      const shadow = sun.current.shadow
+      if (shadow.mapSize.x !== size) {
+        shadow.mapSize.set(size, size)
+        shadow.map?.dispose()
+        shadow.map = null
+      }
       const cam = sun.current.shadow.camera
       cam.left = -h
       cam.right = h
@@ -157,6 +165,9 @@ export function DayNight({ layout }: { layout: Layout }) {
       cam.far = SUN_DIST * 2.5
       cam.updateProjectionMatrix()
     }
+    // at night no shadows at all (the moon's would only darken a dark town): the shadow pass is skipped too
+    const shadows = cfg.shadowMap > 0 && env.night < 0.5
+    if (sun.current.castShadow !== shadows) sun.current.castShadow = shadows
     sun.current.intensity = 0.45 + d * 1.45
     sun.current.color.lerpColors(MOON, SUN_DAY, d)
     hemi.current.intensity = 0.55 + d * 0.57 + env.night * cfg.nightBoost

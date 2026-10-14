@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { AdditiveBlending, BoxGeometry, DoubleSide, BufferGeometry, Float32BufferAttribute, CanvasTexture, CircleGeometry, Color, MathUtils, MeshBasicMaterial, MeshToonMaterial, SRGBColorSpace, type Group, type PointLight, type Material, type Mesh, type Vector3 } from 'three'
+import { AdditiveBlending, BoxGeometry, DoubleSide, BufferGeometry, Float32BufferAttribute, CanvasTexture, CircleGeometry, Color, MathUtils, MeshBasicMaterial, MeshToonMaterial, SRGBColorSpace, Frustum, Matrix4, type Camera, type Group, type PointLight, type Material, type Mesh, type Vector3 } from 'three'
 import { env, lampBulb, windowGlass } from './DayNight'
 import { ENTRANCE, OUTSIDE, type Layout, type Vec2 } from './layout'
 import { useRenderConfig } from './quality'
@@ -558,7 +558,19 @@ function Crossing({ x, z, width, along }: { x: number; z: number; width: number;
 
 const SCREEN = { w: 512, h: 288 }
 /** Frames per second the screens are redrawn at (each one is a texture upload). */
-const SCREEN_FPS = 12
+const SCREEN_FPS = 6
+/** Whether a mesh is in the camera's view now (the frustum is worked out once a frame, for every screen). */
+const frustum = new Frustum()
+const viewProj = new Matrix4()
+let frustumAt = -1
+function inView(camera: Camera, mesh: Mesh) {
+  const frame = performance.now()
+  if (frame - frustumAt > 8) {
+    frustumAt = frame
+    frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse))
+  }
+  return frustum.intersectsObject(mesh)
+}
 
 /** One frame of the screen's show: the giant cat looking out, then the town's name sliding by, then colour waves. */
 function drawScreen(ctx: CanvasRenderingContext2D, t: number) {
@@ -682,9 +694,12 @@ function VideoScreen({
     return { canvas, ctx: canvas.getContext('2d')!, texture }
   }, [])
   const last = useRef(-1)
-  useFrame(() => {
+  const face = useRef<Mesh>(null)
+  useFrame(({ camera }) => {
     const t = performance.now() / 1000 + offset
     if (t - last.current < 1 / SCREEN_FPS) return
+    // off screen: not drawn (each new frame is a texture upload to the graphics card)
+    if (face.current && !inView(camera, face.current)) return
     last.current = t
     draw(ctx, t)
     texture.needsUpdate = true
@@ -693,7 +708,7 @@ function VideoScreen({
   return (
     <group {...props} userData={{ dynamic: true }}>
       <Box size={[w + 0.4, h + 0.4, 0.3]} position={[0, 0, -0.1]} color="#2a2733" />
-      <mesh position={[0, 0, 0.06]}>
+      <mesh ref={face} position={[0, 0, 0.06]}>
         <planeGeometry args={[w, h]} />
         <meshBasicMaterial map={texture} />
       </mesh>
@@ -888,7 +903,7 @@ function CafeTable({ position, umbrella }: { position: [number, number, number];
 }
 
 /**
- * A real light for a place people sit at night (the café's terrace and roof, the coffee shop's tables): it lights the
+ * A real light for a place people sit at night (the café's terrace, the coffee shop's tables): it lights the
  * tables and whoever sits there, not just a painted pool. Only on the tiers with real lamps (scene/quality.ts), so
  * the light count, and the shaders, stay fixed per tier; its strength follows the night.
  */
@@ -1611,13 +1626,11 @@ export function City({ layout }: { layout: Layout }) {
           <WarungPecelLele x={rows.o[0] + 6} z={2.1} />
         </group>
       </StaticBatch>
-      {/* the café's terrace and roof, and the coffee shop's tables: lit for real at night */}
+      {/* the café's terrace and the coffee shop's tables: lit for real at night */}
       {cfg.fixedLights !== 'none' && (
         <group>
-          {[-1 / 3, 0, 1 / 3].map((k) => (
-            <NightLight key={k} position={[town.cafe.x + k * town.cafe.w, 3.2, town.cafe.z + cafeTerraceZ(town.cafe.w, town.cafe.d)]} power={7} distance={10} />
-          ))}
-          <NightLight position={[town.cafe.x, 9, town.cafe.z - town.cafe.d / 2 + 0.8 + CAFE_DEPTH / 2]} power={5} distance={10} />
+          {/* one over the middle of the café's terrace, reaching most of it (each real light costs every pixel) */}
+          <NightLight position={[town.cafe.x, 4.5, town.cafe.z + cafeTerraceZ(town.cafe.w, town.cafe.d)]} power={8} distance={16} />
           <NightLight position={[shopX + 2.6, 3, town.rows.o[1] - 6]} power={6} distance={8} />
         </group>
       )}
