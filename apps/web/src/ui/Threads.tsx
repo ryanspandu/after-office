@@ -12,6 +12,7 @@ import { useDashboard } from '../state/dashboard'
 import { liveApi, useLive, useWorkReady } from '../state/live'
 import { useOffice } from '../state/store'
 import { openUrl, setUrl } from '../state/url'
+import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { ago } from './FollowUps'
 import { Modal } from './Modal'
 import { ScrollTabs } from './ScrollTabs'
@@ -139,6 +140,10 @@ function ThreadRow({ t, now, sub, kids, kidsUnread = 0, folded, onFold, parentTi
   const own = t.unread ?? 0
   // a thread counts its sub-threads' unread replies too (they also show their own under it)
   const unread = own + kidsUnread
+  // phones: a tap on a thread with sub-threads shows or hides them (like its chevron); its chat opens from its menu
+  // (a long press: Open)
+  const phone = useMediaQuery(MOBILE)
+  const foldOnTap = phone && !!kids && !!onFold
   return (
     <div className={`report-row thread-row${unread ? ' report-row--unread' : ''}${sub ? ' thread-row--sub' : ''}${kids ? ' thread-row--parent' : ''}`}>
       {!!kids && (
@@ -148,7 +153,8 @@ function ThreadRow({ t, now, sub, kids, kidsUnread = 0, folded, onFold, parentTi
       )}
       <button
         className="report-row__main"
-        onClick={() => openUrl({ thread: t.id })}
+        onClick={() => (foldOnTap ? onFold() : openUrl({ thread: t.id }))}
+        aria-expanded={foldOnTap ? !folded : undefined}
         onContextMenu={(e) => {
           e.preventDefault()
           useThreadMenu.setState({ at: { id: t.id, x: e.clientX, y: e.clientY } })

@@ -409,8 +409,9 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
     setError('')
     const at = Date.now()
     setOutgoing({ text: body, files: pending.items.filter((p) => p.state === 'done'), at })
-    // the box empties right away (typing a long message into the agent takes a moment); back if it couldn't be sent
-    composer.current?.set('')
+    // the box empties right away (typing a long message into the agent takes a moment); back if it couldn't be sent.
+    // Its saved draft goes only once it's sent: closed while it's on its way, the text is still there next time
+    composer.current?.hold()
     stick.current = true
     try {
       let r: { joined?: boolean } | null = null
@@ -431,6 +432,8 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
       if (spoken.current && !sk) talkedByVoice(agent.id)
       spoken.current = false
       setSentAt(at)
+      // in (or queued, editable there): the draft goes, unless something new was typed meanwhile
+      if (!(composer.current?.get() ?? '').trim()) composer.current?.set('')
       pending.take()
       stick.current = true
       setTimeout(load, 600)

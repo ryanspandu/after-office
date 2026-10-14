@@ -562,8 +562,17 @@ export async function reopenSideSession(agentId: string, key: string) {
   const side = sideSessionsRepo.get(agentId, key)
   if (!row || !side) throw new AgentError('No such session', 404)
   if (!side.closed_at && (await tmux.hasSession(side.tmux_session))) return key
+  // a process left behind under its name (marked closed, but still there): gone first, or tmux refuses the new one
+  if (await tmux.hasSession(side.tmux_session)) await tmux.killSession(side.tmux_session).catch(() => {})
   sideSessionsRepo.update(agentId, key, { closed_at: null })
-  await startSide(row, { ...side, closed_at: null }, sideTranscriptExists(row, side.session_id))
+  try {
+    await startSide(row, { ...side, closed_at: null }, sideTranscriptExists(row, side.session_id))
+  } catch (e) {
+    // didn't start: closed again (it can be opened again later), and why, instead of a bare server error
+    sideSessionsRepo.update(agentId, key, { closed_at: Date.now() })
+    console.warn(`[sessions] could not open ${row.name}'s session ${key} again:`, e instanceof Error ? e.message : e)
+    throw new AgentError(`Could not open the session again: ${e instanceof Error ? e.message : 'it did not start'}`, 500)
+  }
   return key
 }
 

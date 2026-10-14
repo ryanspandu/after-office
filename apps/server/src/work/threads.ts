@@ -182,13 +182,24 @@ export function ensureOpen(t: OfficeThread): Promise<void> {
  * The owner's message in a thread (with its attachments already in the text). Like the manager's own chat it goes in
  * right away, also in the middle of a turn (Claude Code takes it into the turn); the input gate (agents/manager.ts)
  * waits for an empty message box, so it's never added to text already there. It waits in the thread's queue only
- * when the session can't take it now: starting up, compacting, a question or menu open, or messages already waiting.
+ * when the session can't take it now: closed (it opens meanwhile), starting up, compacting, a question or menu open,
+ * or messages already waiting.
  */
 export async function sendToThread(id: string, text: string): Promise<'sent' | 'queued'> {
   const t = getThread(id)
   if (t.archivedAt) save({ ...t, archivedAt: undefined })
-  await ensureOpen(t)
+  if (!sideSessionsRepo.get(t.managerId, t.sessionKey)) throw new AgentError("This thread's session is gone", 409)
   const message = t.started ? text : `${threadContext(t)}\n\n${text}`
+  // its session isn't open (closed when idle, or a reboot): the message waits in the queue (editable there, never
+  // lost) while the session opens in the background, and goes in once it's up. The owner isn't kept waiting for it
+  if (!(await isOpen(t))) {
+    threadQueueRepo.add(t.id, message, true)
+    touchThread(t.id, { started: true })
+    void ensureOpen(t)
+      .then(() => drainThreads())
+      .catch((e) => console.warn(`[threads] could not open "${t.title}":`, e instanceof Error ? e.message : e))
+    return 'queued'
+  }
   const rt = sideRuntimeOf(t.managerId, t.sessionKey)
   const takes = (rt.status === 'idle' || rt.status === 'working') && !rt.compactingSince && !threadQueueRepo.countFor(t.id) && (await isOpen(t))
   if (takes) {

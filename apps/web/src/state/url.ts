@@ -22,10 +22,11 @@ export const useUrl = create<{ params: Params }>(() => ({ params: read() }))
 let backing: Array<() => void> | null = null
 if (typeof window !== 'undefined')
   window.addEventListener('popstate', () => {
-    // left a window's own step (Back on a maximized one): it undoes it
-    if (step && (window.history.state as { aoStep?: string } | null)?.aoStep !== step.id) {
-      const left = step
-      step = null
+    // left a window's own step (Back on a maximized one, an open menu): it undoes it; the steps under the entry
+    // landed on stay
+    const at = (window.history.state as { aoStep?: string } | null)?.aoStep
+    while (steps.length && steps[steps.length - 1].id !== at) {
+      const left = steps.pop()!
       // what changed on top of it (a filter) stays changed
       if (left.url && left.url !== here()) window.history.replaceState(window.history.state, '', left.url)
       left.onBack()
@@ -45,6 +46,7 @@ export function setUrl(patch: Record<string, string | number | null | undefined>
   // a window's step on top (a maximized window, phones): closing the window goes out of the step first; other changes
   // are made in place
   const top = window.history.state as { aoStep?: string; below?: { aoFrom?: string } | null } | null
+  const step = steps[steps.length - 1]
   if (mode === 'replace' && top?.aoStep && step?.id === top.aoStep) {
     const next = withPatch(patch)
     // closing what the page under it opened: out of the step, then closed (two Backs)
@@ -96,28 +98,31 @@ function goBack(then?: () => void) {
   }, 600)
 }
 
-// ── a window's own step (phones: a maximized window): Back undoes it before it closes anything ──
-let step: { id: string; onBack: () => void; url?: string } | null = null
+// ── a window's own step (phones: a maximized window, an open menu): Back undoes it before it closes anything ──
+// several can be on top of each other (a menu opened in a maximized window): the last one first
+const steps: Array<{ id: string; onBack: () => void; url?: string }> = []
 
 /** A step of a window's own on top of the page (same address): the Back gesture calls `onBack` instead of leaving. */
 export function pushStep(onBack: () => void) {
   const id = Math.random().toString(36).slice(2)
   // the entry under it: how its window closes (state.aoFrom), for setUrl
   window.history.pushState({ aoStep: id, below: window.history.state }, '', window.location.href)
-  step = { id, onBack }
+  steps.push({ id, onBack })
   return id
 }
 
 /** Undo a step from the window itself (its button): Back, which calls its `onBack`. */
 export function dropStep(id: string) {
-  if (step?.id !== id) return
-  if ((window.history.state as { aoStep?: string } | null)?.aoStep === id) goBack()
-  else step = null
+  const i = steps.findIndex((x) => x.id === id)
+  if (i < 0) return
+  if (i === steps.length - 1 && (window.history.state as { aoStep?: string } | null)?.aoStep === id) goBack()
+  else steps.splice(i, 1)
 }
 
 /** The window is gone: its step goes too, quietly (no `onBack`). */
 export function forgetStep(id: string) {
-  if (step?.id !== id) return
+  const step = steps.find((x) => x.id === id)
+  if (!step) return
   step.onBack = () => {}
   dropStep(id)
 }

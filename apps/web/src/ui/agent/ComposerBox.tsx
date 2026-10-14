@@ -10,6 +10,9 @@ export interface ComposerHandle {
   get: () => string
   /** replace the text (a sent message empties it, a failed one comes back, a dictation lands in it) */
   set: (v: string) => void
+  /** empty the box while a message is on its way, its saved draft kept: closed before it got through (a slow send),
+   *  the text is still there next time. `set('')` once it's in */
+  hold: () => void
   focus: (opts?: FocusOptions) => void
 }
 
@@ -133,6 +136,13 @@ export const ComposerBox = forwardRef<ComposerHandle, {
         if (timer.current) clearTimeout(timer.current)
         timer.current = null
         writeDraft(draftKey, v)
+      },
+      hold: () => {
+        // whatever was typed last is saved first, as it is (it isn't emptied)
+        if (timer.current) flush()
+        latest.current = ''
+        setValue('')
+        onHasText(false)
       },
       focus: (opts) => el.current?.focus(opts),
     }),

@@ -31,6 +31,7 @@ import { ThreadsPanel } from './Threads'
 import { idleText, waitingLabel } from './agentActivity'
 import { useDashboard } from '../state/dashboard'
 import { confirmWith } from './Confirm'
+import { useMenuDismiss } from './ActionMenu'
 import { openUrl, setUrl } from '../state/url'
 import { tip } from './Tooltip'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
@@ -388,16 +389,15 @@ interface MenuItem {
 /** The card's ⋯ button and its menu (chat, restart, pin, remove; the demo's statuses). */
 function AgentMenu({ at, items, onClose }: { at: { x: number; y: number } | null; items: MenuItem[]; onClose: () => void }) {
   const pop = useRef<HTMLDivElement>(null)
+  // a tap elsewhere only closes it; phones: Back too (ActionMenu.tsx)
+  const release = useMenuDismiss(pop, !!at, onClose)
   useEffect(() => {
     if (!at) return
-    const away = (e: PointerEvent) => !pop.current?.contains(e.target as Node) && onClose()
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    document.addEventListener('pointerdown', away)
     document.addEventListener('keydown', key)
     window.addEventListener('resize', onClose)
     window.addEventListener('scroll', onClose, true)
     return () => {
-      document.removeEventListener('pointerdown', away)
       document.removeEventListener('keydown', key)
       window.removeEventListener('resize', onClose)
       window.removeEventListener('scroll', onClose, true)
@@ -417,6 +417,7 @@ function AgentMenu({ at, items, onClose }: { at: { x: number; y: number } | null
           role="menuitem"
           className={`${it.danger ? 'danger-text' : ''}${it.on ? ' is-on' : ''}`}
           onClick={() => {
+            release()
             onClose()
             it.run()
           }}
