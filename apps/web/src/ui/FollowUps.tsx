@@ -1,3 +1,4 @@
+import { Busy } from './Busy'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { dateTime } from './when'
 import { useShallow } from 'zustand/react/shallow'
@@ -240,15 +241,21 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
   }, [total, brandName])
   useEffect(() => () => void (document.title = useBranding.getState().name), [])
 
+  // answers on their way to the server (their buttons wait, ui/Busy.tsx): one answer per item at a time
+  const [busy, setBusy] = useState<Record<string, true>>({})
   const resolve = async (item: Item, decision: Decision) => {
     setError('')
     if (item.live) {
+      if (busy[item.id]) return
+      setBusy((b) => ({ ...b, [item.id]: true }))
       try {
         // the server answers the held hook (or presses the plan dialog keys); the feed then removes the card
         await liveApi.decide(item.id, toServer(item, decision))
         if (detailId === item.id) setDetailId(null)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not send the answer')
+      } finally {
+        setBusy(({ [item.id]: _, ...rest }) => rest)
       }
       return
     }
@@ -271,6 +278,7 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
       agentColor={agentOf(item.agentId)?.look.shirt ?? '#aaa'}
       age={ago(now - item.createdAt)}
       onResolve={(d) => resolve(item, d)}
+      busy={!!busy[item.id]}
       onOpen={() => setDetailId(item.id)}
     />
   )
@@ -328,6 +336,7 @@ export function FollowUps({ sheet }: { sheet?: { open: boolean; onClose: () => v
           agentColor={agentOf(detail.agentId)?.look.shirt ?? '#aaa'}
           age={ago(now - detail.createdAt)}
           onResolve={(d) => resolve(detail, d)}
+          busy={!!busy[detail.id]}
           onClose={() => setDetailId(null)}
           error={error}
         />
@@ -440,6 +449,7 @@ function FollowUpCard({
   age,
   onResolve,
   onOpen,
+  busy = false,
 }: {
   item: Item
   agentName: string
@@ -447,6 +457,8 @@ function FollowUpCard({
   age: string
   onResolve: (d: Decision) => void
   onOpen: () => void
+  /** its answer is on its way: the buttons wait */
+  busy?: boolean
 }) {
   const [reply, setReply] = useState('')
   const kind = KIND[item.kind]
@@ -468,6 +480,7 @@ function FollowUpCard({
         <span className="chip__dot" style={{ background: agentColor }} />
         {agentName}
       </div>
+      <Busy busy={busy}>
       {item.kind === 'question' && item.questions?.length === 1 && !item.questions[0].multiSelect ? (
         <div className="fu__options">
           {item.questions[0].options.map((o) => (
@@ -511,6 +524,7 @@ function FollowUpCard({
           </button>
         </div>
       )}
+      </Busy>
     </article>
   )
 }
@@ -527,6 +541,7 @@ export function FollowUpDetail({
   onResolve,
   onClose,
   error,
+  busy = false,
 }: {
   item: Item
   agentName: string
@@ -536,6 +551,8 @@ export function FollowUpDetail({
   onClose: () => void
   /** why the last answer didn't go through (shown here, not only behind the modal) */
   error?: string
+  /** its answer is on its way: the buttons wait */
+  busy?: boolean
 }) {
   const [note, setNote] = useState('')
   // a hire: the manager's proposal, editable before approving
@@ -637,7 +654,9 @@ export function FollowUpDetail({
         )}
 
         {item.questions?.length ? (
-          <QuestionForm questions={item.questions} onSubmit={(answers) => onResolve({ type: 'answers', answers })} onSkip={() => onResolve({ type: 'reject' })} />
+          <Busy busy={busy}>
+            <QuestionForm questions={item.questions} onSubmit={(answers) => onResolve({ type: 'answers', answers })} onSkip={() => onResolve({ type: 'reject' })} />
+          </Busy>
         ) : item.detail ? (
           <div className="fu-detail__body">
             <Markdown text={item.detail} />
@@ -664,6 +683,7 @@ export function FollowUpDetail({
         <footer className="modal__foot fu-detail__actions" onMouseDown={(e) => e.preventDefault()}>
           {/* a tap here keeps the focus in the note: on a phone the footer is slimmer while you type (styles:
               follow-ups.css), and the note losing focus first would grow it back under your finger */}
+          <Busy busy={busy}>
           {item.kind === 'plan' && item.live && (
             <>
               {/* no: the dialog closes (Esc), the agent stays in plan mode and does nothing; also when it's gone already */}
@@ -742,6 +762,7 @@ export function FollowUpDetail({
               </button>
             </>
           )}
+          </Busy>
         </footer>
         )}
       </div>

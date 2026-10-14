@@ -23,6 +23,7 @@ import { Attachments, useAgentFiles } from '../Attachments'
 import { FileLinksProvider } from '../fileLinks'
 import { isFrameSheet, OutgoingFiles, PendingTray, splitAttachments, usePendingFiles, type Pending } from './chatAttachments'
 import { tip } from '../Tooltip'
+import { Busy } from '../Busy'
 import { AsleepBanner, OfflineBanner } from './OfflineBanner'
 import { ChatContextBar, ContextChips, splitContext, useChatContext } from './chatContext'
 import { SessionTabs } from './SessionTabs'
@@ -225,6 +226,8 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
   const stick = useRef(true)
   const followUps = useLive((s) => s.followUps).filter((f) => f.agentId === agent.id && (f.sessionKey ?? '') === session)
   const [detail, setDetail] = useState<Item | null>(null)
+  // its answer on its way (ui/Busy.tsx): the buttons wait
+  const [deciding, setDeciding] = useState(false)
   const offline = agent.status === 'offline'
   // time of our last prompt: show the typing bubble right away, before the agent's first hook arrives
   const [sentAt, setSentAt] = useState<number | null>(null)
@@ -995,7 +998,15 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
           agentName={agent.name}
           agentColor={agent.look.shirt}
           age={ago(Date.now() - detail.createdAt)}
-          onResolve={(d) => liveApi.decide(detail.id, toServer(detail, d)).then(() => setDetail(null), (e) => setError(e.message))}
+          onResolve={(d) => {
+            if (deciding) return
+            setDeciding(true)
+            liveApi
+              .decide(detail.id, toServer(detail, d))
+              .then(() => setDetail(null), (e) => setError(e.message))
+              .finally(() => setDeciding(false))
+          }}
+          busy={deciding}
           onClose={() => setDetail(null)}
         />
       )}
@@ -1103,6 +1114,7 @@ function InlineRequest({ item, onOpen, onError }: { item: Item; onOpen: (i: Item
       </div>
       <div className="req__msg">{item.kind === 'permission' ? <code>{item.command ?? item.message}</code> : item.message}</div>
       <div className="req__actions">
+        <Busy busy={sending}>
         {approval ? (
           <>
             <button className="small primary" disabled={sending} onClick={() => decide({ type: 'approve' })}>
@@ -1130,6 +1142,7 @@ function InlineRequest({ item, onOpen, onError }: { item: Item; onOpen: (i: Item
             {item.kind === 'plan' ? 'Review plan' : 'Answer'}
           </button>
         )}
+        </Busy>
       </div>
     </div>
   )
