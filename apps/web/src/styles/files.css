@@ -149,3 +149,6 @@
   .fb__crumbs { flex: 1 1 calc(100% - 40px); }
   .fb__filter { flex: 1 1 0; width: auto; min-width: 70px; }
 }
+/* an HTML file as its page (ui/preview/HtmlFrame.tsx): white like a browser's, filling the window */
+.html-frame { display: block; width: 100%; flex: 1; min-height: 60vh; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.modal--full .html-frame { min-height: 0; }

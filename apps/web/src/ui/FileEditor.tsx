@@ -4,9 +4,11 @@ import { api } from '../state/auth'
 import { useDaylight } from '../state/clock'
 import { confirm } from './Confirm'
 import { Markdown } from './FollowUps'
+import { HtmlFrame } from './preview/HtmlFrame'
 import { useModalMaximize } from './Maximize'
 import { Modal } from './Modal'
 import { useMinimized } from '../state/minimized'
+import { useBackStep } from '../state/useBackStep'
 import { closeFile, fileSaved, minimizeFile, useOpenFiles } from '../state/openFiles'
 
 // A text file of a folder opened in an editor (the Files browser): VS Code's look, its language's colours, saved in
@@ -65,6 +67,8 @@ export function FileEditor({
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const markdown = /\.(md|mdx|markdown)$/i.test(name)
+  // a page: read as the page it makes (ui/preview/HtmlFrame.tsx), its code when editing
+  const html = /\.html?$/i.test(name)
   // reading (the default) or editing (Edit; a new file, or Edit from its menu, opens editing)
   const [editing, setEditing] = useState(edit)
   // while editing Markdown: how it reads
@@ -114,9 +118,12 @@ export function FileEditor({
   saveRef.current = save
 
   const close = async () => {
-    if (dirty && !(await confirm({ title: 'Close without saving?', message: `Your changes to ${name} are lost.`, confirmLabel: 'Discard changes' }))) return
+    if (dirty && !(await confirm({ title: 'Close without saving?', message: `Your changes to ${name} are lost.`, confirmLabel: 'Discard changes' }))) return false
     onClose()
+    return true
   }
+  // Back closes this window (asking first if there are unsaved changes), not what it was opened from; minimized: not
+  useBackStep(close, !hidden)
 
   return (
     <Modal
@@ -137,7 +144,7 @@ export function FileEditor({
             </span>
           )}
           {file?.editable && editing && <span className="code-editor__state muted">{saving ? 'Saving…' : dirty ? 'Unsaved' : savedAt ? 'Saved' : ''}</span>}
-          {markdown && file && editing && (
+          {(markdown || html) && file && editing && (
             <button className="icon-btn small ghost" aria-pressed={preview} onClick={() => setPreview((v) => !v)} data-tip={preview ? 'Back to the text' : 'Preview'} aria-label={preview ? 'Back to the text' : 'Preview'}>
               {preview ? <LuPencil /> : <LuEye />}
             </button>
@@ -185,6 +192,8 @@ export function FileEditor({
               <LuLoader className="spin" />
             </div>
           )
+        ) : html && (!editing || preview) ? (
+          <HtmlFrame html={text} title={name} />
         ) : (markdown && !editing) || (editing && preview) ? (
           <div className="code-editor__preview">
             <Markdown text={text} />

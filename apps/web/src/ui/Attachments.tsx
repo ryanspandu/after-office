@@ -1,10 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
-import { LuFilm, LuDownload, LuFile, LuFileText, LuFileX, LuSheet, LuTable } from 'react-icons/lu'
+import { LuFilm, LuDownload, LuFile, LuFileText, LuFileX, LuGlobe, LuSheet, LuTable } from 'react-icons/lu'
 import { CsvTable } from './preview/CsvTable'
+import { HtmlFrame } from './preview/HtmlFrame'
 import { useModalMaximize } from './Maximize'
 import { Markdown } from './FollowUps'
 import { Modal } from './Modal'
 import type { Attachment } from '@after-office/shared'
+import { useBackStep } from '../state/useBackStep'
 import { api } from '../state/auth'
 
 // Files an agent made or pointed to: shown under its chat messages and reports, with a preview for pictures and a
@@ -25,12 +27,13 @@ export function formatSize(n: number) {
 const TEXT_RE = /\.(md|markdown|mdx|txt|text|csv|tsv|json|jsonl|log|ya?ml|toml|ini|env\.example|xml|html?|css|js|jsx|ts|tsx|py|sh|sql|go|rs|rb|php|java|kt|swift)$/i
 const isMarkdown = (p: string) => /\.(md|markdown|mdx)$/i.test(p)
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i
-type Kind = 'markdown' | 'sheet' | 'text' | 'pdf' | 'docx' | 'image' | 'video'
+type Kind = 'markdown' | 'html' | 'sheet' | 'text' | 'pdf' | 'docx' | 'image' | 'video'
 const VIDEO_RE = /\.(mp4|mov|m4v|webm|mkv|avi|mpe?g|3gp)$/i
 /** How a file is previewed here, if it is. */
 export function previewKind(path: string): Kind | null {
   if (VIDEO_RE.test(path)) return 'video'
   if (isMarkdown(path)) return 'markdown'
+  if (/\.html?$/i.test(path)) return 'html'
   if (/\.(csv|tsv)$/i.test(path)) return 'sheet'
   if (TEXT_RE.test(path)) return 'text'
   if (/\.pdf$/i.test(path)) return 'pdf'
@@ -43,7 +46,7 @@ const FILE_MAX = 30 * 1024 * 1024
 export const canPreview = (f: Pick<Attachment, 'path' | 'size'>) => {
   const kind = previewKind(f.path)
   // a video streams (a part at a time): any size plays
-  return !!kind && (kind === 'video' || f.size <= (kind === 'markdown' || kind === 'text' || kind === 'sheet' ? TEXT_MAX : FILE_MAX))
+  return !!kind && (kind === 'video' || f.size <= (kind === 'markdown' || kind === 'html' || kind === 'text' || kind === 'sheet' ? TEXT_MAX : FILE_MAX))
 }
 // the heavy viewers load only when such a file is opened
 const PdfView = lazy(() => import('./preview/PdfView'))
@@ -119,8 +122,10 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
   const [error, setError] = useState<string | null>(null)
   // a sheet: the table, or the file as it is
   const [raw, setRaw] = useState(false)
+  // Back closes the preview, not what it was opened from (a folder's sheet, a chat, a report)
+  useBackStep(onClose)
   // full size: the whole window, for long documents and wide tables
-  const max = useModalMaximize(kind === 'sheet' || kind === 'pdf' || kind === 'docx' ? 960 : 820)
+  const max = useModalMaximize(kind === 'sheet' || kind === 'html' || kind === 'pdf' || kind === 'docx' ? 960 : 820)
   useEffect(() => {
     if (video) return
     let gone = false
@@ -164,6 +169,8 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
           <div className="file-preview__md">
             <Markdown text={body} />
           </div>
+        ) : kind === 'html' && !raw ? (
+          <HtmlFrame html={body} title={baseName(file.path)} />
         ) : kind === 'sheet' && !raw ? (
           <CsvTable text={body} path={file.path} />
         ) : (
@@ -171,13 +178,21 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
         )}
         <footer className="modal__foot">
           <span className="muted">{formatSize(file.size)}</span>
-          {kind === 'sheet' && text !== null && (
+          {(kind === 'sheet' || kind === 'html') && text !== null && (
             <div className="seg file-preview__mode">
               <button className={raw ? '' : 'active'} onClick={() => setRaw(false)}>
-                <LuTable /> Table
+                {kind === 'html' ? (
+                  <>
+                    <LuGlobe /> Page
+                  </>
+                ) : (
+                  <>
+                    <LuTable /> Table
+                  </>
+                )}
               </button>
               <button className={raw ? 'active' : ''} onClick={() => setRaw(true)}>
-                <LuFileText /> Raw
+                <LuFileText /> {kind === 'html' ? 'Code' : 'Raw'}
               </button>
             </div>
           )}

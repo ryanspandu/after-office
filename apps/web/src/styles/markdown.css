@@ -14,7 +14,13 @@
 .md :not(pre) > code { font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: var(--card-2); border: 1px solid var(--line); }
 .md pre.md-code code { background: none; border: 0; padding: 0; color: inherit; font-size: inherit; }
 .md-table { margin: 8px 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
-.md-table table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.md-table table { border-collapse: collapse; font-size: 13px; }
+/* as wide as its columns need (at least the box): a long cell wraps at a readable width, and a table wider than the
+   screen scrolls sideways instead of squeezing a column down to a letter per line (phones) */
+.md-table table { width: max-content; min-width: 100%; }
+.md-table th, .md-table td { max-width: 22em; overflow-wrap: break-word; }
+/* phones: narrower, so the next column peeks in (it scrolls) */
+@media (max-width: 768px) { .md-table th, .md-table td { max-width: 15em; } }
 .md-table th, .md-table td { padding: 6px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
 .md-table th { font-weight: 600; background: var(--card-2); white-space: nowrap; }
 .md-table tr:last-child td { border-bottom: 0; }
