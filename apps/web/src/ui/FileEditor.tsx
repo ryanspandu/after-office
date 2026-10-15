@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { LuCheck, LuEye, LuLoader, LuLock, LuMinus, LuPencil, LuSave } from 'react-icons/lu'
+import { LuCheck, LuDownload, LuEye, LuFileText, LuGlobe, LuLoader, LuLock, LuMinus, LuPencil, LuSave } from 'react-icons/lu'
 import { api } from '../state/auth'
 import { useDaylight } from '../state/clock'
 import { confirm } from './Confirm'
@@ -9,6 +9,9 @@ import { useModalMaximize } from './Maximize'
 import { Modal } from './Modal'
 import { useMinimized } from '../state/minimized'
 import { useBackStep } from '../state/useBackStep'
+import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
+import { saveUrl } from './Attachments'
+import { CopyButton, pageText, shown } from './CopyButton'
 import { closeFile, fileSaved, minimizeFile, useOpenFiles } from '../state/openFiles'
 
 // A text file of a folder opened in an editor (the Files browser): VS Code's look, its language's colours, saved in
@@ -73,6 +76,11 @@ export function FileEditor({
   const [editing, setEditing] = useState(edit)
   // while editing Markdown: how it reads
   const [preview, setPreview] = useState(false)
+  // reading a page or Markdown: as the page (the default) or its code
+  const [code, setCode] = useState(false)
+  // Markdown as its page: what Copy takes in that view
+  const page = useRef<HTMLDivElement>(null)
+  const phone = useMediaQuery(MOBILE)
   const dirty = !!file && text !== file.text
 
   const load = useCallback(async () => {
@@ -133,7 +141,8 @@ export function FileEditor({
       onBackdrop={onMinimize ?? (() => void close())}
       hidden={hidden}
       title={name}
-      description={path}
+      // phones, full size: the path steps aside for the file (back at the smaller size)
+      description={phone && max.full ? undefined : path}
       {...max.modalProps}
       className={`code-editor${max.modalProps.className ? ` ${max.modalProps.className}` : ''}`}
       actions={
@@ -147,11 +156,6 @@ export function FileEditor({
           {(markdown || html) && file && editing && (
             <button className="icon-btn small ghost" aria-pressed={preview} onClick={() => setPreview((v) => !v)} data-tip={preview ? 'Back to the text' : 'Preview'} aria-label={preview ? 'Back to the text' : 'Preview'}>
               {preview ? <LuPencil /> : <LuEye />}
-            </button>
-          )}
-          {file?.editable && !editing && (
-            <button className="small" onClick={() => (setEditing(true), setPreview(false))} data-tip="Change this file">
-              <LuPencil /> Edit
             </button>
           )}
           {file?.editable && editing && (
@@ -175,6 +179,13 @@ export function FileEditor({
               {savedAt && !dirty ? <LuCheck /> : <LuSave />} Save
             </button>
           )}
+          {/* what's showing: the page (as a page and as text) or its code */}
+          {file && (
+            <CopyButton
+              get={() => (html && !editing && !code ? { text: pageText(text), html: text } : markdown && !editing && !code && page.current ? shown(page.current) : { text })}
+              label={(html || markdown) && !editing && !code ? 'Copy the page' : 'Copy'}
+            />
+          )}
           {onMinimize && (
             <button className="icon-btn small ghost" onClick={onMinimize} data-tip="Minimize (it stays open, with your changes)" aria-label="Minimize">
               <LuMinus />
@@ -192,10 +203,10 @@ export function FileEditor({
               <LuLoader className="spin" />
             </div>
           )
-        ) : html && (!editing || preview) ? (
+        ) : html && ((!editing && !code) || (editing && preview)) ? (
           <HtmlFrame html={text} title={name} />
-        ) : (markdown && !editing) || (editing && preview) ? (
-          <div className="code-editor__preview">
+        ) : (markdown && !editing && !code) || (editing && preview) ? (
+          <div className="code-editor__preview" ref={page}>
             <Markdown text={text} />
           </div>
         ) : (
@@ -208,6 +219,30 @@ export function FileEditor({
           >
             <CodeMirrorBox name={name} value={text} onChange={setText} onSave={() => void saveRef.current()} readOnly={!file.editable || !editing} dark={dark} focus={editing} />
           </Suspense>
+        )}
+        {/* reading: a page or its code, the file to save, Edit (the same footer as a file's preview, ui/Attachments.tsx) */}
+        {file && !editing && (
+          <footer className="modal__foot file-foot">
+            {(html || markdown) && (
+              <div className="seg file-preview__mode">
+                <button className={code ? '' : 'active'} onClick={() => setCode(false)}>
+                  <LuGlobe /> Page
+                </button>
+                <button className={code ? 'active' : ''} onClick={() => setCode(true)}>
+                  <LuFileText /> Code
+                </button>
+              </div>
+            )}
+            <span className="grow" />
+            <button className="small" onClick={() => saveUrl(`/api/workspaces/file?${new URLSearchParams({ root, path })}`, name)}>
+              <LuDownload /> Download
+            </button>
+            {file.editable && (
+              <button className="small primary" onClick={() => (setEditing(true), setPreview(false))} data-tip="Change this file">
+                <LuPencil /> Edit
+              </button>
+            )}
+          </footer>
         )}
       </div>
     </Modal>

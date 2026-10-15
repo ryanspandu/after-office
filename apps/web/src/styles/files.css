@@ -152,3 +152,12 @@
 /* an HTML file as its page (ui/preview/HtmlFrame.tsx): white like a browser's, filling the window */
 .html-frame { display: block; width: 100%; flex: 1; min-height: 60vh; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .modal--full .html-frame { min-height: 0; }
+/* a file's footer (preview and reader): one compact row on phones (size, Page / Code, Download, Edit) */
+@media (max-width: 768px) {
+  .file-foot { flex-wrap: nowrap; align-items: center; gap: 6px; }
+  .modal .file-foot > button { height: 32px; min-height: 0; padding: 0 12px; font-size: 13px; }
+  .file-foot .file-preview__mode { margin-left: 0; padding: 2px; }
+  .file-foot .file-preview__mode button { height: 28px; padding: 0 10px; font-size: 12.5px; }
+  .file-foot .muted { font-size: 12px; white-space: nowrap; }
+  .file-foot__close { display: none; }
+}

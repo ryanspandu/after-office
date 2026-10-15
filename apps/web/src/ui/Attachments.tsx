@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { LuFilm, LuDownload, LuFile, LuFileText, LuFileX, LuGlobe, LuSheet, LuTable } from 'react-icons/lu'
 import { CsvTable } from './preview/CsvTable'
 import { HtmlFrame } from './preview/HtmlFrame'
+import { CopyButton, pageText, shown } from './CopyButton'
 import { useModalMaximize } from './Maximize'
 import { Markdown } from './FollowUps'
 import { Modal } from './Modal'
@@ -123,6 +124,8 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
   const [error, setError] = useState<string | null>(null)
   // a sheet: the table, or the file as it is
   const [raw, setRaw] = useState(false)
+  // Markdown as its page: what Copy takes in that view
+  const page = useRef<HTMLDivElement>(null)
   // Back closes the preview, not what it was opened from (a folder's sheet, a chat, a report)
   useBackStep(onClose)
   // full size: the whole window, for long documents and wide tables
@@ -158,6 +161,18 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
       // phones, full size: the folder's path steps aside for the file (back at the smaller size)
       description={phone && max.full ? undefined : file.path.replace(/^\/(Users|home)\/[^/]+/, '~')}
       {...max.modalProps}
+      actions={
+        <>
+          {/* a text file: what's showing, the page (as a page and as text) or its code */}
+          {body !== null && !binary && !video && (
+            <CopyButton
+              get={() => (kind === 'html' && !raw ? { text: pageText(body), html: body } : kind === 'markdown' && !raw && page.current ? shown(page.current) : { text: body })}
+              label={(kind === 'html' || kind === 'markdown') && !raw ? 'Copy the page' : 'Copy'}
+            />
+          )}
+          {max.modalProps.actions}
+        </>
+      }
     >
       <div className={`modal__body file-preview file-preview--${kind}`} ref={max.bodyRef}>
         {video ? (
@@ -174,8 +189,8 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
           )
         ) : body === null ? (
           loading
-        ) : kind === 'markdown' ? (
-          <div className="file-preview__md">
+        ) : kind === 'markdown' && !raw ? (
+          <div className="file-preview__md" ref={page}>
             <Markdown text={body} />
           </div>
         ) : kind === 'html' && !raw ? (
@@ -185,12 +200,12 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
         ) : (
           <pre className="file-preview__text">{body}</pre>
         )}
-        <footer className="modal__foot">
+        <footer className="modal__foot file-foot">
           <span className="muted">{formatSize(file.size)}</span>
-          {(kind === 'sheet' || kind === 'html') && text !== null && (
+          {(kind === 'sheet' || kind === 'html' || kind === 'markdown') && text !== null && (
             <div className="seg file-preview__mode">
               <button className={raw ? '' : 'active'} onClick={() => setRaw(false)}>
-                {kind === 'html' ? (
+                {kind === 'html' || kind === 'markdown' ? (
                   <>
                     <LuGlobe /> Page
                   </>
@@ -201,7 +216,7 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
                 )}
               </button>
               <button className={raw ? 'active' : ''} onClick={() => setRaw(true)}>
-                <LuFileText /> {kind === 'html' ? 'Code' : 'Raw'}
+                <LuFileText /> {kind === 'html' || kind === 'markdown' ? 'Code' : 'Raw'}
               </button>
             </div>
           )}
@@ -212,7 +227,8 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
           >
             <LuDownload /> Download
           </button>
-          <button className="small" onClick={onClose}>
+          {/* phones: the ✕ above closes it (the footer stays one row) */}
+          <button className="small file-foot__close" onClick={onClose}>
             Close
           </button>
         </footer>

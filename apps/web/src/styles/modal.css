@@ -16,6 +16,12 @@
 .modal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px 0; }
 /* with a description under the title, line the close button up with the title line */
 .modal__head:has(> div > p) { align-items: flex-start; }
+/* the line under the title (a path, a description) takes the whole width, under the buttons too: the title keeps
+   its row beside them */
+.modal__head:has(> div > p) { flex-wrap: wrap; row-gap: 0; }
+.modal__head:has(> div > p) > div { display: contents; }
+.modal__head:has(> div > p) h3 { flex: 1 1 0; min-width: 0; }
+.modal__head:has(> div > p) > div > p { order: 1; flex-basis: 100%; }
 .modal__head:has(> div > p) > .modal__actions { margin-top: -4px; }
 .modal__head > .icon-btn, .modal__actions { flex-shrink: 0; }
 /* a long title or path wraps instead of pushing the header's buttons off the edge */
