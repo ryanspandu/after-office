@@ -47,6 +47,11 @@
 .modal--full .file-preview { flex: 1; min-height: 0; }
 .modal--full .file-preview__md, .modal--full .file-preview__text { flex: 1; max-height: none; min-height: 0; }
 .modal--full .file-preview__md .md { max-width: 980px; margin: 0 auto; }
+/* the footer stays at the bottom, however little the file holds */
+.file-preview > .file-foot { margin-top: auto; }
+@media (max-width: 768px) {
+  .modal:not(.modal--full) .file-preview { min-height: calc(var(--vvh, 100dvh) - 230px); }
+}
 /* file paths in agent text that open / download the file (ui/fileLinks.tsx) */
 .md-file { all: unset; cursor: pointer; color: var(--hl-ink); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; word-break: break-all; }
 .md-file:hover { text-decoration-style: solid; }
@@ -160,4 +165,7 @@
   .file-foot .file-preview__mode button { height: 28px; padding: 0 10px; font-size: 12.5px; }
   .file-foot .muted { font-size: 12px; white-space: nowrap; }
   .file-foot__close { display: none; }
+  /* Download and Edit: their icons only (the tip says which) */
+  .file-foot__label { display: none; }
+  .modal .file-foot > button:has(.file-foot__label) { flex: none; width: 56px; padding: 0; justify-content: center; }
 }

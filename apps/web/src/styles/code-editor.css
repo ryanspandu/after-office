@@ -12,7 +12,9 @@
 .code-editor__ro { margin-right: 6px; }
 .code-editor__ro { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; color: var(--muted); background: var(--card-2); white-space: nowrap; }
 @media (max-width: 768px) {
-  .code-editor__body { height: auto; flex: 1; min-height: 60vh; }
+  /* a height of its own (the sheet's room), so the code scrolls inside it: grown to the file, nothing would scroll */
+  .code-editor__body { height: calc(var(--vvh, 100dvh) - 230px); min-height: 0; flex: none; }
+  .modal--full .code-editor__body { height: auto; flex: 1; min-height: 0; }
   .code-editor__cm { font-size: 12.5px; }
 }
 /* the Files browser: hidden entries a little dimmer; the "show hidden" button on */

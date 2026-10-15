@@ -224,8 +224,10 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
           <button
             className="small"
             onClick={() => saveUrl(src, baseName(file.path))}
+            data-tip="Download"
+            aria-label="Download"
           >
-            <LuDownload /> Download
+            <LuDownload /> <span className="file-foot__label">Download</span>
           </button>
           {/* phones: the ✕ above closes it (the footer stays one row) */}
           <button className="small file-foot__close" onClick={onClose}>

@@ -234,12 +234,12 @@ export function FileEditor({
               </div>
             )}
             <span className="grow" />
-            <button className="small" onClick={() => saveUrl(`/api/workspaces/file?${new URLSearchParams({ root, path })}`, name)}>
-              <LuDownload /> Download
+            <button className="small" onClick={() => saveUrl(`/api/workspaces/file?${new URLSearchParams({ root, path })}`, name)} data-tip="Download" aria-label="Download">
+              <LuDownload /> <span className="file-foot__label">Download</span>
             </button>
             {file.editable && (
-              <button className="small primary" onClick={() => (setEditing(true), setPreview(false))} data-tip="Change this file">
-                <LuPencil /> Edit
+              <button className="small primary" onClick={() => (setEditing(true), setPreview(false))} data-tip="Change this file" aria-label="Edit">
+                <LuPencil /> <span className="file-foot__label">Edit</span>
               </button>
             )}
           </footer>
