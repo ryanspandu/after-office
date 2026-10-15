@@ -7,6 +7,7 @@ import { Markdown } from './FollowUps'
 import { Modal } from './Modal'
 import type { Attachment } from '@after-office/shared'
 import { useBackStep } from '../state/useBackStep'
+import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { api } from '../state/auth'
 
 // Files an agent made or pointed to: shown under its chat messages and reports, with a preview for pictures and a
@@ -125,6 +126,7 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
   // Back closes the preview, not what it was opened from (a folder's sheet, a chat, a report)
   useBackStep(onClose)
   // full size: the whole window, for long documents and wide tables
+  const phone = useMediaQuery(MOBILE)
   const max = useModalMaximize(kind === 'sheet' || kind === 'html' || kind === 'pdf' || kind === 'docx' ? 960 : 820)
   useEffect(() => {
     if (video) return
@@ -149,7 +151,14 @@ export function FilePreview({ agentId, file, onClose, url, inlineUrl }: { agentI
   const body = text === null ? null : /\.json$/i.test(file.path) ? pretty(text) : text
   const loading = <div className="muted">Loading…</div>
   return (
-    <Modal open onClose={onClose} title={baseName(file.path)} description={file.path.replace(/^\/(Users|home)\/[^/]+/, '~')} {...max.modalProps}>
+    <Modal
+      open
+      onClose={onClose}
+      title={baseName(file.path)}
+      // phones, full size: the folder's path steps aside for the file (back at the smaller size)
+      description={phone && max.full ? undefined : file.path.replace(/^\/(Users|home)\/[^/]+/, '~')}
+      {...max.modalProps}
+    >
       <div className={`modal__body file-preview file-preview--${kind}`} ref={max.bodyRef}>
         {video ? (
           <video className="file-preview__video" src={playUrl} controls autoPlay playsInline preload="metadata" />
