@@ -412,7 +412,7 @@ export const liveApi = {
   archiveThread: (id: string, archived: boolean) => call(`/api/threads/${id}/${archived ? 'archive' : 'unarchive'}`, {}) as Promise<OfficeThread>,
   deleteThread: (id: string) => call(`/api/threads/${id}`, undefined, 'DELETE'),
   /** "Ask Marcus" in a note: its helper thread is made on the first message (server: work/noteAssist.ts) */
-  askNote: (noteId: string, b: { text: string; uploads?: string[] }) =>
+  askNote: (noteId: string, b: { text: string; uploads?: string[]; mode?: 'edit' | 'suggest' }) =>
     call(`/api/notes/${encodeURIComponent(noteId)}/assist`, b) as Promise<{ threadId: string; sessionKey: string; queued: boolean }>,
   reviseTask: (taskId: string, feedback: string) => call(`/api/tasks/${taskId}/revise`, { feedback }) as Promise<{ result: 'sent' | 'queued' | 'parallel' }>,
   /** a stopped task taken up again by its agent, where it stopped */

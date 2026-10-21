@@ -5,9 +5,14 @@ import { confirm } from '../ui/Confirm'
 import { isStandalone } from './install'
 
 // The installed app on a phone: the Back gesture at its very bottom (nothing open to close) would leave the app. It
-// asks first. A step of its own sits under everything else in the history (state/url.ts pushStep): Back reaching it
-// asks; "Stay" puts it back. A page can't close an installed app by itself on every phone: when it can't, "Leave"
+// asks first; with a window still open there (opened along with the app, from its address), Back closes that instead.
+// A step of its own sits under everything else in the history (state/url.ts pushStep): Back reaching it asks; "Stay"
+// puts it back. A page can't close an installed app by itself on every phone: when it can't, "Leave"
 // takes the step away and says one more Back leaves.
+
+/** A window, sheet or drawer that's open (shown, not minimized or on its way out), and its close button. */
+const OPEN = '.modal-backdrop:not(.modal-backdrop--hidden):not(.modal-backdrop--closing), .drawer-backdrop:not(.drawer-backdrop--closing)'
+const CLOSE = '.modal__head button[aria-label="Close"], .drawer button[aria-label="Close"], button[aria-label="Close"]'
 
 export function ExitGuard() {
   const phone = useMediaQuery(MOBILE)
@@ -18,6 +23,16 @@ export function ExitGuard() {
     const guard = () => {
       pushStep(() => {
         if (gone) return
+        // something is still open whose own Back step isn't there (opened along with the app, from its address):
+        // Back closes it (its own close button), and the guard stays
+        const open = [...document.querySelectorAll<HTMLElement>(OPEN)].pop()
+        if (open) {
+          guard()
+          const close = open.querySelector<HTMLElement>(CLOSE)
+          if (close) close.click()
+          else window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+          return
+        }
         void confirm({ title: 'Leave After Office?', message: 'The app closes. Your agents keep working on the server.', confirmLabel: 'Leave', danger: false }).then((leave) => {
           if (gone) return
           if (!leave) return guard()

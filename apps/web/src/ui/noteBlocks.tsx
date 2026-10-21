@@ -18,6 +18,9 @@ export interface NoteBlockActions {
   applied: (markdown: string) => boolean
   /** a reply that just came in (not the chat's history loading as it opens): only those go in by themselves */
   fresh: () => boolean
+  /** a suggestion already put in (Insert or Replace), here or another time: its buttons are spent */
+  used: (markdown: string) => 'insert' | 'replace' | null
+  markUsed: (markdown: string, how: 'insert' | 'replace') => void
 }
 
 export const NoteBlockContext = createContext<NoteBlockActions | null>(null)
@@ -47,6 +50,8 @@ function NoteEdit({ markdown, actions }: { markdown: string; actions: NoteBlockA
   const [undo, setUndo] = useState<(() => void) | null>(null)
   // put in already (here, or another time); else: in now if it just came, or waiting for Apply (an old one)
   const [state, setState] = useState<'applied' | 'undone' | 'waiting'>(() => (actions.applied(markdown) || actions.fresh() ? 'applied' : 'waiting'))
+  // what he wrote: already in the note (shown on asking); an old edit waiting for Apply shows it
+  const [shown, setShown] = useState(false)
   const put = () => {
     const back = actions.apply(markdown)
     if (back) setUndo(() => back)
@@ -66,32 +71,34 @@ function NoteEdit({ markdown, actions }: { markdown: string; actions: NoteBlockA
             <LuCheck /> Apply
           </button>
         )}
+        {state !== 'waiting' && markdown.trim() && (
+          <button type="button" className="small ghost" aria-expanded={shown} onClick={() => setShown(!shown)}>
+            {shown ? 'Hide' : 'View'}
+          </button>
+        )}
         {undo && state === 'applied' && (
           <button type="button" className="small ghost" onClick={() => (undo(), setState('undone'))} {...tip('Back to the note as it was before this edit')}>
             <LuUndo2 /> Undo
           </button>
         )}
       </div>
-      <div className="note-block__text">{markdown}</div>
+      {(state === 'waiting' || shown) && markdown.trim() && <div className="note-block__text">{markdown}</div>}
     </div>
   )
 }
 
 function NoteBlock({ markdown, actions }: { markdown: string; actions: NoteBlockActions }) {
-  const [done, setDone] = useState<'insert' | 'replace' | null>(null)
-  useEffect(() => {
-    if (!done) return
-    const t = setTimeout(() => setDone(null), 2200)
-    return () => clearTimeout(t)
-  }, [done])
+  // used once (inserted or replaced): done, its buttons off (remembered, so the chat's history shows it too)
+  const [done, setDone] = useState<'insert' | 'replace' | null>(() => actions.used(markdown))
+  const use = (how: 'insert' | 'replace') => (actions.markUsed(markdown, how), setDone(how))
   return (
     <div className="note-block">
       <div className="note-block__text">{markdown}</div>
       <div className="note-block__actions">
-        <button type="button" className="small primary" onClick={() => (actions.insert(markdown), setDone('insert'))} {...tip('Put it in the note at the cursor (or at its end)')}>
+        <button type="button" className="small primary" disabled={!!done} onClick={() => (actions.insert(markdown), use('insert'))} {...tip('Put it in the note at the cursor (or at its end)')}>
           {done === 'insert' ? <LuCheck /> : <LuTextCursorInput />} {done === 'insert' ? 'Inserted' : 'Insert'}
         </button>
-        <button type="button" className="small ghost" onClick={() => void actions.replace(markdown).then((ok) => ok && setDone('replace'))} {...tip('The whole note becomes this text')}>
+        <button type="button" className="small ghost" disabled={!!done} onClick={() => void actions.replace(markdown).then((ok) => ok && use('replace'))} {...tip('The whole note becomes this text')}>
           {done === 'replace' ? <LuCheck /> : <LuReplace />} {done === 'replace' ? 'Replaced' : 'Replace note'}
         </button>
       </div>

@@ -319,7 +319,7 @@ workRoutes.get('/notes/:id/assist', (c) => {
   return c.json(t ? { threadId: t.id, sessionKey: t.sessionKey } : null)
 })
 workRoutes.post('/notes/:id/assist', async (c) => {
-  const b = await c.req.json<{ text?: unknown; uploads?: unknown }>().catch(() => ({}) as { text?: unknown; uploads?: unknown })
+  const b = await c.req.json<{ text?: unknown; uploads?: unknown; mode?: unknown }>().catch(() => ({}) as { text?: unknown; uploads?: unknown; mode?: unknown })
   const text = typeof b.text === 'string' ? b.text.slice(0, 50_000) : ''
   const ids = Array.isArray(b.uploads) ? b.uploads.filter((f): f is string => typeof f === 'string').slice(0, MAX_UPLOADS) : []
   if (!text.trim() && !ids.length) throw new AgentError('Write something first', 400)
@@ -328,7 +328,7 @@ workRoutes.post('/notes/:id/assist', async (c) => {
   // attachments (staged by /uploads) go into the manager's folder, as in a thread
   const paths = committedPaths(ids.map((id) => commitStaged(manager, id)))
   noteOwnerMessage(manager.id, requestWho(c))
-  return c.json(await askAboutNote(c.req.param('id'), withAttachments(text, paths)))
+  return c.json(await askAboutNote(c.req.param('id'), withAttachments(text, paths), b.mode === 'edit' ? 'edit' : 'suggest'))
 })
 workRoutes.put('/reports/:id/tags', async (c) => {
   const { tags } = await c.req.json<{ tags?: unknown }>().catch(() => ({ tags: undefined }))

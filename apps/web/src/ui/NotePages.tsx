@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { LuArrowLeft, LuArrowRight, LuBookOpen, LuBookPlus, LuCheck, LuChevronRight, LuEllipsis, LuFolderInput, LuInbox, LuLayers, LuPencil, LuPlus, LuTag, LuTrash2 } from 'react-icons/lu'
+import { LuArrowLeft, LuArrowRight, LuBookCopy, LuBookOpen, LuBookPlus, LuCheck, LuChevronRight, LuEllipsis, LuFolderInput, LuInbox, LuLayers, LuPencil, LuPlus, LuTag, LuTrash2 } from 'react-icons/lu'
 import type { NotePage, OwnerNoteSummary } from '@after-office/shared'
 import { closestCenter, DndContext, MouseSensor, TouchSensor, useDndMonitor, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from '@dnd-kit/sortable'
@@ -13,6 +13,7 @@ import { confirm } from './Confirm'
 import { ago } from './FollowUps'
 import { Field, Modal } from './Modal'
 import { Select } from './Select'
+import { tip } from './Tooltip'
 import { TagIcon } from './tagIcons'
 
 // Notes → View all: the notes kept on pages (notebooks; pages hold sub-pages, any depth), shown as cards like the
@@ -195,7 +196,7 @@ function useCardFocus() {
 const byLatest = (notes: OwnerNoteSummary[]) => [...notes].sort((a, b) => b.updatedAt - a.updatedAt)
 
 /** One card: a page's (or a tag's) notes, by name, and how many; its footer opens them. */
-function NoteCard({ i, id, title, icon, color, list, subs = 0, updatedAt, now, on, onFocus, onOpen, onMenu, sortable = false, noteDrop = false }: {
+function NoteCard({ i, id, title, icon, color, list, subs = 0, updatedAt, now, on, onFocus, onOpen, onMenu, sortable = false, noteDrop = false, clickOpens = false }: {
   i: number
   id: string
   title: string
@@ -214,6 +215,8 @@ function NoteCard({ i, id, title, icon, color, list, subs = 0, updatedAt, now, o
   sortable?: boolean
   /** a sub-page's card in the notes window: a note dragged onto it goes to that page */
   noteDrop?: boolean
+  /** a sub-page's row (inside a page): a click opens it at once, no focus step first */
+  clickOpens?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, data: { kind: 'page' }, disabled: !sortable })
   const drop = usePageDrop('card', id, title, noteDrop)
@@ -232,7 +235,7 @@ function NoteCard({ i, id, title, icon, color, list, subs = 0, updatedAt, now, o
       className={`tag-card tag-card--static page-card${on ? ' is-on' : ''}${isDragging ? ' is-dragging' : ''}${drop.cls}`}
       // moved by a drag: its way in (a transform that stays) gives way to the drag's
       style={{ ['--c' as string]: color, ['--i' as string]: Math.min(i, 12), transform: CSS.Transform.toString(transform), transition, ...(transform ? { animation: 'none' } : {}) }}
-      onClick={onFocus}
+      onClick={clickOpens ? onOpen : onFocus}
       onContextMenu={
         onMenu &&
         ((e) => {
@@ -244,8 +247,16 @@ function NoteCard({ i, id, title, icon, color, list, subs = 0, updatedAt, now, o
     >
       <span className="tag-card__top">
         <span className="tag-card__icon">{icon}</span>
-        <span className={`tag-card__badge${list.length ? ' tag-card__badge--active' : ''}`}>
-          {list.length ? `${list.length} note${list.length === 1 ? '' : 's'}` : 'empty'}
+        <span className="page-card__badges">
+          {/* its sub-pages: a quiet count by the notes' (the footer stays about its notes) */}
+          {subs > 0 && (
+            <span className="tag-card__badge page-card__subs" {...tip(`${subs} sub-page${subs === 1 ? '' : 's'}`)}>
+              <LuBookCopy /> {subs}
+            </span>
+          )}
+          <span className={`tag-card__badge${list.length ? ' tag-card__badge--active' : ''}`}>
+            {list.length ? `${list.length} note${list.length === 1 ? '' : 's'}` : 'empty'}
+          </span>
         </span>
       </span>
       <span className="tag-card__title">{title}</span>
@@ -262,12 +273,6 @@ function NoteCard({ i, id, title, icon, color, list, subs = 0, updatedAt, now, o
       <button type="button" className="tag-card__foot tag-card__open" onClick={onOpen} aria-label={`Open ${title}`}>
         <span className="tag-card__count">
           <b>{list.length}</b> note{list.length === 1 ? '' : 's'}
-          {subs > 0 && (
-            <span className="page-card__subs">
-              {' '}
-              · {subs} sub-page{subs === 1 ? '' : 's'}
-            </span>
-          )}
           {last ? <span className="muted"> · {ago(now - last)}</span> : null}
         </span>
         <span className="tag-card__go" aria-hidden>
@@ -408,9 +413,10 @@ export function NotePageCards({ notes, parent, onOpen, noteDrop = false }: { not
       subs={page ? kidsOf(page.id).length : 0}
       updatedAt={page?.updatedAt}
       now={now}
-      on={focus === id}
+      on={!parent && focus === id}
       onFocus={() => setFocus(id)}
       onOpen={() => onOpen(id)}
+      clickOpens={!!parent}
       onMenu={page && ((at) => setMenu({ page, ...at }))}
       sortable={!!page}
       noteDrop={noteDrop && !!page}

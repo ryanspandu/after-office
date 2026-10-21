@@ -27,8 +27,15 @@ export function noteSnapshot(n: OwnerNote) {
   return `[The note now: "${n.title.trim() || 'Untitled'}"] (\`\`\`note-edit block: your edit, replaces it at once; \`\`\`note block: a suggestion)\n<<<NOTE\n${text || '(empty)'}\nNOTE>>>`
 }
 
-/** The owner's message to the note's helper: its thread is made on the first one; the note's text goes along when it changed. */
-export async function askAboutNote(noteId: string, text: string) {
+/** Edit mode (the panel's switch): the owner wants the note changed, not suggestions. Goes with each such message. */
+export const EDIT_MODE_LINE =
+  '[Note helper: edit mode] Make the change in the note yourself: answer with ONE fenced block that starts with ```note-edit and holds the WHOLE new note (Markdown), and at most one short line saying what you changed. No ```note suggestions in this mode.'
+
+/**
+ * The owner's message to the note's helper: its thread is made on the first one; the note's text goes along when it
+ * changed. `mode` 'edit': he changes the note himself (EDIT_MODE_LINE); else he may suggest.
+ */
+export async function askAboutNote(noteId: string, text: string, mode: 'edit' | 'suggest' = 'suggest') {
   const n = ownerNotesRepo.get(noteId)
   if (!n) throw new AgentError('This note no longer exists', 404)
   if (!agentsRepo.manager()) throw new AgentError('Ask Marcus needs the manager: add one to the office first', 409)
@@ -36,7 +43,9 @@ export async function askAboutNote(noteId: string, text: string) {
   const snap = noteSnapshot(n)
   const hash = String(Bun.hash(snap))
   const changed = !t.started || sentHash.get(t.id) !== hash
-  const result = await sendToThread(t.id, text, changed ? snap : undefined)
+  // the office's part before the owner's words (folded away in the chat): the mode, the note's text
+  const before = [mode === 'edit' ? EDIT_MODE_LINE : null, changed ? snap : null].filter(Boolean).join('\n\n')
+  const result = await sendToThread(t.id, text, before || undefined)
   sentHash.set(t.id, hash)
   return { threadId: t.id, sessionKey: t.sessionKey, queued: result === 'queued' }
 }

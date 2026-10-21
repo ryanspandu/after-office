@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { LuLoader, LuPaperclip, LuSend, LuSparkles, LuX } from 'react-icons/lu'
+import { LuLightbulb, LuLoader, LuPaperclip, LuPencilLine, LuSend, LuSparkles, LuX } from 'react-icons/lu'
 import { liveApi, useLive } from '../state/live'
 import { avatarStyle, useOffice, type OfficeAgent } from '../state/store'
 import { ChatView } from './agent/ChatTab'
@@ -18,6 +18,55 @@ import { AgentFace } from './AgentFace'
 // once, with Undo.
 
 const SUGGESTIONS = ['Summarize this note', 'Fix grammar', 'Make it a checklist', 'Continue writing']
+/** Edit mode's one-tap jobs (a writing assistant): each changes the note itself */
+const QUICK = ['Fix grammar & typos', 'Improve the writing', 'Make it shorter', 'Make it a checklist', 'Continue writing']
+
+/** How Marcus helps (remembered): 'edit' changes the note itself (Undo after), 'suggest' gives text to insert. */
+type AssistMode = 'edit' | 'suggest'
+const MODE_KEY = 'after-office:note-assist-mode'
+function useAssistMode() {
+  const [mode, setMode] = useState<AssistMode>(() => {
+    try {
+      return localStorage.getItem(MODE_KEY) === 'suggest' ? 'suggest' : 'edit'
+    } catch {
+      return 'edit'
+    }
+  })
+  const pick = (m: AssistMode) => {
+    setMode(m)
+    try {
+      localStorage.setItem(MODE_KEY, m)
+    } catch {
+      /* this visit only */
+    }
+  }
+  return [mode, pick] as const
+}
+
+/** The panel's top: Edit or Suggest, and (Edit) a few one-tap jobs for the note. */
+function ModeBar({ mode, onMode, onQuick, busy }: { mode: AssistMode; onMode: (m: AssistMode) => void; onQuick?: (job: string) => void; busy?: boolean }) {
+  return (
+    <div className="note-assist__mode">
+      <div className="note-assist__seg" role="tablist" aria-label="How Marcus helps">
+        <button role="tab" aria-selected={mode === 'edit'} className={mode === 'edit' ? 'active' : ''} onClick={() => onMode('edit')} {...tip('He changes the note himself (Undo after)')}>
+          <LuPencilLine /> Edit
+        </button>
+        <button role="tab" aria-selected={mode === 'suggest'} className={mode === 'suggest' ? 'active' : ''} onClick={() => onMode('suggest')} {...tip('He suggests text; you insert it')}>
+          <LuLightbulb /> Suggest
+        </button>
+      </div>
+      {mode === 'edit' && onQuick && (
+        <div className="note-assist__quick">
+          {QUICK.map((q) => (
+            <button key={q} type="button" className="small" disabled={busy} onClick={() => onQuick(q)}>
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /** The header's ✨ (desktop): a note not saved yet has no helper. */
 export function NoteAssistButton({ saved, on, onToggle }: { saved: boolean; on: boolean; onToggle: () => void }) {
@@ -59,9 +108,9 @@ const editsOf = (noteId: string): string[] => {
     return []
   }
 }
-const rememberEdit = (noteId: string, md: string) => {
+const rememberEdit = (noteId: string, md: string, prefix = '') => {
   try {
-    localStorage.setItem(EDITS_KEY(noteId), JSON.stringify([...editsOf(noteId), hashOf(md)].slice(-50)))
+    localStorage.setItem(EDITS_KEY(noteId), JSON.stringify([...editsOf(noteId), `${prefix}${hashOf(md)}`].slice(-50)))
   } catch {
     /* this visit only */
   }
@@ -70,6 +119,15 @@ const rememberEdit = (noteId: string, md: string) => {
 /** The chat itself: Marcus's side of it once the note has a helper, else a short intro with a few ways to start. */
 export function NoteAssistChat({ noteId, editor }: { noteId: string; editor: RefObject<RichNotesApi | null> }) {
   const openedAt = useRef(Date.now())
+  const [mode, setMode] = useAssistMode()
+  const [quickBusy, setQuickBusy] = useState(false)
+  const quick = (job: string) => {
+    setQuickBusy(true)
+    void liveApi
+      .askNote(noteId, { text: job, mode: 'edit' })
+      .catch(() => {})
+      .finally(() => setQuickBusy(false))
+  }
   const manager = useOffice((s) => s.agents.find((a) => a.kind === 'manager'))
   const t = useLive((s) => s.noteThreads.find((x) => x.noteId === noteId))
   const actions = useMemo<NoteBlockActions>(
@@ -90,6 +148,8 @@ export function NoteAssistChat({ noteId, editor }: { noteId: string; editor: Ref
         return () => ed.setHtml(before)
       },
       applied: (md) => editsOf(noteId).includes(hashOf(md)),
+      used: (md) => (editsOf(noteId).includes(`i:${hashOf(md)}`) ? 'insert' : editsOf(noteId).includes(`r:${hashOf(md)}`) ? 'replace' : null),
+      markUsed: (md, how) => rememberEdit(noteId, md, how === 'insert' ? 'i:' : 'r:'),
       // the history shows within moments of opening; what comes after is new
       fresh: () => Date.now() - openedAt.current > FRESH_AFTER_MS,
     }),
@@ -102,7 +162,7 @@ export function NoteAssistChat({ noteId, editor }: { noteId: string; editor: Ref
     return () => clearTimeout(tm)
   }, [t?.id, t?.unread])
   if (!manager) return <div className="note-assist__empty muted">Ask Marcus needs the manager: add one to the office first.</div>
-  if (!t) return <NoteAssistIntro noteId={noteId} manager={manager} />
+  if (!t) return <NoteAssistIntro noteId={noteId} manager={manager} mode={mode} onMode={setMode} />
   const side = manager.sessions?.find((s) => s.key === t.sessionKey && s.open)
   // its session's own state, like a thread's; resting (closed) reads as ready: a message opens it again
   const view: OfficeAgent = side
@@ -112,6 +172,7 @@ export function NoteAssistChat({ noteId, editor }: { noteId: string; editor: Ref
   const doing = view.status === 'working' ? `${manager.name} is writing…` : view.status === 'waiting' ? `${manager.name} needs you` : view.compactingSince ? 'Compacting…' : null
   return (
     <NoteBlockContext.Provider value={actions}>
+      <ModeBar mode={mode} onMode={setMode} onQuick={quick} busy={quickBusy || view.status === 'working'} />
       {doing && (
         <div className="note-assist__doing muted" role="status">
           <LuLoader className="spin" /> {doing}
@@ -125,7 +186,7 @@ export function NoteAssistChat({ noteId, editor }: { noteId: string; editor: Ref
         thread={{
           placeholder: `Ask ${manager.name}…`,
           bare: true,
-          send: (text, uploads) => liveApi.askNote(noteId, { text, uploads }),
+          send: (text, uploads) => liveApi.askNote(noteId, { text, uploads, mode }),
           mention: () => null,
           names: [],
           compact: () => liveApi.compactThread(t.id).then(() => undefined),
@@ -142,7 +203,7 @@ export function NoteAssistChat({ noteId, editor }: { noteId: string; editor: Ref
 }
 
 /** Before the first message: what Marcus can do here, and a few ways to start. */
-function NoteAssistIntro({ noteId, manager }: { noteId: string; manager: OfficeAgent }) {
+function NoteAssistIntro({ noteId, manager, mode, onMode }: { noteId: string; manager: OfficeAgent; mode: AssistMode; onMode: (m: AssistMode) => void }) {
   // the same message box, in the same place, as once the chat is there (ChatView's, bare)
   const composer = useRef<ComposerHandle>(null)
   const [hasText, setHasText] = useState(false)
@@ -155,7 +216,7 @@ function NoteAssistIntro({ noteId, manager }: { noteId: string; manager: OfficeA
     setError('')
     try {
       // the helper's thread is made now; its chat takes over once the dashboard hears of it
-      await liveApi.askNote(noteId, { text: words.trim() })
+      await liveApi.askNote(noteId, { text: words.trim(), mode })
       composer.current?.set('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send')
@@ -164,14 +225,24 @@ function NoteAssistIntro({ noteId, manager }: { noteId: string; manager: OfficeA
   }
   return (
     <div className={`chat chat--bare note-assist__start${mobile ? ' chat--mobile' : ''}`}>
+      <ModeBar mode={mode} onMode={onMode} />
       <div className="note-assist__empty">
         <LuSparkles className="note-assist__spark" aria-hidden />
         <p>
-          {manager.name} helps you write this note: summarize, fix, shorten or continue it. His suggestions come with an <b>Insert</b> button;
-          nothing changes in the note until you press it.
+          {mode === 'edit' ? (
+            <>
+              {manager.name} works on this note with you: fix, improve, shorten or continue it. He <b>changes the note himself</b>, and every edit
+              can be undone.
+            </>
+          ) : (
+            <>
+              {manager.name} suggests text for this note; each suggestion comes with an <b>Insert</b> button, and nothing changes until you press
+              it.
+            </>
+          )}
         </p>
         <div className="note-assist__chips">
-          {SUGGESTIONS.map((s) => (
+          {(mode === 'edit' ? QUICK : SUGGESTIONS).map((s) => (
             <button key={s} type="button" className="small" disabled={busy} onClick={() => void ask(s)}>
               {s}
             </button>

@@ -354,7 +354,7 @@
   .page-card.tag-card--static { row-gap: 2px; grid-template-rows: auto auto 1fr; align-content: stretch; }
   .page-card.tag-card--static .tag-card__icon { grid-row: 1 / span 2; align-self: center; }
   .page-card.tag-card--static .tag-card__title { grid-column: 2 / -1; grid-row: 1; }
-  .page-card.tag-card--static .tag-card__badge { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
+  .page-card.tag-card--static .page-card__badges { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
   .page-card.tag-card--static .tag-card__open { margin-top: 8px; align-self: end; }
 }
 .fnotes__tap-hint { font-size: 12px; }
@@ -376,7 +376,9 @@
 .tag-cards.page-subs { margin-bottom: 4px; }
 .page-subs__add { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--line); color: var(--muted); }
 .page-subs__add:hover { color: var(--text); }
-.page-card__subs { color: var(--hl-ink); }
+.page-card__badges { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.page-card__subs { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
+.page-card__subs svg { font-size: 11px; }
 /* a new page: inside the page it was asked from, or at the top level */
 .page-name__where { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: 12.5px; color: var(--muted); }
 .page-name__where > svg { flex: none; color: var(--hl-ink); }
@@ -410,3 +412,38 @@
 .note-row__move { position: absolute; z-index: 1; top: 6px; right: 10px; display: inline-flex; align-items: center; gap: 5px; max-width: 70%; padding: 2px 9px; border-radius: 999px; background: var(--hl); color: #fff; font-size: 11.5px; font-weight: 500; box-shadow: 0 4px 12px rgba(0, 0, 0, .18); pointer-events: none; }
 .note-row__move > b { min-width: 0; font-weight: 700; }
 .note-row__move > svg { flex: none; }
+/* inside a page: its sub-pages as a list (rows like the notes under them), not cards — icon, name, its notes and
+   when, the arrow; "New sub-page" a quiet row at the end */
+.tag-cards.page-subs { display: flex; flex-direction: column; gap: 0; margin: 0 0 6px; }
+.tag-cards.page-subs > .page-card.tag-card--static {
+  display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: 0; padding: 7px 8px; border: 0; border-radius: 10px;
+  background: transparent; box-shadow: none; animation: none;
+}
+.tag-cards.page-subs > .page-card.tag-card--static:hover, .tag-cards.page-subs > .page-card.is-on { background: var(--card-2); box-shadow: none; border: 0; }
+.tag-cards.page-subs > .page-card .tag-card__top { display: contents; }
+.tag-cards.page-subs > .page-card .tag-card__icon { order: 0; flex: none; width: 28px; height: 28px; font-size: 14px; border-radius: 8px; }
+.tag-cards.page-subs > .page-card .page-card__badges, .tag-cards.page-subs > .page-card .page-card__titles { display: none; }
+.tag-cards.page-subs > .page-card .tag-card__title { order: 1; flex: 1 1 auto; min-width: 0; margin: 0; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-cards.page-subs > .page-card .tag-card__open { order: 2; flex: none; margin: 0; padding: 0; border: 0; background: none; gap: 8px; }
+.tag-cards.page-subs > .page-card .tag-card__count { font-size: 12px; color: var(--muted); }
+.tag-cards.page-subs > .page-card .tag-card__count b { font-size: 12px; font-weight: 500; color: var(--muted); }
+.tag-cards.page-subs > .page-card .tag-card__go { width: 24px; height: 24px; }
+.tag-cards.page-subs > .tag-card--new {
+  flex-direction: row; justify-content: flex-start; align-self: stretch; gap: 10px; min-height: 0; padding: 7px 8px; border: 0; border-radius: 10px;
+  background: transparent; font-size: 13px; color: var(--muted); animation: none;
+}
+.tag-cards.page-subs > .tag-card--new:hover { background: var(--card-2); color: var(--text); }
+.tag-cards.page-subs > .tag-card--new .tag-card__plus { width: 28px; height: 28px; font-size: 14px; border-radius: 8px; }
+@media (max-width: 768px) {
+  .tag-cards.page-subs > .page-card .tag-card__count .muted { display: none; }
+}
+/* inside a page: no "New sub-page" row or button (the sub-pages and notes read as one list); a sub-page is made with
+   New page up top (inside this page by default) or the page's ⋯ menu */
+.tag-cards.page-subs > .tag-card--new, .notes-modal .page-subs__add { display: none; }
+.tag-cards.page-subs { margin-bottom: 0; }
+/* the sub-page rows lined up with the notes' rows under them: the same padding, gap and a plain 14px icon (orange: a
+   page), so the names start at the same place */
+.tag-cards.page-subs > .page-card.tag-card--static { gap: 9px; padding: 8px; border-radius: 12px; }
+.tag-cards.page-subs > .page-card .tag-card__icon { width: auto; height: auto; font-size: 14px; background: none; border-radius: 0; color: var(--hl-ink); }
+/* the sub-pages and the notes under them, one list: the same 2px between every row (not the page's 10px between parts) */
+.tag-cards.page-subs { gap: 2px; margin-bottom: -8px; }
