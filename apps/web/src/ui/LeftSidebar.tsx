@@ -18,7 +18,7 @@ import { DateTimeField, TimeField } from './pickers'
 import { Select } from './Select'
 import { AgentSelect, assigneePatch, OWNER, useStatuses, dueInfo, HOUR, PRIORITY_OPTIONS, PRIORITY_RANK, FolderSelect, StatusSelect, WaitsForSelect, BlockedBadge, CheckBadge } from './taskMeta'
 import { useLaunch } from '../pwa/launch'
-import { MOBILE } from '../state/useMediaQuery'
+import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { useWorkReady } from '../state/live'
 import { TagPicker } from './tags'
 import { TagsTab } from './TagsTab'
@@ -115,7 +115,7 @@ export function CronPanel() {
     .filter((c) => matchesSearch(q, c.name, c.prompt, agents.find((a) => a.id === c.agentId)?.name))
     .sort((a, b) => Number(b.enabled) - Number(a.enabled) || nextRunIn(a, nowMin) - nextRunIn(b, nowMin))
   // Daily (the jobs) or Calendar (ui/CalendarView.tsx), remembered in this browser
-  const [tab, setTab] = useState<'daily' | 'calendar'>(() => {
+  const [picked, setTab] = useState<'daily' | 'calendar'>(() => {
     try {
       return localStorage.getItem(DAILY_TAB_KEY) === 'calendar' ? 'calendar' : 'daily'
     } catch {
@@ -130,11 +130,15 @@ export function CronPanel() {
       // private mode: not remembered
     }
   }
+  // phones: the calendar has its own round button on the stage (MobileDock.tsx CalendarFab), so this is just the jobs
+  const phone = useMediaQuery(MOBILE)
+  const tab = phone ? 'daily' : picked
   const active = crons.filter((c) => c.enabled).length
 
   return (
     <section className="card">
       <header className="card__head">
+        {!phone && (
         <ScrollTabs className="task-tabs daily-tabs" label="Daily jobs or calendar" active={tab}>
           <button role="tab" aria-selected={tab === 'daily'} className={tab === 'daily' ? 'active' : ''} onClick={() => pickTab('daily')} {...tip(`${active} active`)}>
             <LuCalendarClock /> Daily
@@ -144,6 +148,9 @@ export function CronPanel() {
             <LuCalendarDays /> Calendar
           </button>
         </ScrollTabs>
+        )}
+        {/* phones: no tabs, the buttons stay on the right */}
+        {phone && <span className="grow" />}
         {tab === 'daily' && crons.length > 0 && (
           <button className={`icon-btn small icon-btn--toggle`} aria-pressed={searching} aria-expanded={searching} {...tip(searching ? 'Close search' : 'Search daily jobs')} onClick={toggleSearch}>
             {searching ? <LuX /> : <LuSearch />}

@@ -47,3 +47,7 @@
 .modal--full .dock-sheet > .card .list,
 .modal--full.modal .agents-modal .agents-card .list { max-height: none; }
 .modal--full .dock-sheet .followups { max-height: none; }
+/* phones: the small round buttons in a sheet's card header (search, add…) a size easier to tap */
+@media (max-width: 768px) {
+  .dock-sheet .card__head .icon-btn.small { width: 32px; height: 32px; font-size: 15px; }
+}
