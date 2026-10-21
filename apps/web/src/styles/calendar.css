@@ -176,7 +176,9 @@
 @container (min-width: 760px) {
   /* the picked day's card on the left, as tall as the month beside it (its list scrolls when it's longer) */
   .cal--big .cal__layout { grid-template-columns: 320px minmax(0, 1fr); gap: 20px; align-items: stretch; }
-  .cal--big .cal__agenda { order: -1; position: static; height: 0; min-height: 100%; box-sizing: border-box; overflow-y: auto; border-left: 0; padding: 14px 12px; }
+  .cal--big .cal__agenda { order: -1; position: static; height: 0; min-height: 100%; box-sizing: border-box; overflow: hidden; border-left: 0; padding: 14px 12px; }
+  /* only the list scrolls: the day above it and Add event below stay put */
+  .cal--big .cal__agenda > .cal__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 }
 /* a day's list in its own small window (the Daily card): the window says which day; no line above the list */
 .cal--popup { overflow: visible; }
@@ -197,4 +199,4 @@
 .cal__agenda-foot { margin-top: auto; padding-top: 10px; display: flex; }
 .cal__agenda .cal__agenda-add { flex: 1; justify-content: center; padding-block: 9px; background: var(--hl); border-color: var(--hl); color: #fff; }
 .cal__agenda .cal__agenda-add:hover:not(:disabled) { background: color-mix(in srgb, var(--hl) 88%, #000); border-color: transparent; color: #fff; }
-.cal--big .cal__agenda-foot { position: sticky; bottom: 0; background: var(--card-2); }
+.cal--big .cal__agenda-foot { flex: none; }

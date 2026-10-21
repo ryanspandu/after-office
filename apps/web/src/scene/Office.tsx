@@ -401,12 +401,35 @@ const UNFOCUSED_FPS = 8
 const IDLE_FPS = 15
 const IDLE_MS = 2 * 60_000
 
+/** A window, sheet or drawer open over the office (its blurred backdrop covers the scene). */
+const COVER = '.modal-backdrop:not(.modal-backdrop--hidden):not(.modal-backdrop--closing), .drawer-backdrop:not(.drawer-backdrop--closing)'
+
+/** Whether something covers the office now: watched as windows open and close (they're added to <body>). */
+function useCovered() {
+  const [covered, setCovered] = useState(false)
+  useEffect(() => {
+    let raf = 0
+    const check = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => setCovered(!!document.querySelector(COVER)))
+    }
+    const mo = new MutationObserver(check)
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] })
+    check()
+    return () => (mo.disconnect(), cancelAnimationFrame(raf))
+  }, [])
+  return covered
+}
+
 /**
  * The frame rate to run at: the tier's cap while someone's using the dashboard; fewer frames with the window in the
- * background or nobody touching it for a while; none while it's hidden. Back to full pace on the next move.
+ * background or nobody touching it for a while; none while it's hidden, or covered by a window (behind its blur the
+ * scene can stand still, and the window's own animation gets the machine to itself). Back to full pace on the next
+ * move.
  */
 function usePace(cap: number) {
   const [state, setState] = useState<'active' | 'idle' | 'unfocused' | 'hidden'>('active')
+  const covered = useCovered()
   useEffect(() => {
     let last = Date.now()
     const judge = () =>
@@ -432,5 +455,5 @@ function usePace(cap: number) {
       clearInterval(id)
     }
   }, [])
-  return state === 'hidden' ? 0 : state === 'unfocused' ? Math.min(cap, UNFOCUSED_FPS) : state === 'idle' ? Math.min(cap, IDLE_FPS) : cap
+  return state === 'hidden' || covered ? 0 : state === 'unfocused' ? Math.min(cap, UNFOCUSED_FPS) : state === 'idle' ? Math.min(cap, IDLE_FPS) : cap
 }
