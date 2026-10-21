@@ -37,6 +37,7 @@ import { AppReload } from './ui/AppReload'
 import { CalendarFab, FoldersFab, MobileDock, NotesFab } from './ui/MobileDock'
 import { StageDock } from './ui/StageDock'
 import { ZoomBadge } from './ui/ZoomBadge'
+import { ExitGuard } from './pwa/ExitGuard'
 
 export function App() {
   useLiveSync()
@@ -74,6 +75,8 @@ export function App() {
       <ZoomBadge />
       <ViewReset />
       <AppReload />
+      {/* the installed app on a phone: asks before Back leaves it */}
+      <ExitGuard />
       <FocusCard />
       {full && <StageDock />}
       {/* phones: Boss mode and Public access float at the stage's top left (in the navbar they'd push it onto more lines) */}

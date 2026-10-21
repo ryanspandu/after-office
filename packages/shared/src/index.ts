@@ -283,10 +283,12 @@ export interface OwnerNoteSummary {
   createdAt: number
   updatedAt: number
 }
-/** A page of the owner's notes (Notes → its cards): a notebook a note can be on. One level, no pages in pages. */
+/** A page of the owner's notes (Notes → its cards): a notebook a note can be on. Pages can hold pages, any depth. */
 export interface NotePage {
   id: string
   name: string
+  /** the page it sits in (NotePage id; unset: top level) */
+  parentId?: string
   /** its place among the pages (lower first); unset: by when it was made, after the placed ones */
   order?: number
   createdAt: number

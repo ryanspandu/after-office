@@ -1,8 +1,9 @@
 import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
-import { LuArrowLeft, LuBookOpen, LuBookPlus, LuCalendarDays, LuCheck, LuFolder, LuLoader, LuMinus, LuNotebookPen, LuPencil, LuPin, LuPinOff, LuUsers, LuPlus, LuListFilter, LuSearch, LuSettings2, LuTag, LuTrash2, LuX } from 'react-icons/lu'
+import { createPortal } from 'react-dom'
+import { LuArrowLeft, LuBookOpen, LuBookOpenCheck, LuBookPlus, LuCalendarDays, LuCheck, LuFolder, LuLoader, LuMinus, LuNotebookPen, LuPencil, LuPin, LuPinOff, LuUsers, LuPlus, LuListFilter, LuSearch, LuSettings2, LuTag, LuTrash2, LuX } from 'react-icons/lu'
 import type { OwnerNote, OwnerNoteSummary } from '@after-office/shared'
 import { api } from '../state/auth'
-import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { closestCenter, DndContext, MouseSensor, pointerWithin, TouchSensor, useDndContext, useSensor, useSensors, type CollisionDetection } from '@dnd-kit/core'
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useNow } from '../state/clock'
@@ -19,9 +20,9 @@ import { Select } from './Select'
 import { ProjectFolderPicker } from './ProjectFolderPicker'
 import { TagChips, TagPicker } from './tags'
 import { NoteDateButton, noteWhenLabel, type NoteWhen, type NoteWhenPatch } from './NoteDate'
-import { inView, NotePageCards, NotePageChip, NotePageHeader, NotePageSelect, NoteTagCards, NoteTagHeader, PageNameModal } from './NotePages'
+import { inView, NotePageCards, NotePageChip, NotePageHeader, NotePageSelect, NoteTagCards, NoteTagHeader, PageNameModal, parentPage } from './NotePages'
 import { lazyRetry } from '../pwa/lazyRetry'
-import { NoteMenu, noteMenuAt } from './NoteMenu'
+import { NoteMenu, noteMenuAt, patchNote } from './NoteMenu'
 import type { RichNotesApi } from './FolderNotes'
 import { NoteAssistButton, NoteAssistFab, NoteAssistPanel, NoteAssistSheet } from './NoteAssist'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
@@ -79,9 +80,13 @@ function NotePlaceButton({ note }: { note: NoteState }) {
 /** Pinned first, then as the server orders them (the owner's order). */
 const pinnedFirst = (notes: OwnerNoteSummary[]) => [...notes].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned))
 
-/** A note in a list; dragged (anywhere on it, after a few pixels / a long press) to put it elsewhere. */
+/** A note in a list; dragged (anywhere on it, after a few pixels / a long press) to put it elsewhere (another place in
+ *  the list, or, in the notes window, onto a page). */
 export function NoteRow({ n, now, onOpen, sortable = false, showPage = false }: { n: OwnerNoteSummary; now: number; onOpen: () => void; sortable?: boolean; showPage?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: n.id, disabled: !sortable })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: n.id, data: { kind: 'note', note: n }, disabled: !sortable })
+  // over a page it can go to (ui/NotePages.tsx usePageDrop): says which
+  const target = useDndContext().over?.data.current
+  const moveTo = isDragging && target?.kind === 'page-target' && target.page !== (n.pageId ?? 'none') ? (target.name as string) : null
   // written (or last changed) by an agent: its name instead of "You"
   const by = useOffice((s) => {
     const id = n.editedBy ?? n.author
@@ -97,6 +102,11 @@ export function NoteRow({ n, now, onOpen, sortable = false, showPage = false }: 
       style={{ transform: CSS.Transform.toString(transform), transition }}
       {...(sortable ? { ...attributes, ...listeners } : {})}
     >
+      {moveTo && (
+        <span className="note-row__move">
+          <LuBookOpenCheck /> Move to <b className="truncate">{moveTo}</b>
+        </span>
+      )}
       <button className="report-row__main" onClick={onOpen} onContextMenu={(e) => setMenu(noteMenuAt(e))}>
         <LuNotebookPen className="report__icon" />
         <span className="report-row__body">
@@ -140,19 +150,103 @@ function moveNote(activeId: string, overId: string | null) {
   void api('/api/notes/order', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: next.map((n) => n.id) }) })
 }
 
-/** The notes, in their order; `sortable`: dragged into another order. */
-function NoteItems({ notes, now, sortable, onOpen, showPage }: { notes: OwnerNoteSummary[]; now: number; sortable: boolean; onOpen?: (id: string) => void; showPage?: boolean }) {
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }),
+const useNoteSensors = () =>
+  useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }))
+
+/** The notes, in their order; `sortable`: dragged into another order. `movable` (the notes window): in its drag
+ *  (NoteMoves, not a DndContext of their own), dragged onto a page even where they can't be put in another order. */
+function NoteItems({ notes, now, sortable, movable = false, onOpen, showPage }: { notes: OwnerNoteSummary[]; now: number; sortable: boolean; movable?: boolean; onOpen?: (id: string) => void; showPage?: boolean }) {
+  const sensors = useNoteSensors()
+  const rows = (
+    // not to be put in another order: the others stay where they are while one is dragged (onto a page)
+    <SortableContext items={notes.map((n) => n.id)} strategy={sortable ? verticalListSortingStrategy : () => null} disabled={!sortable && !movable}>
+      {notes.map((n) => (
+        <NoteRow key={n.id} n={n} now={now} sortable={sortable || movable} showPage={showPage} onOpen={() => (onOpen ? onOpen(n.id) : openUrl({ note: n.id }))} />
+      ))}
+    </SortableContext>
   )
+  if (movable) return rows
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => moveNote(String(e.active.id), e.over ? String(e.over.id) : null)}>
-      <SortableContext items={notes.map((n) => n.id)} strategy={verticalListSortingStrategy} disabled={!sortable}>
-        {notes.map((n) => (
-          <NoteRow key={n.id} n={n} now={now} sortable={sortable} showPage={showPage} onOpen={() => (onOpen ? onOpen(n.id) : openUrl({ note: n.id }))} />
-        ))}
-      </SortableContext>
+      {rows}
+    </DndContext>
+  )
+}
+
+const kindOf = (c: { data: { current?: Record<string, unknown> } }) => c.data.current?.kind
+/** A note: onto the page under the pointer (a card, a part of the header), else beside the nearest note; a page's card:
+ *  among its sibling cards only. */
+const noteOrPage: CollisionDetection = (args) => {
+  const among = (kind: string) => args.droppableContainers.filter((c) => kindOf(c) === kind)
+  if (kindOf(args.active) === 'page') return closestCenter({ ...args, droppableContainers: among('page') })
+  const onPage = pointerWithin({ ...args, droppableContainers: among('page-target') })
+  return onPage.length ? onPage : closestCenter({ ...args, droppableContainers: among('note') })
+}
+
+/**
+ * The notes window's drag (a page's view): its notes, its header and its sub-pages' cards in one DndContext, so a note
+ * is dropped onto a page (moved there) or among the notes (another order, when `sortable`); a sub-page's card sorts
+ * among its siblings (NotePageCards). A move says so for a few seconds, with Undo.
+ */
+function NoteMoves({ sortable, children }: { sortable: boolean; children: ReactNode }) {
+  const sensors = useNoteSensors()
+  const [moved, setMoved] = useState<{ id: string; from: string | null; name: string; at: number } | { error: string; at: number } | null>(null)
+  useEffect(() => {
+    if (!moved) return
+    const t = setTimeout(() => setMoved(null), 4000)
+    return () => clearTimeout(t)
+  }, [moved])
+  const toPage = (n: OwnerNoteSummary, page: string, name: string) => {
+    const pageId = page === 'none' ? null : page
+    const from = n.pageId ?? null
+    if (from === pageId) return
+    patchNote(n, { pageId }).then(
+      () => setMoved({ id: n.id, from, name, at: Date.now() }),
+      (err: Error) => setMoved({ error: err.message, at: Date.now() }),
+    )
+  }
+  const undo = () => {
+    if (!moved || !('id' in moved)) return
+    const n = useLive.getState().notes.find((x) => x.id === moved.id)
+    setMoved(null)
+    if (n) void patchNote(n, { pageId: moved.from }).catch((err: Error) => setMoved({ error: err.message, at: Date.now() }))
+  }
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={noteOrPage}
+      onDragEnd={(e) => {
+        const a = e.active.data.current
+        if (a?.kind !== 'note') return
+        const t = e.over?.data.current
+        if (t?.kind === 'page-target') toPage(a.note as OwnerNoteSummary, t.page as string, t.name as string)
+        else if (sortable) moveNote(String(e.active.id), e.over ? String(e.over.id) : null)
+      }}
+    >
+      {children}
+      {/* above the window (the app's toasts, styles/chat.css): out of it, so its scrolling and size don't move it */}
+      {moved &&
+        createPortal(
+          <div className="sync-toast sync-toast--reply" role="status" key={moved.at}>
+            <LuBookOpenCheck />
+            {'error' in moved ? (
+              <span>{moved.error}</span>
+            ) : (
+              <>
+                <span>
+                  Moved to <b>{moved.name}</b>
+                </span>
+                <button className="small" onClick={undo}>
+                  Undo
+                </button>
+              </>
+            )}
+            <button className="icon-btn small ghost" data-tip="Dismiss" aria-label="Dismiss" onClick={() => setMoved(null)}>
+              <LuX />
+            </button>
+          </div>,
+          document.body,
+        )}
     </DndContext>
   )
 }
@@ -245,6 +339,11 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
   const view = nview === 'none' || pages.some((p) => p.id === nview) ? nview! : '*'
   // (replacing the entry: closing the window from inside a page must leave no copy of it behind for Back)
   const openPage = (id: string | null) => setUrl({ nview: id })
+  // a page (not All notes / No page): its sub-pages show above its notes, a new page starts inside it
+  const isPage = view !== '*' && view !== 'none'
+  // back from a page: to the page it's in, then the cards
+  const up = isPage ? parentPage(pages, view)?.id : undefined
+  const goBack = () => (setTagFilter(''), openPage(up ?? null))
   // tags stay a filter inside a page
   const allTags = useDashboard((s) => s.tags)
   const [tagFilter, setTagFilter] = useState('')
@@ -271,9 +370,10 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
   const inTag = ntag !== null && !inPage
   const openTag = (id: string | null) => setUrl({ nbytag: id, nview: id ? null : '*' })
   const atCards = !inPage && !inTag && !q.trim()
-  // phones: Back inside a page (or a tag) goes back to the cards first, not out of the window
+  // phones: Back inside a page (or a tag) goes back to the page it's in, then the cards, not out of the window (a
+  // step up to a parent page keeps the step: false)
   const phone = useMediaQuery(MOBILE)
-  useBackStep(() => (inTag ? setUrl({ nbytag: null }) : (setTagFilter(''), openPage(null))), phone && (inPage || inTag))
+  useBackStep(() => (inTag ? setUrl({ nbytag: null }) : (goBack(), up ? false : undefined)), phone && (inPage || inTag))
   const folders = [...new Set(notes.map((n) => n.folder).filter((f): f is string => !!f))]
   // full size (remembered), like the dock's sheets
   const max = useModalMaximize(720, 'after-office:sheet-max:Notes list')
@@ -355,13 +455,13 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
             </button>
           )}
           {/* like Tasks: search on the left, New note on the right (inside a page, the new note starts on it) */}
-          {/* the cards: a new page beside New note */}
-          {atCards && (
+          {/* the cards: a new page beside New note (inside a page: a new page in it, by default) */}
+          {(atCards || (inPage && isPage && !q.trim())) && (
             <button className="small notes-modal__new" aria-label="New page" {...(max.full ? {} : { 'data-tip': 'New page' })} onClick={() => setAddingPage(true)}>
               <LuBookPlus /> <span className="notes-modal__new-label">New page</span>
             </button>
           )}
-          {addingPage && <PageNameModal onClose={() => setAddingPage(false)} onSaved={(id) => (pickGroup('pages'), openPage(id))} />}
+          {addingPage && <PageNameModal parent={inPage && isPage ? view : undefined} onClose={() => setAddingPage(false)} onSaved={(id) => (pickGroup('pages'), openPage(id))} />}
           {/* desktop, not full size: one row, the button just its + (styles/notes.css) */}
           <button
             className="small primary notes-modal__new"
@@ -385,19 +485,24 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
         {atCards ? (
           group === 'tags' ? <NoteTagCards notes={notes} onOpen={(id) => openTag(id ?? null)} /> : <NotePageCards notes={notes} onOpen={(id) => openPage(id)} />
         ) : (
+        <NoteMoves sortable={shown.length === notes.length}>
         <div className="tag-detail">
         {!q.trim() &&
           (inTag ? (
             <NoteTagHeader notes={shown} tag={ntag!} onBack={() => setUrl({ nbytag: null })} />
           ) : (
-            <NotePageHeader notes={notes} view={view} onBack={() => (setTagFilter(''), openPage(null))} />
+            <NotePageHeader notes={notes} view={view} onBack={goBack} onOpen={(id) => (setTagFilter(''), openPage(id))} />
           ))}
+        {/* inside a page: its sub-pages as cards, then its own notes */}
+        {!q.trim() && !inTag && isPage && <NotePageCards notes={notes} parent={view} noteDrop onOpen={(id) => (setTagFilter(''), openPage(id))} />}
         <ul className="list reports-modal__list">
-          {/* dragged into another order only when every note is shown (not while searching or filtering) */}
-          <NoteItems notes={shown} now={now} sortable={shown.length === notes.length} showPage={!!q.trim() || view === '*'} />
+          {/* dragged into another order only when every note is shown (not while searching or filtering); onto a page
+              (the header's way there, a sub-page's card) when the header shows */}
+          <NoteItems notes={shown} now={now} sortable={shown.length === notes.length} movable={!q.trim() && !inTag} showPage={!!q.trim() || view === '*'} />
           {!shown.length && <li className="empty">{notes.length ? 'No notes match.' : 'No notes yet.'}</li>}
         </ul>
         </div>
+        </NoteMoves>
         )}
       </div>
     </Modal>

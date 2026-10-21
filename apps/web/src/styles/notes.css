@@ -182,7 +182,15 @@
 .rs__option--selected .fnotes__px { color: inherit; opacity: 0.7; }
 .fnotes__tools--phone .fnotes__more { flex: none; margin-left: 0; padding-left: 4px; }
 .fnotes__tools--phone .fnotes__menu .fnotes__btn { width: 36px; height: 36px; }
-.fnotes__done-pill { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px; border-radius: 999px; }
+.fnotes__done-pill { flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 999px; font-size: 17px; }
+/* phones: "⋯" opens a panel the toolbar's width (not hanging off the screen's left), above or below the toolbar, its
+   tools in rows */
+.fnotes__tools--phone .fnotes__more { position: static; }
+.fnotes__tools--phone .fnotes__menu {
+  left: 0; right: 0; width: auto; max-height: 50vh; overflow-y: auto; box-sizing: border-box; padding: 8px;
+  background: color-mix(in srgb, var(--card-2) 88%, var(--text)); box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.35);
+}
+.fnotes__tools--phone .fnotes__menu > .fnotes__group { display: flex; flex-wrap: wrap; gap: 4px; }
 /* light mode: the folder icon on notes in grey (orange stays for what's active or needs you) */
 :root:not([data-theme='night']) :is(.note-row__folder, .note-modal__folder > svg) { color: var(--muted); }
 /* a note's date (ui/NoteDate.tsx): beside the folder; its picker is the navbar range picker's calendar */
@@ -203,7 +211,7 @@
 .note-modal__meta > .note-page-select > .rs__control { flex: 1; min-height: 100% !important; font-size: 12.5px; }
 .note-page-select__value { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .note-page-select__value > svg { flex: none; color: var(--hl-ink); }
-.note-row__page { flex: none; display: inline-flex; align-items: center; gap: 3px; max-width: 120px; font-size: 11.5px; color: var(--muted); }
+.note-row__page { flex: none; display: inline-flex; align-items: center; gap: 3px; max-width: 160px; font-size: 11.5px; color: var(--muted); }
 .note-row__page > svg { flex: none; }
 /* a page's card: its latest notes by name, one per line */
 .page-card__titles { display: grid; gap: 1px; min-width: 0; }
@@ -357,3 +365,48 @@
   .fnotes:not(.fnotes--view) .fnotes__box .fnotes__editor { border-radius: 12px 12px 0 0; }
   .fnotes:not(.fnotes--view) .fnotes__box .fnotes__menu { top: auto; bottom: calc(100% + 8px); }
 }
+/* pages in pages (ui/NotePages.tsx): inside a page, the way there (Pages › its parents ›) before its name */
+.page-crumbs { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 0 1 auto; overflow: hidden; font-size: 13px; color: var(--muted); }
+.page-crumbs > svg, .page-crumbs__step > svg { flex: none; font-size: 12px; opacity: 0.7; }
+.page-crumbs__step { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.page-crumbs__part { all: unset; box-sizing: border-box; min-width: 0; max-width: 140px; padding: 2px 4px; border-radius: 6px; cursor: pointer; }
+.page-crumbs__part:hover { color: var(--text); background: var(--card-2); }
+.page-crumbs__part:focus-visible { outline: 2px solid var(--hl); outline-offset: 1px; }
+/* its sub-pages as cards, above its notes; none yet: a small way to add one */
+.tag-cards.page-subs { margin-bottom: 4px; }
+.page-subs__add { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--line); color: var(--muted); }
+.page-subs__add:hover { color: var(--text); }
+.page-card__subs { color: var(--hl-ink); }
+/* a new page: inside the page it was asked from, or at the top level */
+.page-name__where { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: 12.5px; color: var(--muted); }
+.page-name__where > svg { flex: none; color: var(--hl-ink); }
+.page-name__where b { color: var(--text); font-weight: 600; }
+.page-name__where > button { margin-left: auto; flex: none; }
+/* Move page: the tree, each page indented under its parent */
+.page-tree { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: min(55vh, 420px); overflow-y: auto; }
+.page-tree__item { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 7px 10px 7px calc(10px + var(--depth, 0) * 16px); border-radius: 8px; font-size: 13px; cursor: pointer; }
+.page-tree__item > svg { flex: none; color: var(--muted); }
+.page-tree__item:hover { background: var(--card-2); }
+.page-tree__item:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
+.page-tree__item.is-on { color: var(--hl-ink); font-weight: 600; }
+.page-tree__item .page-tree__here { margin-left: auto; color: var(--hl-ink); }
+.page-tree__item:disabled { opacity: 0.6; cursor: default; }
+/* a note's page picker: sub-pages indented in the open list */
+.page-option { display: block; min-width: 0; padding-left: calc(var(--depth, 0) * 14px); }
+@media (max-width: 768px) {
+  /* phones: no trail, just the back arrow (to the page it's in) and the name */
+  .notes-modal .page-crumbs { display: none; }
+}
+/* the notes window's header: the page's name reads as the breadcrumb's last part (no icon, the same size, only the
+   text colour marks where you are) */
+.notes-modal .tag-head > .tag-card__icon { display: none; }
+.notes-modal .tag-head__title { font-size: 13px; font-weight: 500; color: var(--text); }
+.notes-modal .tag-head { gap: 6px; }
+/* dragging a note onto a page (the header's way there, a sub-page's card): those it can go to, lit up; the one under
+   it, more (ui/NotePages.tsx usePageDrop) */
+:is(.page-card, .tag-head__back, .page-crumbs__part).is-drop-target { outline: 1px dashed color-mix(in srgb, var(--hl) 55%, transparent); outline-offset: 2px; }
+:is(.page-card, .tag-head__back, .page-crumbs__part).is-drop-over { outline: 2px solid var(--hl); outline-offset: 2px; background: var(--hl-soft); color: var(--text); }
+/* the dragged note: where it goes when let go */
+.note-row__move { position: absolute; z-index: 1; top: 6px; right: 10px; display: inline-flex; align-items: center; gap: 5px; max-width: 70%; padding: 2px 9px; border-radius: 999px; background: var(--hl); color: #fff; font-size: 11.5px; font-weight: 500; box-shadow: 0 4px 12px rgba(0, 0, 0, .18); pointer-events: none; }
+.note-row__move > b { min-width: 0; font-weight: 700; }
+.note-row__move > svg { flex: none; }

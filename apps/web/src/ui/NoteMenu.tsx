@@ -14,9 +14,9 @@ import { TagPicker } from './tags'
 // A note's right-click menu (its row in a list): open it, pin it, share it, put it on a page, its tags and folder, or
 // delete it, without opening the note. Changes show at once (the live list) and are stored on the server.
 
-type Patch = { pinned?: boolean; shared?: boolean; pageId?: string | null; folder?: string | null; tags?: string[] }
+export type NotePatch = { pinned?: boolean; shared?: boolean; pageId?: string | null; folder?: string | null; tags?: string[] }
 
-async function patchNote(n: OwnerNoteSummary, patch: Patch) {
+export async function patchNote(n: OwnerNoteSummary, patch: NotePatch) {
   // shown right away; the server's version follows on the live stream
   const local: Partial<OwnerNoteSummary> = {}
   if (patch.pinned !== undefined) local.pinned = patch.pinned || undefined
@@ -42,7 +42,7 @@ async function deleteNote(n: OwnerNoteSummary) {
 /** The menu at a point (a right click on the note's row), and the small windows its items open. */
 export function NoteMenu({ n, at, onClose, onOpen }: { n: OwnerNoteSummary; at: { x: number; y: number } | null; onClose: () => void; onOpen: () => void }) {
   const [edit, setEdit] = useState<'page' | 'tags' | 'folder' | null>(null)
-  const run = (p: Patch) => void patchNote(n, p).catch(() => {})
+  const run = (p: NotePatch) => void patchNote(n, p).catch(() => {})
   const actions: MenuAction[] = [
     { icon: <LuExternalLink />, label: 'Open', run: onOpen },
     n.pinned ? { icon: <LuPinOff />, label: 'Unpin', run: () => run({ pinned: false }) } : { icon: <LuPin />, label: 'Pin to top', run: () => run({ pinned: true }) },

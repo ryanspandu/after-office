@@ -191,11 +191,11 @@ export function deleteNote(id: string) {
 /** A note gone: its writing helper (work/noteAssist.ts) goes with it, in the background. */
 const dropHelper = (id: string) => void forgetNoteHelper(id).catch((e) => console.warn('[notes] could not remove the note helper:', e instanceof Error ? e.message : e))
 
-// ── pages: the notebooks the owner keeps notes on (one level) ──
+// ── pages: the notebooks the owner keeps notes on (pages in pages, any depth) ──
 
 const PAGE_NAME_MAX = 80
 
-/** In their order: the placed ones first, then by when they were made. */
+/** In their order: the placed ones first, then by when they were made (order counts among siblings). */
 export const listNotePages = () =>
   notePagesRepo.all().sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER) || a.createdAt - b.createdAt)
 
@@ -208,17 +208,40 @@ function pageOrder(v: unknown) {
   if (typeof v !== 'number' || !Number.isFinite(v)) throw new AgentError('order is a number', 400)
   return v
 }
+/** A parent page: one that exists; null or "" is the top level. */
+function pageParent(v: unknown) {
+  if (v === null || v === '') return undefined
+  if (typeof v !== 'string' || !notePagesRepo.get(v)) throw new AgentError('No such parent page', 400)
+  return v
+}
+/** True when `id` is `ancestor` or sits somewhere under it (a stored loop can't hang the walk). */
+function isWithin(id: string, ancestor: string) {
+  const seen = new Set<string>()
+  for (let cur: string | undefined = id; cur && !seen.has(cur); cur = notePagesRepo.get(cur)?.parentId) {
+    if (cur === ancestor) return true
+    seen.add(cur)
+  }
+  return false
+}
 
-export function createPage(input: { name?: unknown; order?: unknown }) {
+export function createPage(input: { name?: unknown; order?: unknown; parentId?: unknown }) {
   const now = Date.now()
   const order = input.order === undefined ? undefined : pageOrder(input.order)
-  const page: NotePage = { id: crypto.randomUUID(), name: pageName(input.name), ...(order !== undefined ? { order } : {}), createdAt: now, updatedAt: now }
+  const parentId = input.parentId === undefined ? undefined : pageParent(input.parentId)
+  const page: NotePage = {
+    id: crypto.randomUUID(),
+    name: pageName(input.name),
+    ...(parentId ? { parentId } : {}),
+    ...(order !== undefined ? { order } : {}),
+    createdAt: now,
+    updatedAt: now,
+  }
   notePagesRepo.put(page)
   publishWork('notePages')
   return page
 }
 
-/** The pages in the owner's order (dragged on the Notes cards): each gets its place. */
+/** Pages in the owner's order (dragged on the Notes cards, siblings of one parent): each gets its place. */
 export function reorderPages(ids: unknown) {
   if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string')) throw new AgentError('Send the page ids in their new order', 400)
   ;(ids as string[]).forEach((id, i) => {
@@ -228,7 +251,7 @@ export function reorderPages(ids: unknown) {
   publishWork('notePages')
 }
 
-export function updatePage(id: string, input: { name?: unknown; order?: unknown }) {
+export function updatePage(id: string, input: { name?: unknown; order?: unknown; parentId?: unknown }) {
   const prev = notePagesRepo.get(id)
   if (!prev) throw new AgentError('No such page', 404)
   const next: NotePage = { ...prev, updatedAt: Date.now() }
@@ -238,24 +261,41 @@ export function updatePage(id: string, input: { name?: unknown; order?: unknown 
     if (order === undefined) delete next.order
     else next.order = order
   }
+  if (input.parentId !== undefined) {
+    const parentId = pageParent(input.parentId)
+    // not under itself or one of its own sub-pages
+    if (parentId && isWithin(parentId, id)) throw new AgentError("A page can't go inside itself or its sub-pages", 400)
+    if (parentId !== prev.parentId) delete next.order // a new place: after its new siblings
+    if (parentId) next.parentId = parentId
+    else delete next.parentId
+  }
   notePagesRepo.put(next)
   publishWork('notePages')
   return next
 }
 
-/** A page goes; its notes stay, on no page. */
+/** A page goes; its notes and sub-pages move up to its parent (the top level / no page if none). */
 export function deletePage(id: string) {
-  if (!notePagesRepo.get(id)) throw new AgentError('No such page', 404)
+  const page = notePagesRepo.get(id)
+  if (!page) throw new AgentError('No such page', 404)
+  const up = page.parentId
   let moved = 0
   for (const n of ownerNotesRepo.all()) {
     if (n.pageId !== id) continue
     const { pageId: _gone, ...rest } = n
-    ownerNotesRepo.put(rest)
+    ownerNotesRepo.put(up ? { ...rest, pageId: up } : rest)
     moved++
+  }
+  let pages = 0
+  for (const p of notePagesRepo.all()) {
+    if (p.parentId !== id) continue
+    const { parentId: _gone, order: _place, ...rest } = p
+    notePagesRepo.put(up ? { ...rest, parentId: up } : rest)
+    pages++
   }
   notePagesRepo.remove(id)
   publishWork('notePages', 'notes')
-  return { moved }
+  return { moved, pages }
 }
 
 // ── the agents' side (their MCP tools): shared notes only, read and written as Markdown ──

@@ -36,3 +36,9 @@
   .zoom-badge { top: 10px; left: 10px; padding: 3px 9px; font-size: 11.5px; }
   .stage-badges { top: 42px; }
 }
+/* the installed app, phones: after "Leave" when the app can't close itself (pwa/ExitGuard.tsx) */
+.exit-hint {
+  position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 3000;
+  padding: 8px 14px; border-radius: 999px; font-size: 13px; color: var(--text); background: var(--card-2); border: 1px solid var(--line);
+  box-shadow: var(--shadow); animation: fade-in 0.15s ease-out; pointer-events: none; white-space: nowrap;
+}

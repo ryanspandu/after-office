@@ -90,7 +90,7 @@ test("pages: made, renamed, a note put on one; deleting one keeps its notes, on 
   expect(((await (await call('PUT', `/notes/${n.id}`, { pageId: '' })).json()) as OwnerNote).pageId).toBeUndefined()
 
   await call('PUT', `/notes/${n.id}`, { pageId: work.id })
-  expect(await (await call('DELETE', `/note-pages/${work.id}`)).json()).toEqual({ moved: 1 })
+  expect(await (await call('DELETE', `/note-pages/${work.id}`)).json()).toEqual({ moved: 1, pages: 0 })
   expect(notePagesRepo.get(work.id)).toBeNull()
   const kept = ownerNotesRepo.get(n.id)!
   expect(kept.title).toBe('Rapat')
@@ -98,6 +98,45 @@ test("pages: made, renamed, a note put on one; deleting one keeps its notes, on 
   expect((await call('DELETE', `/note-pages/${work.id}`)).status).toBe(404)
   await call('DELETE', `/notes/${n.id}`)
   await call('DELETE', `/note-pages/${home.id}`)
+})
+
+test('pages in pages: made inside one, no loops, listed; deleting one moves its notes and sub-pages up', async () => {
+  expect((await call('POST', '/note-pages', { name: 'X', parentId: 'nope' })).status).toBe(400)
+  const top = (await (await call('POST', '/note-pages', { name: 'Proyek' })).json()) as NotePage
+  expect(top.parentId).toBeUndefined()
+  const mid = (await (await call('POST', '/note-pages', { name: 'Klien', parentId: top.id })).json()) as NotePage
+  expect(mid.parentId).toBe(top.id)
+  const leaf = (await (await call('POST', '/note-pages', { name: 'Rapat', parentId: mid.id })).json()) as NotePage
+  const other = (await (await call('POST', '/note-pages', { name: 'Lain', parentId: mid.id })).json()) as NotePage
+  // listed with their parents
+  const listed = listNotePages()
+  expect(listed.find((p) => p.id === leaf.id)?.parentId).toBe(mid.id)
+  expect(listed.filter((p) => p.parentId === mid.id).map((p) => p.name).sort()).toEqual(['Lain', 'Rapat'])
+  // siblings reordered among themselves
+  await call('PUT', '/note-pages/order', { ids: [other.id, leaf.id] })
+  expect(listNotePages().filter((p) => p.parentId === mid.id).map((p) => p.name)).toEqual(['Lain', 'Rapat'])
+
+  // not under itself or its own sub-pages
+  expect((await call('PUT', `/note-pages/${top.id}`, { parentId: top.id })).status).toBe(400)
+  expect((await call('PUT', `/note-pages/${top.id}`, { parentId: leaf.id })).status).toBe(400)
+  expect((await call('PUT', `/note-pages/${mid.id}`, { parentId: 'nope' })).status).toBe(400)
+  expect(notePagesRepo.get(top.id)?.parentId).toBeUndefined()
+  // moved elsewhere, then back to the top level (null)
+  expect(((await (await call('PUT', `/note-pages/${other.id}`, { parentId: top.id })).json()) as NotePage).parentId).toBe(top.id)
+  expect('parentId' in ((await (await call('PUT', `/note-pages/${other.id}`, { parentId: null })).json()) as NotePage)).toBe(false)
+
+  // deleting the middle one: its note and sub-page go up to its parent
+  const n = (await (await call('POST', '/notes', { title: 'Catatan', pageId: mid.id })).json()) as OwnerNote
+  expect(await (await call('DELETE', `/note-pages/${mid.id}`)).json()).toEqual({ moved: 1, pages: 1 })
+  expect(ownerNotesRepo.get(n.id)?.pageId).toBe(top.id)
+  expect(notePagesRepo.get(leaf.id)?.parentId).toBe(top.id)
+  // deleting a top-level one: to the top level, on no page
+  expect(await (await call('DELETE', `/note-pages/${top.id}`)).json()).toEqual({ moved: 1, pages: 1 })
+  expect('pageId' in ownerNotesRepo.get(n.id)!).toBe(false)
+  expect('parentId' in notePagesRepo.get(leaf.id)!).toBe(false)
+
+  await call('DELETE', `/notes/${n.id}`)
+  for (const id of [leaf.id, other.id]) await call('DELETE', `/note-pages/${id}`)
 })
 
 test('plain text of a note: block ends become spaces, entities decoded', () => {

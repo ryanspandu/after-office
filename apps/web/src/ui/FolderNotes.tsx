@@ -45,7 +45,6 @@ import {
   LuUnlink,
   LuBold,
   LuCheck,
-  LuPencil,
   LuPenTool,
   LuChevronsDownUp,
   LuHeading3,
@@ -305,11 +304,13 @@ export function RichNotes({
     editor?.commands.focus(at ?? 'end')
     setEditing(true)
   }
-  /** Phones: a tap on the note while reading starts writing, right where it was tapped (no Edit button). A tap on a
-   *  link, a picture, a drawing or a checkbox still does what it does; a scroll isn't a tap (no click). */
+  /** A click (a tap) on the note while reading starts writing, right where it was clicked (no Edit button). A click on
+   *  a link, a picture, a drawing or a checkbox still does what it does; a scroll isn't a tap (no click), and text
+   *  being selected (to copy) isn't either. */
   const tapToWrite = (e: React.MouseEvent) => {
-    if (editing || !editor || !phone) return
+    if (editing || !editor) return
     if ((e.target as HTMLElement).closest('a, img, input, button, .node-image, .node-drawing, .note-img, [data-type="drawing"]')) return
+    if (!(window.getSelection()?.isCollapsed ?? true)) return
     const hit = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })
     startEditing(hit?.pos)
   }
@@ -332,14 +333,8 @@ export function RichNotes({
         {editing ? (
           editor && <History editor={editor} />
         ) : (
-          // phones: no button, a tap on the note starts writing (tapToWrite)
-          phone ? (
-            <span className="muted fnotes__tap-hint">Tap the note to edit</span>
-          ) : (
-            <button type="button" className="small fnotes__edit" onMouseDown={(e) => e.preventDefault()} onClick={() => startEditing()}>
-              <LuPencil /> Edit
-            </button>
-          )
+          // no button: a click (a tap) on the note starts writing (tapToWrite)
+          <span className="muted fnotes__tap-hint">{phone ? 'Tap' : 'Click'} the note to edit</span>
         )}
         <span className="grow" />
         <span className={`fnotes__state muted${state === 'error' ? ' danger-text' : ''}`}>
@@ -1054,8 +1049,15 @@ function PhoneToolbar({ main, rest, onDone }: { main: React.ReactNode; rest: Rea
           </span>
         )}
       </span>
-      <button type="button" className="small primary fnotes__done-pill" onMouseDown={(e) => e.preventDefault()} onClick={() => (onDone(), (document.activeElement as HTMLElement | null)?.blur())}>
-        <LuCheck /> Done
+      {/* phones: just its ✓ (round), the room goes to the tools */}
+      <button
+        type="button"
+        className="small primary fnotes__done-pill"
+        aria-label="Done"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => (onDone(), (document.activeElement as HTMLElement | null)?.blur())}
+      >
+        <LuCheck />
       </button>
     </div>
   )
