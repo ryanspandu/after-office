@@ -25,9 +25,12 @@ let backing: Array<() => void> | null = null
 if (typeof window !== 'undefined')
   window.addEventListener('popstate', () => {
     // left a window's own step (Back on a maximized one, an open menu): it undoes it; the steps under the entry
-    // landed on stay
-    const at = (window.history.state as { aoStep?: string } | null)?.aoStep
-    while (steps.length && steps[steps.length - 1].id !== at) {
+    // landed on stay. Steps are numbered in order; the entry landed on is a step (its number), or an opened window's
+    // entry that says how many steps were under it (aoUnder): only later steps go (one far below, e.g. the installed
+    // app's exit guard, stays)
+    const st = window.history.state as { aoSeq?: number; aoUnder?: number } | null
+    const at = st?.aoSeq ?? st?.aoUnder ?? 0
+    while (steps.length && steps[steps.length - 1].seq > at) {
       const left = steps.pop()!
       // what changed on top of it (a filter) stays changed
       if (left.url && left.url !== here()) window.history.replaceState(window.history.state, '', left.url)
@@ -70,7 +73,8 @@ export function setUrl(patch: Record<string, string | number | null | undefined>
   // later lands on that copy and seems to do nothing (the window under it doesn't close).
   const state = window.history.state as { aoFrom?: string } | null
   if (mode === 'replace' && state?.aoFrom === next) return void goBack()
-  if (mode === 'push') window.history.pushState({ aoFrom: now }, '', next)
+  // the step it sits on (if any), so Back to this entry undoes only the steps above it
+  if (mode === 'push') window.history.pushState({ aoFrom: now, aoUnder: steps[steps.length - 1]?.seq ?? 0 }, '', next)
   else window.history.replaceState(window.history.state, '', next)
   useUrl.setState({ params: read() })
 }
@@ -102,14 +106,17 @@ function goBack(then?: () => void) {
 
 // ── a window's own step (phones: a maximized window, an open menu): Back undoes it before it closes anything ──
 // several can be on top of each other (a menu opened in a maximized window): the last one first
-const steps: Array<{ id: string; onBack: () => void; url?: string }> = []
+const steps: Array<{ id: string; seq: number; onBack: () => void; url?: string }> = []
+// numbered on from the time of loading: entries left from before a reload have lower numbers (all under these)
+let seqs = Date.now()
 
 /** A step of a window's own on top of the page (same address): the Back gesture calls `onBack` instead of leaving. */
 export function pushStep(onBack: () => void) {
   const id = Math.random().toString(36).slice(2)
+  const seq = ++seqs
   // the entry under it: how its window closes (state.aoFrom), for setUrl
-  window.history.pushState({ aoStep: id, below: window.history.state }, '', window.location.href)
-  steps.push({ id, onBack })
+  window.history.pushState({ aoStep: id, aoSeq: seq, below: window.history.state }, '', window.location.href)
+  steps.push({ id, seq, onBack })
   return id
 }
 
