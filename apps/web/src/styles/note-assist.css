@@ -27,7 +27,10 @@
 .chat--bare .chat__log { padding: 2px 6px 6px 0; background: none; border: 0; border-radius: 0; gap: 10px; }
 .chat--bare .msg { font-size: 13px; }
 .chat--bare .msg--agent { max-width: 100%; align-self: stretch; padding: 0; background: none; border: 0; border-radius: 0; }
-.chat--bare .msg--user { max-width: 85%; padding: 6px 10px; border-radius: 12px 12px 4px 12px; }
+/* the owner's messages: a bubble as wide as its words (up to most of the panel), words never broken letter by letter
+   (its width is the row's, not a % of its own content) */
+.chat--bare .msg-user { max-width: 85%; }
+.chat--bare .msg--user { max-width: 100%; padding: 7px 12px; border-radius: 14px 14px 4px 14px; overflow-wrap: break-word; word-break: normal; }
 .chat--bare:not(.chat--mobile) .chat__composer { align-items: center; gap: 4px; }
 .chat--bare:not(.chat--mobile) .chat__composer textarea { min-height: 36px; max-height: 128px; padding: 8px 10px; font-size: 13px; border-radius: 12px; }
 .chat--bare:not(.chat--mobile) .chat__composer .icon-btn { width: 34px; height: 34px; font-size: 15px; }
@@ -88,3 +91,9 @@
 .note-modal__editor:has(.fnotes:focus-within) .note-assist-fab { display: none; }
 /* the last lines can scroll out from under it */
 .note-modal__editor:has(.note-assist-fab) .fnotes__editor .tiptap { padding-bottom: 60px; }
+/* Marcus's own edit to the note (ui/noteBlocks.tsx NoteEdit): what changed, with Undo (or Apply for an old one) */
+.note-block--edit .note-block__edited { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 12.5px; font-weight: 600; color: var(--hl-ink); border-bottom: 1px solid var(--line); }
+.note-block--edit .note-block__edited > button { display: inline-flex; align-items: center; gap: 5px; font-weight: 500; }
+.note-block--edit .note-block__text { max-height: 140px; color: var(--muted); }
+.note-block--edit.is-undone .note-block__edited { color: var(--muted); }
+.note-block--edit.is-undone .note-block__text { text-decoration: line-through; opacity: 0.6; }

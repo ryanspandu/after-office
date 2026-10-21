@@ -130,7 +130,7 @@ button.report__thread:hover { text-decoration: underline; }
 .thread-row--sub + .report-row:not(.thread-row--sub) { border-top: 1px solid var(--line); }
 .report-row.thread-row--sub { border-top: none; }
 .thread-row__fold {
-  all: unset; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); z-index: 1; display: grid; place-items: center;
+  all: unset; position: absolute; right: 4px; top: 0; bottom: 0; margin: auto 0; z-index: 1; display: grid; place-items: center;
   width: 26px; height: 26px; border-radius: 8px; color: var(--muted); font-size: 14px; cursor: pointer;
 }
 /* room for it on the right (the unread count moves left of it) */
@@ -252,3 +252,5 @@ button.link.link--inline.thread-file__go { display: inline-flex; align-items: ce
   .thread-row__fold { width: 40px; height: 40px; right: 0; font-size: 16px; }
   .thread-row--parent > .report-row__main { padding-right: 44px; }
 }
+/* pressed (phones press buttons smaller): it stays put; only its arrow turns, and a soft background shows the press */
+.thread-row__fold:not(:disabled):active { transform: none; opacity: 1; background: var(--card-2); }

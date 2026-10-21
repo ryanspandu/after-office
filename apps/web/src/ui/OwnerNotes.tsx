@@ -25,6 +25,7 @@ import { NoteMenu, noteMenuAt } from './NoteMenu'
 import type { RichNotesApi } from './FolderNotes'
 import { NoteAssistButton, NoteAssistFab, NoteAssistPanel, NoteAssistSheet } from './NoteAssist'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
+import { useBackStep } from '../state/useBackStep'
 import { usePresence } from '../state/usePresence'
 
 // The owner's own notes (Reports → Notes): written in the dashboard with the same rich text editor as a folder's notes,
@@ -270,6 +271,9 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
   const inTag = ntag !== null && !inPage
   const openTag = (id: string | null) => setUrl({ nbytag: id, nview: id ? null : '*' })
   const atCards = !inPage && !inTag && !q.trim()
+  // phones: Back inside a page (or a tag) goes back to the cards first, not out of the window
+  const phone = useMediaQuery(MOBILE)
+  useBackStep(() => (inTag ? setUrl({ nbytag: null }) : (setTagFilter(''), openPage(null))), phone && (inPage || inTag))
   const folders = [...new Set(notes.map((n) => n.folder).filter((f): f is string => !!f))]
   // full size (remembered), like the dock's sheets
   const max = useModalMaximize(720, 'after-office:sheet-max:Notes list')

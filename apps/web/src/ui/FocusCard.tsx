@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { LuChevronDown, LuChevronUp, LuLocateFixed, LuMessageSquare, LuMinus, LuPlus, LuRotateCcw, LuRotateCw, LuX } from 'react-icons/lu'
+import { LuChevronDown, LuChevronUp, LuLocateFixed, LuMessageSquare, LuMinus, LuPlus, LuRotate3D, LuRotateCcw, LuRotateCw, LuSearch, LuX } from 'react-icons/lu'
 import { useView } from '../scene/focus'
 import { useDashboard } from '../state/dashboard'
 import { avatarStyle, useOffice } from '../state/store'
@@ -61,6 +61,9 @@ export function ViewReset() {
   const turn = useView((s) => s.turn)
   const zoomBy = useView((s) => s.zoomBy)
   const tilt = useView((s) => s.tilt)
+  const pinch = useView((s) => s.pinch)
+  const setPinch = useView((s) => s.setPinch)
+  const touch = useMediaQuery('(hover: none) and (pointer: coarse)')
   const select = useOffice((s) => s.select)
   // tips point in, toward the stage's middle: the buttons sit on its right edge, on the left in the desktop's
   // fullscreen office (styles/stage-dock.css)
@@ -88,6 +91,19 @@ export function ViewReset() {
       <button {...tip('Zoom out', side)} onClick={() => zoomBy(1 / 1.35)}>
         <LuMinus />
       </button>
+      {/* touch screens: what two fingers do, zoom or turn (one at a time) */}
+      {touch && (
+        <>
+          <span className="view-controls__sep" />
+          <button
+            className={`view-controls__pinch view-controls__pinch--${pinch}`}
+            aria-label={pinch === 'zoom' ? 'Two fingers zoom: switch to turning' : 'Two fingers turn: switch to zooming'}
+            onClick={() => setPinch(pinch === 'zoom' ? 'turn' : 'zoom')}
+          >
+            {pinch === 'zoom' ? <LuSearch /> : <LuRotate3D />}
+          </button>
+        </>
+      )}
       {moved && (
         <>
           <span className="view-controls__sep" />

@@ -94,6 +94,9 @@ export interface RichNotesApi {
   insert: (markdown: string) => void
   /** the whole text becomes this Markdown */
   replace: (markdown: string) => void
+  /** the text as it is now (HTML), and back to some earlier one (Undo of Marcus's edit) */
+  html: () => string
+  setHtml: (html: string) => void
 }
 
 /**
@@ -290,15 +293,25 @@ export function RichNotes({
         editor.chain().insertContentAt(touched.current ? { from, to } : end, html).run()
       },
       replace: (md) => void editor.commands.setContent(markdownToHtml(md), { emitUpdate: true }),
+      html: () => editor.getHTML(),
+      setHtml: (html) => void editor.commands.setContent(html, { emitUpdate: true }),
     })
     return () => onReady(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor])
-  // right in the tap (a phone opens its keyboard only for a focus made there)
-  const startEditing = () => {
+  // right in the tap (a phone opens its keyboard only for a focus made there); `at`: where the text was tapped
+  const startEditing = (at?: number) => {
     editor?.setEditable(true)
-    editor?.commands.focus('end')
+    editor?.commands.focus(at ?? 'end')
     setEditing(true)
+  }
+  /** Phones: a tap on the note while reading starts writing, right where it was tapped (no Edit button). A tap on a
+   *  link, a picture, a drawing or a checkbox still does what it does; a scroll isn't a tap (no click). */
+  const tapToWrite = (e: React.MouseEvent) => {
+    if (editing || !editor || !phone) return
+    if ((e.target as HTMLElement).closest('a, img, input, button, .node-image, .node-drawing, .note-img, [data-type="drawing"]')) return
+    const hit = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })
+    startEditing(hit?.pos)
   }
   // back to reading (viewFirst only): Done on a computer; ✓, Back or leaving the editor on a phone
   const stopEditing = () => {
@@ -319,9 +332,14 @@ export function RichNotes({
         {editing ? (
           editor && <History editor={editor} />
         ) : (
-          <button type="button" className="small fnotes__edit" onMouseDown={(e) => e.preventDefault()} onClick={startEditing}>
-            <LuPencil /> Edit
-          </button>
+          // phones: no button, a tap on the note starts writing (tapToWrite)
+          phone ? (
+            <span className="muted fnotes__tap-hint">Tap the note to edit</span>
+          ) : (
+            <button type="button" className="small fnotes__edit" onMouseDown={(e) => e.preventDefault()} onClick={() => startEditing()}>
+              <LuPencil /> Edit
+            </button>
+          )
         )}
         <span className="grow" />
         <span className={`fnotes__state muted${state === 'error' ? ' danger-text' : ''}`}>
@@ -375,7 +393,7 @@ export function RichNotes({
             )}
           </div>
         )}
-        <div className="fnotes__editor">
+        <div className="fnotes__editor" onClick={tapToWrite}>
           {/* like Notion: a grip beside the block under the pointer drags it (a paragraph, a list item, a section…) */}
           {editor && editing && (
             <DragHandle editor={editor}>

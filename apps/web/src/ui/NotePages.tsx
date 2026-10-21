@@ -297,8 +297,8 @@ export function NoteTagHeader({ notes, tag, onBack }: { notes: OwnerNoteSummary[
   const shared = notes.filter((n) => n.shared).length
   return (
     <div className="tag-head" style={{ ['--c' as string]: t?.color ?? 'var(--muted)' }}>
-      <button type="button" className="small tag-head__back" onClick={onBack}>
-        <LuArrowLeft /> Tags
+      <button type="button" className="small tag-head__back" aria-label="Back to the tags" onClick={onBack}>
+        <LuArrowLeft /> <span className="tag-head__back-label">Tags</span>
       </button>
       <span className="tag-card__icon">{t ? <TagIcon tag={t} /> : <LuTag />}</span>
       <span className="tag-head__title">{t?.name ?? 'No tag'}</span>
@@ -317,8 +317,8 @@ export function NotePageHeader({ notes, view, onBack }: { notes: OwnerNoteSummar
   const shared = list.filter((n) => n.shared).length
   return (
     <div className="tag-head" style={{ ['--c' as string]: page ? 'var(--hl)' : 'var(--text)' }}>
-      <button type="button" className="small tag-head__back" onClick={onBack}>
-        <LuArrowLeft /> Pages
+      <button type="button" className="small tag-head__back" aria-label="Back to the pages" onClick={onBack}>
+        <LuArrowLeft /> <span className="tag-head__back-label">Pages</span>
       </button>
       <span className="tag-card__icon">{page ? <LuBookOpen /> : view === 'none' ? <LuInbox /> : <LuLayers />}</span>
       <span className="tag-head__title">{page?.name ?? (view === 'none' ? 'No page' : 'All notes')}</span>

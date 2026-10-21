@@ -336,3 +336,24 @@
   /* phones: rename, ✓ and settings a little bigger, easier to hit */
   :is(.note-modal__name > .icon-btn, .note-modal__settings).small { width: 36px; height: 36px; font-size: 17px; }
 }
+/* phones: the way back from a page (or a tag) to the cards is just its arrow */
+@media (max-width: 768px) {
+  .notes-modal .tag-head__back { width: 36px; height: 36px; padding: 0; justify-content: center; border-radius: 999px; font-size: 16px; }
+  .notes-modal .tag-head__back-label { display: none; }
+}
+/* phones: a page's card keeps its whole name on the first line, its count (badge) under it; the icon beside both */
+@media (max-width: 768px) {
+  .page-card.tag-card--static { row-gap: 2px; grid-template-rows: auto auto 1fr; align-content: stretch; }
+  .page-card.tag-card--static .tag-card__icon { grid-row: 1 / span 2; align-self: center; }
+  .page-card.tag-card--static .tag-card__title { grid-column: 2 / -1; grid-row: 1; }
+  .page-card.tag-card--static .tag-card__badge { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
+  .page-card.tag-card--static .tag-card__open { margin-top: 8px; align-self: end; }
+}
+.fnotes__tap-hint { font-size: 12px; }
+/* phones, writing: the toolbar under the text (by the thumb, right above the keyboard), its menus opening upward */
+@media (max-width: 768px) {
+  .fnotes:not(.fnotes--view) .fnotes__box > .fnotes__bar { order: 2; }
+  .fnotes:not(.fnotes--view) .fnotes__box .fnotes__tools { border-radius: 0 0 12px 12px; border-bottom: 1px solid var(--line); border-top: 0; }
+  .fnotes:not(.fnotes--view) .fnotes__box .fnotes__editor { border-radius: 12px 12px 0 0; }
+  .fnotes:not(.fnotes--view) .fnotes__box .fnotes__menu { top: auto; bottom: calc(100% + 8px); }
+}

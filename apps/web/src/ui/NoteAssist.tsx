@@ -14,7 +14,8 @@ import { AgentFace } from './AgentFace'
 
 // "Ask Marcus" while writing a note: a chat with the manager in the note's own hidden thread (server:
 // work/noteAssist.ts). Desktop: a panel on the right of the note's window; phones: a bottom sheet over it (?nai=1).
-// His ```note blocks come with Insert / Replace note (ui/noteBlocks.tsx); nothing changes the note until pressed.
+// His ```note blocks come with Insert / Replace note (ui/noteBlocks.tsx); his ```note-edit blocks go into the note at
+// once, with Undo.
 
 const SUGGESTIONS = ['Summarize this note', 'Fix grammar', 'Make it a checklist', 'Continue writing']
 
@@ -42,8 +43,33 @@ export function NoteAssistFab({ saved, onOpen }: { saved: boolean; onOpen: () =>
   )
 }
 
+// Marcus's edits already put in a note (ui/noteBlocks.tsx NoteEdit), by a short hash of their text: reopening the chat
+// doesn't put them in again
+const FRESH_AFTER_MS = 3000
+const EDITS_KEY = (noteId: string) => `after-office:note-edits:${noteId}`
+const hashOf = (s: string) => {
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+const editsOf = (noteId: string): string[] => {
+  try {
+    return JSON.parse(localStorage.getItem(EDITS_KEY(noteId)) ?? '[]') as string[]
+  } catch {
+    return []
+  }
+}
+const rememberEdit = (noteId: string, md: string) => {
+  try {
+    localStorage.setItem(EDITS_KEY(noteId), JSON.stringify([...editsOf(noteId), hashOf(md)].slice(-50)))
+  } catch {
+    /* this visit only */
+  }
+}
+
 /** The chat itself: Marcus's side of it once the note has a helper, else a short intro with a few ways to start. */
 export function NoteAssistChat({ noteId, editor }: { noteId: string; editor: RefObject<RichNotesApi | null> }) {
+  const openedAt = useRef(Date.now())
   const manager = useOffice((s) => s.agents.find((a) => a.kind === 'manager'))
   const t = useLive((s) => s.noteThreads.find((x) => x.noteId === noteId))
   const actions = useMemo<NoteBlockActions>(
@@ -55,8 +81,19 @@ export function NoteAssistChat({ noteId, editor }: { noteId: string; editor: Ref
         editor.current.replace(md)
         return true
       },
+      apply: (md) => {
+        const ed = editor.current
+        if (!ed) return null
+        const before = ed.html()
+        ed.replace(md)
+        rememberEdit(noteId, md)
+        return () => ed.setHtml(before)
+      },
+      applied: (md) => editsOf(noteId).includes(hashOf(md)),
+      // the history shows within moments of opening; what comes after is new
+      fresh: () => Date.now() - openedAt.current > FRESH_AFTER_MS,
     }),
-    [editor],
+    [editor, noteId],
   )
   // seen: its replies are read
   useEffect(() => {

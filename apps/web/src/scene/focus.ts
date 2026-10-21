@@ -39,6 +39,19 @@ interface ViewState {
   moved: boolean
   reset: () => void
   setMoved: (moved: boolean) => void
+  /** phones: what two fingers do, zoom only or turn and tilt only (one at a time feels steadier); remembered */
+  pinch: Pinch
+  setPinch: (pinch: Pinch) => void
+}
+
+export type Pinch = 'zoom' | 'turn'
+const PINCH_KEY = 'after-office:pinch'
+const savedPinch = (): Pinch => {
+  try {
+    return localStorage.getItem(PINCH_KEY) === 'turn' ? 'turn' : 'zoom'
+  } catch {
+    return 'zoom'
+  }
 }
 
 export const useView = create<ViewState>((set) => ({
@@ -50,4 +63,13 @@ export const useView = create<ViewState>((set) => ({
   moved: false,
   reset: () => set({ resetAt: Date.now(), moved: false }),
   setMoved: (moved) => set((s) => (s.moved === moved ? s : { moved })),
+  pinch: savedPinch(),
+  setPinch: (pinch) => {
+    try {
+      localStorage.setItem(PINCH_KEY, pinch)
+    } catch {
+      /* this visit only */
+    }
+    set({ pinch })
+  },
 }))

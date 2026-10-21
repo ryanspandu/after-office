@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { MapControls, PerformanceMonitor } from '@react-three/drei'
 import { MathUtils, Spherical, Vector3 } from 'three'
 import { agentWorld, useView } from './focus'
+import { useMediaQuery } from '../state/useMediaQuery'
 import { useZoom } from './zoom'
 import { isAway, useOffice } from '../state/store'
 import { Agent } from './Agent'
@@ -36,6 +37,9 @@ export function Office() {
   const select = useOffice((s) => s.select)
   const layout = useLayout()
   const { advanced, dpr, setDpr, setTier } = useQuality()
+  // a touch screen (no mouse): two fingers do one thing at a time there
+  const touch = useMediaQuery('(hover: none) and (pointer: coarse)')
+  const pinch = useView((s) => s.pinch)
   const cfg = useRenderConfig()
   // fewer frames while nobody's looking: the window in the background, or untouched for a while
   const fps = usePace(cfg.fps)
@@ -115,6 +119,7 @@ export function Office() {
       <FitCamera layout={layout} />
       {/* drag pans; right-drag (two fingers on a phone) turns the view around the office and tilts it, from nearly
           straight down to nearly level with the floor (never under it) */}
+      {/* phones: two fingers either zoom or turn, not both at once (the camera buttons switch, ui/FocusCard.tsx) */}
       <MapControls
         makeDefault
         minZoom={4}
@@ -123,6 +128,8 @@ export function Office() {
         minPolarAngle={MIN_POLAR}
         maxPolarAngle={MAX_POLAR}
         rotateSpeed={0.6}
+        enableZoom={!touch || pinch === 'zoom'}
+        enableRotate={!touch || pinch === 'turn'}
       />
       <FocusCamera />
       <NudgeCamera />

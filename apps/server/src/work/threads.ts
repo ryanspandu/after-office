@@ -143,7 +143,8 @@ export function noteHelperContext(t: OfficeThread) {
   const title = (t.noteId ? ownerNotesRepo.get(t.noteId)?.title.trim() : '') || 'Untitled'
   return [
     `[Note helper: "${title}"] The owner is writing one of their notes in the dashboard and wants help with the writing. Answer in chat.`,
-    'Put any text meant for the note in a fenced block that starts with ```note (Markdown); the owner inserts it with a button.',
+    'To change the note yourself (the owner asks you to write, fix, rewrite, shorten or add to it), put the WHOLE new note in one fenced block that starts with ```note-edit (Markdown): it replaces the note at once and the owner can undo it.',
+    'For options to choose from (a few versions, a piece to add somewhere), use fenced blocks that start with ```note instead: the owner inserts those with a button.',
     "Don't edit or create notes with tools and don't delegate unless the owner asks.",
   ].join('\n')
 }

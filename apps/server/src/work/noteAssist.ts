@@ -23,7 +23,8 @@ export const noteHelperOf = (noteId: string): OfficeThread | null => threadsRepo
 export function noteSnapshot(n: OwnerNote) {
   const md = htmlToMarkdown(n.html)
   const text = md.length > NOTE_SNAPSHOT_MAX ? `${md.slice(0, NOTE_SNAPSHOT_MAX)}\n… (cut short: the note goes on)` : md
-  return `[The note now: "${n.title.trim() || 'Untitled'}"]\n<<<NOTE\n${text || '(empty)'}\nNOTE>>>`
+  // with a reminder of how to change it (helpers made before ```note-edit existed learn it here)
+  return `[The note now: "${n.title.trim() || 'Untitled'}"] (\`\`\`note-edit block: your edit, replaces it at once; \`\`\`note block: a suggestion)\n<<<NOTE\n${text || '(empty)'}\nNOTE>>>`
 }
 
 /** The owner's message to the note's helper: its thread is made on the first one; the note's text goes along when it changed. */
