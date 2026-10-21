@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { pushStep } from '../state/url'
+import { forgetStep, pushStep } from '../state/url'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { confirm } from '../ui/Confirm'
 import { isStandalone } from './install'
@@ -20,17 +20,28 @@ export function ExitGuard() {
   useEffect(() => {
     if (!phone || !isStandalone()) return
     let gone = false
+    // the guard's own step (one at a time), and a window being closed by it right now
+    let id: string | null = null
+    let closing = false
     const guard = () => {
-      pushStep(() => {
+      if (gone || id) return
+      id = pushStep(() => {
+        id = null
         if (gone) return
         // something is still open whose own Back step isn't there (opened along with the app, from its address):
-        // Back closes it (its own close button), and the guard stays
+        // Back closes it (its own close button). The guard comes back only once that's done: closing a window can
+        // itself go Back, which would land on a guard put back at once and close again… over and over (a frozen app)
         const open = [...document.querySelectorAll<HTMLElement>(OPEN)].pop()
         if (open) {
-          guard()
+          if (closing) return
+          closing = true
           const close = open.querySelector<HTMLElement>(CLOSE)
           if (close) close.click()
           else window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+          setTimeout(() => {
+            closing = false
+            guard()
+          }, 800)
           return
         }
         void confirm({ title: 'Leave After Office?', message: 'The app closes. Your agents keep working on the server.', confirmLabel: 'Leave', danger: false }).then((leave) => {
@@ -43,7 +54,12 @@ export function ExitGuard() {
       })
     }
     guard()
-    return () => void (gone = true)
+    return () => {
+      gone = true
+      // its step goes with it (a remount must not stack a second guard)
+      if (id) forgetStep(id)
+      id = null
+    }
   }, [phone])
   useEffect(() => {
     if (!hint) return
