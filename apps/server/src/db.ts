@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { chmodSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { ActivityEntry, AgentKind, CronJob, LiveMode, OfficeTask, OfficeThread, OwnerNote, TaskComment, WorkReport } from '@after-office/shared'
+import type { ActivityEntry, AgentKind, CronJob, LiveMode, NotePage, OfficeTask, OfficeThread, OwnerNote, TaskComment, WorkReport } from '@after-office/shared'
 
 // Persistent state lives in one SQLite file (OFFICE_DATA_DIR, default apps/server/data).
 // Runtime state (status, current tool, pending approvals) stays in memory and is rebuilt from hooks.
@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS owner_notes (
   data        TEXT NOT NULL,        -- OwnerNote JSON
   updated_at  INTEGER NOT NULL
 );
+-- the pages of the owner's notes (work/notes.ts): a note's pageId points here
+CREATE TABLE IF NOT EXISTS note_pages (
+  id          TEXT PRIMARY KEY,
+  data        TEXT NOT NULL,        -- NotePage JSON
+  updated_at  INTEGER NOT NULL
+);
 -- the owner's threads with the manager (work/threads.ts): one topic each, in a side session of the manager's
 CREATE TABLE IF NOT EXISTS threads (
   id          TEXT PRIMARY KEY,
@@ -133,6 +139,8 @@ if (!hasColumn('side_sessions', 'name')) db.exec('ALTER TABLE side_sessions ADD 
 if (!hasColumn('prompt_queue', 'cron_id')) db.exec('ALTER TABLE prompt_queue ADD COLUMN cron_id TEXT')
 if (!hasColumn('agents', 'kind')) db.exec("ALTER TABLE agents ADD COLUMN kind TEXT NOT NULL DEFAULT 'worker'")
 if (!hasColumn('agents', 'figure')) db.exec('ALTER TABLE agents ADD COLUMN figure TEXT')
+// its avatar's hair, picked by the owner (a Notionists variant); NULL = drawn from its look
+if (!hasColumn('agents', 'face')) db.exec('ALTER TABLE agents ADD COLUMN face TEXT')
 // connectors an agent may use: JSON array of tool prefixes; NULL = every one (agents from before this)
 if (!hasColumn('agents', 'connectors')) db.exec('ALTER TABLE agents ADD COLUMN connectors TEXT')
 // a random number the dashboards draw its character from (hair, hat, glasses…); NULL: drawn from the desk
@@ -222,6 +230,8 @@ export interface AgentRow {
   extra_dirs?: string
   /** 'man' | 'woman': its character in the office */
   figure?: string | null
+  /** its avatar's hair ("variant01"…"variant63"); null: drawn from its look */
+  face?: string | null
   /** JSON array of the connectors (tool prefixes) it may use; null = every one */
   connectors?: string | null
   /** 1: pinned to the top of the agents list */
@@ -305,7 +315,7 @@ export const agentsRepo = {
         $style: a.style ?? null,
         $effort: a.effort ?? null,
       }),
-  update: (id: string, patch: Partial<Pick<AgentRow, 'model' | 'permission_mode' | 'session_id' | 'name' | 'role' | 'cwd' | 'extra_dirs' | 'figure' | 'connectors' | 'pinned' | 'style' | 'effort' | 'git_name' | 'git_email' | 'ssh_public' | 'ssh_fingerprint' | 'connectors_write' | 'connectors_read_ask' | 'asleep_at'>>) => {
+  update: (id: string, patch: Partial<Pick<AgentRow, 'model' | 'permission_mode' | 'session_id' | 'name' | 'role' | 'cwd' | 'extra_dirs' | 'figure' | 'face' | 'connectors' | 'pinned' | 'style' | 'effort' | 'git_name' | 'git_email' | 'ssh_public' | 'ssh_fingerprint' | 'connectors_write' | 'connectors_read_ask' | 'asleep_at'>>) => {
     const keys = Object.keys(patch) as (keyof typeof patch)[]
     if (!keys.length) return
     db.query(`UPDATE agents SET ${keys.map((k) => `${k} = $${k}`).join(', ')} WHERE id = $id`).run({
@@ -584,6 +594,17 @@ export const ownerNotesRepo = {
     for (const n of ownerNotesRepo.all())
       if (n.folder && (n.folder === from || n.folder.startsWith(`${from}/`))) ownerNotesRepo.put({ ...n, folder: to + n.folder.slice(from.length) })
   },
+}
+
+export const notePagesRepo = {
+  all: () => db.query<{ data: string }, []>('SELECT data FROM note_pages').all().map((r) => JSON.parse(r.data) as NotePage),
+  get: (id: string) => {
+    const r = db.query<{ data: string }, [string]>('SELECT data FROM note_pages WHERE id = ?').get(id)
+    return r ? (JSON.parse(r.data) as NotePage) : null
+  },
+  put: (p: NotePage) =>
+    db.query('INSERT INTO note_pages (id, data, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET data = ?2, updated_at = ?3').run(p.id, JSON.stringify(p), p.updatedAt),
+  remove: (id: string) => db.query('DELETE FROM note_pages WHERE id = ?').run(id),
 }
 
 export const folderNotesRepo = {

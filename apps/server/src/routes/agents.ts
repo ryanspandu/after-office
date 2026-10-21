@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs'
 import { active, cleanChatContext, contextBlock, expectChatReport, withContext, stopActiveTask } from '../work/work'
 import { decide } from '../agents/ingest'
 import { AgentError, changeFolder, compactSession, createAgent, deleteAgent, interrupt, restartAgent, sendChat, setMode, revokeFolder, randomStyle, grantFolder, sessionKeyOf, openSideSession, closeSideSession, reopenSideSession, forgetSideSession, renameSideSession } from '../agents/manager'
-import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime, runtimeOf, sideRuntimeOf, clearPendingFor } from '../agents/registry'
+import { currentRateLimits, snapshot, subscribe, toInfo, updateRuntime, updateSideRuntime, runtimeOf, sideRuntimeOf, clearPendingFor, FACE } from '../agents/registry'
 import type { Runtime } from '../agents/state'
 import { readChat } from '../agents/transcripts'
 import { requireSameOrigin, terminalSocket } from '../agents/term'
@@ -390,6 +390,16 @@ agentRoutes.put('/agents/:id/figure', async (c) => {
   if (figure !== 'man' && figure !== 'woman' && figure !== null) throw new AgentError('Choose man or woman')
   agentsRepo.update(id, { figure: figure as string | null })
   updateRuntime(id, (rt) => ({ ...rt })) // the changed figure goes out to the dashboards
+  return c.json({ ok: true })
+})
+// its avatar's hair (the owner's pick in its profile), or null for the one drawn from its look
+agentRoutes.put('/agents/:id/face', async (c) => {
+  const id = c.req.param('id')
+  if (!agentsRepo.get(id)) throw new AgentError('No such agent', 404)
+  const { face } = await c.req.json<{ face?: unknown }>().catch(() => ({ face: undefined }))
+  if (face !== null && (typeof face !== 'string' || !FACE.test(face))) throw new AgentError('Choose one of the avatars')
+  agentsRepo.update(id, { face: face as string | null })
+  updateRuntime(id, (rt) => ({ ...rt }))
   return c.json({ ok: true })
 })
 // a new random look for its character (same figure): "Shuffle look" in its profile

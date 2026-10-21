@@ -26,6 +26,7 @@ import { FolderMenuLayer, folderMenuHandler } from './FolderMenu'
 import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { AgentFace } from './AgentFace'
 
 // Folders tab: what the agents are working on, straight from their folders, in two lists. "Folders": the folders in
 // the office's own folder (~/after-office/project, where New folder makes one). "Agents": each agent's folder (a git
@@ -313,7 +314,7 @@ function Avatars({ agents }: { agents: OfficeAgent[] }) {
     <span className="ws__agents">
       {agents.slice(0, 4).map((a) => (
         <span key={a.id} className="avatar avatar--xs" style={avatarStyle(a.look.shirt)} data-tip={a.name}>
-          {a.name[0]}
+          <AgentFace look={a.look} />
         </span>
       ))}
       {agents.length > 4 && <span className="muted">+{agents.length - 4}</span>}

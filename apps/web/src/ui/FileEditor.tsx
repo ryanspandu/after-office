@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { LuCheck, LuDownload, LuEye, LuFileText, LuGlobe, LuLoader, LuLock, LuMinus, LuPencil, LuSave } from 'react-icons/lu'
 import { api } from '../state/auth'
 import { useDaylight } from '../state/clock'
@@ -13,12 +13,13 @@ import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { saveUrl } from './Attachments'
 import { CopyButton, pageText, shown } from './CopyButton'
 import { closeFile, fileSaved, minimizeFile, useOpenFiles } from '../state/openFiles'
+import { lazyRetry } from '../pwa/lazyRetry'
 
 // A text file of a folder opened in an editor (the Files browser): VS Code's look, its language's colours, saved in
 // place (⌘S). It opens for reading (Markdown as a page, code read only); Edit turns it into the editor. A save over
 // a version an agent wrote meanwhile asks first.
 
-const CodeMirrorBox = lazy(() => import('./CodeMirrorBox'))
+const CodeMirrorBox = lazyRetry(() => import('./CodeMirrorBox'))
 
 /** Opened in the editor when clicked (instead of a preview or a download): text and code by their name. */
 const TEXT_EXT = new Set(

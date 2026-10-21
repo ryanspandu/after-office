@@ -37,3 +37,6 @@ export const outingKind = (desk: number): 'ride' | 'sit' => ((desk * 7 + 3) % 5 
 
 /** Where each agent who is out is now: kept when its character is drawn afresh (it comes back from there). */
 export const outings = new Map<string, { kind: 'sit'; seat: number } | { kind: 'ride'; driver: Driver }>()
+
+/** Whether the town is showing now (scene/City.tsx, from a zoom out): out of it, those in town aren't drawn. */
+export const townView = { shown: false }

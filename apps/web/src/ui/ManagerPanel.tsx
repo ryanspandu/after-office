@@ -1,7 +1,7 @@
 import { onBackdropTap } from '../state/useMediaQuery'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { LuCrown, LuMessageSquare, LuUsers, LuX } from 'react-icons/lu'
+import { LuMessageSquare, LuUsers, LuX } from 'react-icons/lu'
 import { create } from 'zustand'
 import { divisionOf } from '@after-office/shared'
 import { useNow } from '../state/clock'
@@ -13,6 +13,7 @@ import { MaximizeButton, useMaximize } from './Maximize'
 import { useSheetDrag } from '../state/useSheetDrag'
 import { ago } from './FollowUps'
 import { StatusPill } from './taskMeta'
+import { AgentFace } from './AgentFace'
 
 // The manager's own panel: talk to it (Chat) and see what it handed out (Team). Opened from the navbar on desktops
 // and from the dock on phones. The manager is a normal Claude Code agent with the after-office MCP tools.
@@ -64,7 +65,7 @@ function Panel({ manager, onClose: close }: { manager: OfficeAgent; onClose: () 
         <div className="drawer__grab" aria-hidden="true" {...dragProps} />
         <header className="drawer__head" {...dragProps}>
           <span className="avatar avatar--lg manager-avatar" style={avatarStyle(manager.look.shirt)}>
-            <LuCrown />
+            <AgentFace look={manager.look} />
           </span>
           <div className="drawer__title">
             <h3>

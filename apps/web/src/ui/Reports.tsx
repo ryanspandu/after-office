@@ -23,6 +23,7 @@ import { NotesList } from './OwnerNotes'
 import { REPORTS, useMinimized } from '../state/minimized'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { ScrollTabs } from './ScrollTabs'
+import { AgentFace } from './AgentFace'
 
 // Reports: what an agent said when it finished a task or a cron run (its final message), kept apart from the chat
 // so finished work can be reviewed later. Written by the server on the agent's Stop hook; no LLM involved.
@@ -91,7 +92,7 @@ export function ReportRow({
           <span className="report-row__meta">
             {/* who: a small initial in the agent's colour, about the size of the text */}
             <span className="report-row__who" style={agent ? avatarStyle(agent.look.shirt) : undefined} aria-hidden>
-              {(agent?.name ?? '?')[0]}
+              {agent ? <AgentFace look={agent.look} /> : '?'}
             </span>
             <span className="truncate">
               {agent?.name ?? 'Removed agent'} · {ago(now - r.finishedAt)}
@@ -283,7 +284,7 @@ function JobRow({
             <span className="job-row__who" aria-hidden>
               {who.slice(0, 4).map((a) => (
                 <span key={a.id} className="report-row__who" style={avatarStyle(a.look.shirt)}>
-                  {a.name[0]}
+                  <AgentFace look={a.look} />
                 </span>
               ))}
             </span>
@@ -867,9 +868,13 @@ export function ReportsModal({ onClose, onMinimize }: { onClose: () => void; onM
             {pickedReport ? (
               <ReportView key={pickedReport.id} r={pickedReport} title onClose={() => setUrl({ ri: null })} />
             ) : (
-              <p className="empty reports-modal__none">
-                <LuFileText /> Pick a report to read it here.
-              </p>
+              <div className="reports-modal__none">
+                <span className="reports-modal__none-icon" aria-hidden>
+                  <LuFileText />
+                </span>
+                <b>No report open</b>
+                <span className="muted">Pick a report from the list to read it here.</span>
+              </div>
             )}
           </section>
         )}

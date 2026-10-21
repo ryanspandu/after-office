@@ -31,8 +31,11 @@ function Dot({ status, waitingFor }: { status: string; waitingFor?: string }) {
 }
 
 export function SessionTabs({ agent, current, onPick }: { agent: OfficeAgent; current: string; onPick: (key: string) => void }) {
-  const open = (agent.sessions ?? []).filter((s) => s.open)
-  const closed = (agent.sessions ?? []).filter((s) => !s.open)
+  // a note's writing helper runs in a session of the manager's too: it lives in its note, not here
+  const helpers = useLive((st) => st.noteThreads)
+  const listed = (agent.sessions ?? []).filter((s) => !s.threadId || !helpers.some((t) => t.id === s.threadId))
+  const open = listed.filter((s) => s.open)
+  const closed = listed.filter((s) => !s.open)
   // what each is called ("Session n" numbered among the unnamed ones, not by its key)
   const names = sessionNames(agent.sessions ?? [])
   const nameOf = (s: SideSessionInfo) => names.get(s.key) ?? sessionName(s)

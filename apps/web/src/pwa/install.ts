@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { useAppUpdate } from './register'
+import { askUpdate, useAppUpdate } from './register'
 
 // "Install app": Chromium (Android, desktop) offers a prompt event we keep until the user asks; iOS Safari has no
 // prompt, so we explain Share → Add to Home Screen instead. Nothing shows once the app runs installed.
@@ -51,7 +51,7 @@ export async function reloadApp() {
     await Promise.race([reg?.update(), new Promise((r) => setTimeout(r, 1500))])
     // found one just now: take it (controllerchange reloads)
     if (reg?.waiting && navigator.serviceWorker.controller) {
-      reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+      askUpdate(reg.waiting)
       setTimeout(() => location.reload(), 3000)
       return
     }

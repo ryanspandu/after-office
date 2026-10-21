@@ -93,9 +93,12 @@ export function useModalMaximize(width: number, remember?: string) {
       }
     const card = bodyRef.current?.closest<HTMLElement>('.modal')
     const from = card?.getBoundingClientRect()
+    // its own CSS transitions (e.g. the note window's width for Ask Marcus) off while measuring: the size it ends at
+    if (card) card.style.transition = 'none'
     flushSync(() => setFull((v) => !v))
-    if (!card || !from || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const to = card.getBoundingClientRect()
+    const to = card?.getBoundingClientRect()
+    if (card) requestAnimationFrame(() => (card.style.transition = ''))
+    if (!card || !from || !to || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     // phones: pulled up by hand, it grows on from where the finger let go (useSheetDrag)
     const pulled = Number(card.dataset.fromHeight)
     const fromHeight = pulled || from.height

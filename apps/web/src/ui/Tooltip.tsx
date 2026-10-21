@@ -37,13 +37,22 @@ function tipContent(el: Element | null) {
 }
 
 export function TooltipLayer() {
-  const touch = useMediaQuery('(hover: none)')
-  return touch ? <TouchTooltip /> : <HoverTooltip />
+  // hover tips only with a real hovering pointer (a mouse, a trackpad): a phone that says it can "hover" would otherwise
+  // keep a tapped button's tip on screen
+  const hover = useMediaQuery('(hover: hover) and (pointer: fine)')
+  return hover ? <HoverTooltip /> : <TouchTooltip />
 }
 
 function HoverTooltip() {
   // a tip that changes while it's shown (a switch turned on under the pointer): shown again with the new words
   const [, redraw] = useReducer((n: number) => n + 1, 0)
+  const ref = useRef<TooltipRefProps>(null)
+  // a touch on a device with a mouse too (a laptop's touch screen): a tap doesn't leave its tip behind
+  useEffect(() => {
+    const onUp = (e: PointerEvent) => e.pointerType !== 'mouse' && ref.current?.close()
+    document.addEventListener('pointerup', onUp, { capture: true })
+    return () => document.removeEventListener('pointerup', onUp, { capture: true })
+  }, [])
   useEffect(() => {
     const seen = new MutationObserver(redraw)
     seen.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-tip', 'data-tip-title'] })
@@ -51,6 +60,7 @@ function HoverTooltip() {
   }, [])
   return (
     <Tooltip
+      ref={ref}
       id="ao-tip"
       anchorSelect="[data-tip]"
       render={({ activeAnchor }) => tipContent(activeAnchor)}

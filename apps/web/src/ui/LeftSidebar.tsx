@@ -1,7 +1,7 @@
 import { OwnerAvatar } from './EditProfile'
 import { useState, type FormEvent, useEffect, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { LuTag, LuFolderGit2, LuCalendarClock, LuCrown, LuListChecks, LuListTodo, LuPencil, LuPlay, LuPlus, LuSearch, LuTrash2, LuX, LuActivity } from 'react-icons/lu'
+import { LuTag, LuFolderGit2, LuCalendarClock, LuCalendarDays, LuMaximize2, LuCrown, LuListChecks, LuListTodo, LuPencil, LuPlay, LuPlus, LuSearch, LuTrash2, LuX, LuActivity } from 'react-icons/lu'
 import { tip } from './Tooltip'
 import { openUrl } from '../state/url'
 import type { CronJob, OfficeTask, TaskPriority, TaskStatus } from '@after-office/shared'
@@ -25,7 +25,10 @@ import { TagsTab } from './TagsTab'
 import { TagModal } from './TagModal'
 import { ActivitySidebar } from './Activity'
 import { ScrollTabs } from './ScrollTabs'
+import { CalendarView } from './CalendarView'
+import { openNewEvent } from './NewEvent'
 import { matchesSearch, SearchBox } from './SearchBox'
+import { AgentFace } from './AgentFace'
 
 export function LeftSidebar() {
   return (
@@ -85,6 +88,8 @@ export function nextRunLabel(cron: Pick<CronJob, 'times' | 'days' | 'enabled' | 
   return null
 }
 
+const DAILY_TAB_KEY = 'after-office:daily-panel-tab'
+
 export function CronPanel() {
   const ready = useWorkReady()
   const { crons, updateCron, removeCron } = useDashboard(useShallow((s) => ({ crons: s.crons, updateCron: s.updateCron, removeCron: s.removeCron })))
@@ -109,24 +114,61 @@ export function CronPanel() {
   const sorted = [...crons]
     .filter((c) => matchesSearch(q, c.name, c.prompt, agents.find((a) => a.id === c.agentId)?.name))
     .sort((a, b) => Number(b.enabled) - Number(a.enabled) || nextRunIn(a, nowMin) - nextRunIn(b, nowMin))
+  // Daily (the jobs) or Calendar (ui/CalendarView.tsx), remembered in this browser
+  const [tab, setTab] = useState<'daily' | 'calendar'>(() => {
+    try {
+      return localStorage.getItem(DAILY_TAB_KEY) === 'calendar' ? 'calendar' : 'daily'
+    } catch {
+      return 'daily'
+    }
+  })
+  const pickTab = (t: 'daily' | 'calendar') => {
+    setTab(t)
+    try {
+      localStorage.setItem(DAILY_TAB_KEY, t)
+    } catch {
+      // private mode: not remembered
+    }
+  }
+  const active = crons.filter((c) => c.enabled).length
 
   return (
     <section className="card">
       <header className="card__head">
-        <h2>
-          <LuCalendarClock /> Daily
-        </h2>
-        <span className="muted">{crons.filter((c) => c.enabled).length} active</span>
-        {crons.length > 0 && (
+        <ScrollTabs className="task-tabs daily-tabs" label="Daily jobs or calendar" active={tab}>
+          <button role="tab" aria-selected={tab === 'daily'} className={tab === 'daily' ? 'active' : ''} onClick={() => pickTab('daily')} {...tip(`${active} active`)}>
+            <LuCalendarClock /> Daily
+            {active > 0 && <span className="daily-tabs__count">{active}</span>}
+          </button>
+          <button role="tab" aria-selected={tab === 'calendar'} className={tab === 'calendar' ? 'active' : ''} onClick={() => pickTab('calendar')}>
+            <LuCalendarDays /> Calendar
+          </button>
+        </ScrollTabs>
+        {tab === 'daily' && crons.length > 0 && (
           <button className={`icon-btn small icon-btn--toggle`} aria-pressed={searching} aria-expanded={searching} {...tip(searching ? 'Close search' : 'Search daily jobs')} onClick={toggleSearch}>
             {searching ? <LuX /> : <LuSearch />}
           </button>
         )}
-        <button className="icon-btn small" data-tip="New daily job" aria-label="New daily job" onClick={() => openUrl({ daily: 'new' })}>
-          <LuPlus />
-        </button>
+        {/* a new event (a dated note) on the day picked in the calendar */}
+        {tab === 'calendar' && (
+          <button className="icon-btn small" {...tip('New event')} onClick={() => openNewEvent()}>
+            <LuPlus />
+          </button>
+        )}
+        {/* the calendar in a big window of its own */}
+        {tab === 'calendar' && (
+          <button className="icon-btn small" {...tip('Full size calendar')} onClick={() => openUrl({ calendar: '1' })}>
+            <LuMaximize2 />
+          </button>
+        )}
+        {tab === 'daily' && (
+          <button className="icon-btn small" data-tip="New daily job" aria-label="New daily job" onClick={() => openUrl({ daily: 'new' })}>
+            <LuPlus />
+          </button>
+        )}
       </header>
-      {crons.length > 0 && (
+      {tab === 'calendar' && <CalendarView dayPopup />}
+      {tab === 'daily' && crons.length > 0 && (
         // folds open under the header (styles: .fold-search)
         <div ref={searchBox} className={`fold-search${searching ? ' is-open' : ''}`} inert={!searching || undefined}>
           <div>
@@ -134,26 +176,28 @@ export function CronPanel() {
           </div>
         </div>
       )}
-      <ul className="list">
-        {sorted.map((c) => (
-          <CronRow
-            key={c.id}
-            cron={c}
-            nowMin={nowMin}
-            open={openId === c.id}
-            onOpen={() => setOpenId((id) => (id === c.id ? null : c.id))}
-            agent={agents.find((a) => a.id === c.agentId)}
-            onToggle={() => updateCron(c.id, { enabled: !c.enabled })}
-            onAssign={(agentId) => updateCron(c.id, { agentId: agentId || null })}
-            onRemove={async () => {
-              if (await confirm({ title: `Delete the daily job “${c.name}”?`, message: "It stops running. Its past reports stay. This can't be undone." })) removeCron(c.id)
-            }}
-            onEdit={() => openUrl({ daily: c.id })}
-          />
-        ))}
-        {!crons.length && ready && <li className="empty">No daily jobs yet.</li>}
-        {crons.length > 0 && !sorted.length && <li className="empty">No daily jobs match.</li>}
-      </ul>
+      {tab === 'daily' && (
+        <ul className="list">
+          {sorted.map((c) => (
+            <CronRow
+              key={c.id}
+              cron={c}
+              nowMin={nowMin}
+              open={openId === c.id}
+              onOpen={() => setOpenId((id) => (id === c.id ? null : c.id))}
+              agent={agents.find((a) => a.id === c.agentId)}
+              onToggle={() => updateCron(c.id, { enabled: !c.enabled })}
+              onAssign={(agentId) => updateCron(c.id, { agentId: agentId || null })}
+              onRemove={async () => {
+                if (await confirm({ title: `Delete the daily job “${c.name}”?`, message: "It stops running. Its past reports stay. This can't be undone." })) removeCron(c.id)
+              }}
+              onEdit={() => openUrl({ daily: c.id })}
+            />
+          ))}
+          {!crons.length && ready && <li className="empty">No daily jobs yet.</li>}
+          {crons.length > 0 && !sorted.length && <li className="empty">No daily jobs match.</li>}
+        </ul>
+      )}
     </section>
   )
 }
@@ -484,7 +528,7 @@ export function TaskPanel({ noFolders = false }: { noFolders?: boolean } = {}) {
                 </span>
               ) : agent ? (
                 <span className="avatar avatar--xs" style={avatarStyle(agent.look.shirt)} data-tip={agent.name}>
-                  {agent.name[0]}
+                  <AgentFace look={agent.look} />
                 </span>
               ) : (
                 <span className="muted">—</span>

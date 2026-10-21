@@ -16,7 +16,7 @@ import { closeIdleThreads, deliverToThread, drainThreads, listThreads, onThreadT
 import { transcriptPath, unwrapPaste } from '../agents/transcripts'
 import { CLAUDE_PROJECTS_DIR } from '../fsroots'
 import { listTags } from './tags'
-import { moveFolderNotes, noteSummaries } from './notes'
+import { listNotePages, moveFolderNotes, noteSummaries } from './notes'
 import { taskStatuses } from './statuses'
 import { trackTurnOrigin } from './origin'
 import { checkFor, runGate } from './gate'
@@ -61,6 +61,7 @@ export function workState(): WorkState {
     bossMode: ((b) => (b ? { since: b.since, until: b.until } : null))(bossMode()),
     publicAccess: publicAccess(),
     notes: noteSummaries(),
+    notePages: listNotePages(),
     statuses: taskStatuses(),
     reportJob: reportJob(),
     threads: listThreads(),

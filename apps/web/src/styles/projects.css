@@ -226,7 +226,100 @@
 .fnotes__btn:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
 .fnotes__sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
 .fnotes__editor { position: relative; flex: 1; min-height: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card-2); cursor: text; }
-.fnotes__editor:focus-within { border-color: var(--hl); }
+.fnotes__editor:focus-within { border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+/* a note's pictures (ui/NoteImageView.tsx): never cropped, as wide as the text at most; picked with a click (its
+   outline right on the picture), resized by its handles, gone with Backspace */
+.fnotes__editor .note-img { display: flex; margin: 8px 0; }
+.fnotes__editor .note-img--center { justify-content: center; }
+.note-img__frame { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.note-img__frame > img { display: block; width: 100%; max-width: 100%; height: auto; object-fit: initial; border-radius: 10px; }
+/* no width of its own: its natural size, at most the text's width */
+.note-img__frame:not([style*='width']) > img { width: auto; }
+.note-img.is-picked .note-img__frame > img { outline: 2px solid var(--hl); outline-offset: 0; }
+.fnotes--view .note-img__frame > img { cursor: zoom-in; }
+.note-img__handle { position: absolute; z-index: 1; width: 12px; height: 36px; top: 50%; margin-top: -18px; border-radius: 6px; background: var(--hl); border: 2px solid var(--card); cursor: ew-resize; touch-action: none; }
+.note-img__handle--left { left: -7px; }
+.note-img__handle--right { right: -7px; }
+.note-img__handle--corner { top: auto; bottom: -7px; right: -7px; margin: 0; width: 16px; height: 16px; cursor: nwse-resize; }
+@media (pointer: coarse) { .note-img__handle { width: 16px; height: 44px; margin-top: -22px; } .note-img__handle--corner { width: 22px; height: 22px; margin: 0; } }
+/* its bar: over the top of the picture, as wide as its buttons (a small picture doesn't squeeze it: it reaches past
+   the picture's sides), from the picture's left edge (centred over a centred one); only a phone too narrow for it
+   scrolls it */
+.note-img__bar {
+  position: absolute; z-index: 2; top: 8px; left: 8px; display: flex; align-items: center; gap: 2px;
+  width: max-content; max-width: calc(100vw - 56px); overflow-x: auto; scrollbar-width: none; padding: 3px; border-radius: 10px;
+  background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); line-height: 1;
+}
+.note-img--center .note-img__bar { left: 50%; transform: translateX(-50%); }
+.note-img__bar::-webkit-scrollbar { display: none; }
+.note-img__bar > button { all: unset; box-sizing: border-box; flex: none; display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 7px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.note-img__bar > button:hover { background: var(--card-2); color: var(--text); }
+.note-img__bar > button.is-on { color: var(--hl-ink); }
+.note-img__sep { flex: none; width: 1px; height: 16px; background: var(--line); margin: 0 2px; }
+.fnotes--view :is(.note-img__handle, .note-img__bar) { display: none; }
+/* a drawing (ui/NoteDrawing.tsx): its strokes as an SVG as wide as the text, on a faint pad. A tap (or Draw) while
+   writing starts drawing: tools above it (kept in sight while it scrolls), the page doesn't scroll under the pen;
+   its bottom handle sets the height. While reading, a click opens it bigger. */
+.fnotes__editor .drawing { position: relative; display: flex; flex-direction: column; align-items: flex-start; margin: 8px 0; --draw-ink: var(--text); }
+.fnotes__editor .drawing--center { align-items: center; }
+/* its box: as wide as the text, or the % it was sized to (data-width-pct); the strokes scale with it */
+.drawing__frame { position: relative; width: 100%; max-width: 100%; }
+.drawing__pad { position: relative; border-radius: 10px; background: color-mix(in srgb, var(--card) 55%, transparent); box-shadow: inset 0 0 0 1px var(--line); line-height: 0; cursor: pointer; }
+.drawing__svg { display: block; width: 100%; height: auto; overflow: hidden; border-radius: inherit; }
+.drawing.is-picked .drawing__pad { box-shadow: inset 0 0 0 1px transparent, 0 0 0 2px color-mix(in srgb, var(--hl) 70%, transparent); }
+.drawing.is-drawing .drawing__pad { touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.drawing.is-drawing .drawing__pad[data-tool='eraser'] { cursor: cell; }
+.drawing__hint { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12.5px; line-height: 1.4; color: var(--muted); pointer-events: none; }
+.drawing__draw, .drawing__expand {
+  all: unset; box-sizing: border-box; position: absolute; top: 8px; right: 8px; z-index: 2; display: none; align-items: center; gap: 5px; height: 26px; padding: 0 10px;
+  border-radius: 999px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 4px 12px rgba(0, 0, 0, 0.18); font-size: 12px; line-height: 1; color: var(--text); cursor: pointer;
+}
+.drawing__expand { width: 28px; height: 28px; padding: 0; justify-content: center; font-size: 13px; }
+.drawing__draw > svg { color: var(--hl-ink); }
+.drawing:hover :is(.drawing__draw, .drawing__expand), .drawing.is-picked .drawing__draw { display: inline-flex; }
+@media (hover: none) { .drawing:not(:has(.drawing__hint)) :is(.drawing__draw, .drawing__expand) { display: inline-flex; } }
+.drawing__tools {
+  position: sticky; top: 6px; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; width: max-content; max-width: 100%; box-sizing: border-box;
+  margin: 0 auto 6px; padding: 3px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22); line-height: 1;
+}
+.drawing__tools > button { all: unset; box-sizing: border-box; flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; font-size: 15px; color: var(--muted); cursor: pointer; }
+.drawing__tools > button:hover:not(:disabled) { background: var(--card-2); color: var(--text); }
+.drawing__tools > button.is-on { background: var(--accent); color: var(--accent-fg); }
+.drawing__tools > button:disabled { opacity: 0.35; cursor: default; }
+.drawing__tools > button:focus-visible { outline: 2px solid var(--hl); outline-offset: -2px; }
+.drawing__tools > .drawing__colour::before { content: ''; width: 16px; height: 16px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35); }
+.drawing__tools > .drawing__colour.is-on { background: transparent; }
+.drawing__tools > .drawing__colour.is-on::before { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
+.drawing__dot { display: block; border-radius: 50%; background: currentColor; }
+.drawing__tools > .drawing__done { width: auto; display: inline-flex; gap: 4px; padding: 0 10px; margin-left: 2px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--hl); color: #1a1a1a; }
+.drawing__tools > .drawing__done:hover:not(:disabled) { background: var(--hl); color: #1a1a1a; filter: brightness(1.06); }
+.drawing__sep { flex: none; width: 1px; height: 16px; background: var(--line); margin: 0 3px; }
+.drawing__warn { flex: 1 1 100%; padding: 4px 6px 2px; font-size: 12px; color: var(--danger); }
+/* its handles, like a picture's: the sides (width), the bottom edge (height), the corner (both) */
+.drawing__resize { position: absolute; z-index: 2; box-sizing: border-box; display: none; border-radius: 6px; background: var(--hl); border: 2px solid var(--card); touch-action: none; }
+.drawing__resize--left, .drawing__resize--right { top: 50%; width: 12px; height: 36px; margin-top: -18px; cursor: ew-resize; }
+.drawing__resize--left { left: -7px; }
+.drawing__resize--right { right: -7px; }
+.drawing__resize--bottom { left: 50%; bottom: -7px; width: 36px; height: 12px; margin-left: -18px; cursor: ns-resize; }
+.drawing__resize--corner { right: -7px; bottom: -7px; width: 16px; height: 16px; cursor: nwse-resize; }
+.drawing:hover .drawing__resize, .drawing.is-picked .drawing__resize { display: block; }
+@media (pointer: coarse) {
+  .drawing__tools > button { width: 36px; height: 36px; font-size: 17px; }
+  .drawing__resize--left, .drawing__resize--right { width: 16px; height: 44px; margin-top: -22px; }
+  .drawing__resize--bottom { width: 44px; height: 16px; margin-left: -22px; bottom: -8px; }
+  .drawing__resize--corner { width: 22px; height: 22px; }
+  .drawing:hover:not(.is-picked) .drawing__resize { display: none; }
+}
+.fnotes--view .drawing__pad { cursor: zoom-in; }
+.fnotes--view .drawing__pad.is-empty { cursor: default; }
+/* bigger (a click while reading): as large as the screen allows, on the note's own colours */
+.drawing-lightbox {
+  --draw-ink: var(--text); width: min(100%, 1400px, calc((100dvh - 48px) * var(--ar, 2.5))); border-radius: 12px; background: var(--card-2); line-height: 0; cursor: default;
+}
+/* full size: over everything, a click outside closes it */
+.img-lightbox { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, 0.82); cursor: zoom-out; }
+.img-lightbox > img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; cursor: default; }
+.img-lightbox__close { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 12px; color: #fff; background: rgba(255, 255, 255, 0.12); }
 .fnotes__editor .tiptap { min-height: 100%; padding: 14px 18px 14px 34px; outline: none; font-size: 14px; line-height: 1.6; box-sizing: border-box; }
 .fnotes__editor .tiptap > * + * { margin-top: 0.5em; }
 .fnotes__editor .tiptap p { margin: 0; }
@@ -244,9 +337,9 @@
 .fnotes__editor .tiptap ul[data-type='taskList'] li > div { flex: 1; min-width: 0; }
 .fnotes__editor .tiptap ul[data-type='taskList'] li[data-checked='true'] > div { text-decoration: line-through; color: var(--muted); }
 .fnotes__editor .tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted); float: left; height: 0; pointer-events: none; }
-/* the notes' richer toolbar: font size, colours, collapsible sections */
-.fnotes__size { height: 30px; padding: 0 6px; border-radius: 7px; border: none; background: transparent; color: var(--text); font-size: 12.5px; cursor: pointer; }
-.fnotes__size:hover { background: var(--card-2); }
+/* an empty line while writing: "Type / for commands" */
+.fnotes__editor .tiptap p.is-empty:not(.is-editor-empty)::before { content: attr(data-placeholder); color: color-mix(in srgb, var(--muted) 70%, transparent); float: left; height: 0; pointer-events: none; }
+/* the notes' richer toolbar: colours, collapsible sections */
 .fnotes__swatch-wrap { position: relative; display: inline-flex; }
 .fnotes__btn.has-color { box-shadow: inset 0 -3px 0 var(--swatch); }
 .fnotes__palette { position: fixed; z-index: 1000; display: grid; grid-template-columns: repeat(5, 22px); gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2); }
@@ -254,6 +347,10 @@
 .fnotes__chip.is-on { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--text); }
 .fnotes__chip--none { background: linear-gradient(135deg, transparent 45%, var(--danger) 45% 55%, transparent 55%), var(--card-2); }
 .fnotes__editor .tiptap h3 { font-size: 1.05em; margin: 0.5em 0 0.15em; }
+/* the smaller headings: a step down each, the last one small capitals in grey */
+.fnotes__editor .tiptap h4 { font-size: 1em; margin: 0.5em 0 0.15em; }
+.fnotes__editor .tiptap h5 { font-size: 0.92em; margin: 0.45em 0 0.1em; }
+.fnotes__editor .tiptap h6 { font-size: 0.8em; margin: 0.45em 0 0.1em; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 .fnotes__editor .tiptap hr { border: none; border-top: 1px solid var(--line); margin: 1em 0; }
 .fnotes__editor .tiptap mark { border-radius: 3px; padding: 0 2px; color: #111; }
 /* collapsible sections (TipTap Details) */
@@ -272,6 +369,9 @@
 .fnotes__grip:hover { background: var(--card); color: var(--text); }
 .fnotes__grip:active { cursor: grabbing; }
 .fnotes__editor .ProseMirror-selectednode { outline: 2px solid color-mix(in srgb, var(--hl) 50%, transparent); border-radius: 6px; }
+/* a picked image shows its own outline and handles: not a second box across the line (the class goes on the node
+   view's wrapper, TipTap's .react-renderer.node-image, not on .note-img inside it) */
+.fnotes__editor :is(.node-image, .note-img, .node-drawing, .drawing).ProseMirror-selectednode { outline: none; }
 /* the toolbar wraps a whole group at a time (undo and redo stay together), a line between groups */
 .fnotes__group { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; }
 .fnotes__group + .fnotes__group { border-left: 1px solid var(--line); }
@@ -306,18 +406,19 @@
 .fmin__more[aria-expanded='true'] { background: var(--accent); color: var(--accent-fg); }
 .fmin__close:hover { background: var(--accent-soft); }
 /* phones: round buttons on the stage around the menu button (.nav-burger: right 12px, bottom 12px, 42px): Folders right
-   above it, Threads above that (ui/MobileDock.tsx FoldersFab, ui/Threads.tsx ThreadsFab); the minimized windows' one
-   left of it */
-.fmin-fab, .threads-fab, .folders-fab {
+   above it, Threads above that (ui/MobileDock.tsx FoldersFab, ui/Threads.tsx ThreadsFab); Notes left of it (NotesFab),
+   the minimized windows' one left of that */
+.fmin-fab, .threads-fab, .folders-fab, .notes-fab {
   all: unset; box-sizing: border-box; position: absolute; right: 12px; bottom: 62px; z-index: 5;
   display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; cursor: pointer; font-size: 18px; color: var(--hl-ink);
   background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); box-shadow: var(--shadow);
   animation: fmin-in .18s ease-out;
 }
 .fmin-fab[aria-expanded='true'] { background: var(--accent); color: var(--accent-fg); }
-.fmin-fab:focus-visible, .threads-fab:focus-visible, .folders-fab:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
-.fmin-fab { right: 62px; bottom: 12px; }
-.folders-fab, .threads-fab { color: var(--text); animation: none; }
+.fmin-fab:focus-visible, .threads-fab:focus-visible, .folders-fab:focus-visible, .notes-fab:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+.fmin-fab { right: 112px; bottom: 12px; }
+.notes-fab { right: 62px; bottom: 12px; }
+.folders-fab, .threads-fab, .notes-fab { color: var(--text); animation: none; }
 .threads-fab { bottom: 112px; }
 .fmin-fab__count {
   position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box; border-radius: 999px;

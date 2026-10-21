@@ -2,12 +2,12 @@ import { afterAll, expect, test } from 'bun:test'
 import { Hono } from 'hono'
 import { mkdirSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import type { OfficeTask, OwnerNote, WorkReport } from '@after-office/shared'
-import { db, folderNotesRepo, ownerNotesRepo, reportsRepo, tasksRepo } from '../db'
+import type { NotePage, OfficeTask, OwnerNote, WorkReport } from '@after-office/shared'
+import { db, folderNotesRepo, notePagesRepo, ownerNotesRepo, reportsRepo, tasksRepo } from '../db'
 import { PROJECTS_DIR } from '../fsroots'
 import { moveProjectsToFolders } from './folders'
 import { workRoutes } from '../routes/work'
-import { moveFolderNotes, noteSummaries, plainText } from './notes'
+import { listNotePages, moveFolderNotes, noteSummaries, plainText } from './notes'
 
 // The owner's notes (Docs → Notes, a folder's notes): the owner's own edits, checked like the rest of the work routes.
 // And the old projects: their tasks, reports and notes get the project's folder, then the projects are gone.
@@ -19,6 +19,7 @@ mkdirSync(join(PROJECTS_DIR, 'notes-folder'), { recursive: true })
 const FOLDER = realpathSync(join(PROJECTS_DIR, 'notes-folder'))
 afterAll(() => {
   for (const n of ownerNotesRepo.all()) ownerNotesRepo.remove(n.id)
+  for (const p of notePagesRepo.all()) notePagesRepo.remove(p.id)
   reportsRepo.remove('rep-old')
   tasksRepo.remove('task-old')
   rmSync(FOLDER, { recursive: true, force: true })
@@ -44,6 +45,59 @@ test("notes: made, changed, listed without their text, and removed", async () =>
 
   expect((await call('DELETE', `/notes/${made.id}`)).status).toBe(200)
   expect((await call('GET', `/notes/${made.id}`)).status).toBe(404)
+})
+
+test('a note on the calendar: a day, a range or a day with a time; checked, kept in the list, cleared', async () => {
+  const made = (await (await call('POST', '/notes', { title: 'Rapat', date: '2026-10-21', time: '14:00' })).json()) as OwnerNote
+  expect(made).toMatchObject({ date: '2026-10-21', time: '14:00' })
+  const put = async (body: unknown) => call('PUT', `/notes/${made.id}`, body)
+  // the summaries the dashboard's calendar reads carry it
+  expect(noteSummaries().find((n) => n.id === made.id)).toMatchObject({ date: '2026-10-21', time: '14:00' })
+
+  // bad formats, an end before the start, a time on a range: refused
+  for (const body of [{ date: '21-10-2026' }, { date: '2026-02-30' }, { time: '25:00' }, { dateEnd: '2026-10-20' }, { dateEnd: '2026-10-24', time: '09:00' }])
+    expect((await put(body)).status).toBe(400)
+
+  // a range: all day (its time goes)
+  const range = (await (await put({ dateEnd: '2026-10-24' })).json()) as OwnerNote
+  expect(range).toMatchObject({ date: '2026-10-21', dateEnd: '2026-10-24' })
+  expect(range.time).toBeUndefined()
+  // the same end day as the start: one day again
+  expect(((await (await put({ dateEnd: '2026-10-21' })).json()) as OwnerNote).dateEnd).toBeUndefined()
+  // other changes leave it alone
+  expect(((await (await put({ title: 'Rapat tim' })).json()) as OwnerNote).date).toBe('2026-10-21')
+  // no day: none of it
+  const cleared = (await (await put({ date: null })).json()) as OwnerNote
+  expect([cleared.date, cleared.dateEnd, cleared.time]).toEqual([undefined, undefined, undefined])
+  await call('DELETE', `/notes/${made.id}`)
+})
+
+test("pages: made, renamed, a note put on one; deleting one keeps its notes, on no page", async () => {
+  expect((await call('POST', '/note-pages', { name: '   ' })).status).toBe(400)
+  const work = (await (await call('POST', '/note-pages', { name: ' Kerja ' })).json()) as NotePage
+  expect(work.name).toBe('Kerja')
+  const home = (await (await call('POST', '/note-pages', { name: 'Rumah', order: 0 })).json()) as NotePage
+  // the placed one first
+  expect(listNotePages().map((p) => p.name)).toEqual(['Rumah', 'Kerja'])
+  expect(((await (await call('PUT', `/note-pages/${work.id}`, { name: 'Kantor' })).json()) as NotePage).name).toBe('Kantor')
+  expect((await call('PUT', '/note-pages/nope', { name: 'X' })).status).toBe(404)
+
+  // a note on a page (only one that exists); "" takes it off
+  expect((await call('POST', '/notes', { title: 'X', pageId: 'nope' })).status).toBe(400)
+  const n = (await (await call('POST', '/notes', { title: 'Rapat', pageId: work.id })).json()) as OwnerNote
+  expect(noteSummaries().find((x) => x.id === n.id)?.pageId).toBe(work.id)
+  expect(((await (await call('PUT', `/notes/${n.id}`, { pageId: home.id })).json()) as OwnerNote).pageId).toBe(home.id)
+  expect(((await (await call('PUT', `/notes/${n.id}`, { pageId: '' })).json()) as OwnerNote).pageId).toBeUndefined()
+
+  await call('PUT', `/notes/${n.id}`, { pageId: work.id })
+  expect(await (await call('DELETE', `/note-pages/${work.id}`)).json()).toEqual({ moved: 1 })
+  expect(notePagesRepo.get(work.id)).toBeNull()
+  const kept = ownerNotesRepo.get(n.id)!
+  expect(kept.title).toBe('Rapat')
+  expect('pageId' in kept).toBe(false)
+  expect((await call('DELETE', `/note-pages/${work.id}`)).status).toBe(404)
+  await call('DELETE', `/notes/${n.id}`)
+  await call('DELETE', `/note-pages/${home.id}`)
 })
 
 test('plain text of a note: block ends become spaces, entities decoded', () => {

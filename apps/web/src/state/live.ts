@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useActivityLive } from './activity'
 import { create } from 'zustand'
-import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, OfficeThread, PublicAccess, LiveFollowUp, LiveMode, NotifyEvent, OfficeEvent, OwnerNoteSummary, OfficeSettings, RateLimits, TaskArchivePage, TaskComment, TaskDiff, TaskStatusDef, WorkState, Workspace, GitCommit } from '@after-office/shared'
+import type { AgentEffort, AgentInfo, AutomationStatus, BossMode, FollowUpDecision, GitCommit, LiveFollowUp, LiveMode, NotePage, NotifyEvent, OfficeEvent, OfficeSettings, OfficeThread, OwnerNoteSummary, PublicAccess, RateLimits, TaskArchivePage, TaskComment, TaskDiff, TaskStatusDef, Workspace, WorkState } from '@after-office/shared'
 import { api, useAuth } from './auth'
 import { mergeServer, useDashboard, ymd } from './dashboard'
 import { applyReportJob } from './reportBulk'
@@ -32,13 +32,17 @@ interface LiveStore {
   publicAccess: PublicAccess
   /** the owner's notes (Reports → Notes), newest first, without their text */
   notes: OwnerNoteSummary[]
+  /** the pages the notes are kept on (Notes → its cards), in order */
+  notePages: NotePage[]
   /** the task statuses (board columns), in order; empty until the server sends them */
   statuses: TaskStatusDef[]
   /** the owner's threads with the manager, latest activity first (archived ones too) */
   threads: OfficeThread[]
+  /** the notes' writing helpers ("Ask Marcus" in a note): threads too, kept apart so no list of threads shows them */
+  noteThreads: OfficeThread[]
 }
 
-export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null, publicAccess: { supported: false, public: false }, notes: [], statuses: [], threads: [] }))
+export const useLive = create<LiveStore>(() => ({ connected: false, followUps: [], rateLimits: null, system: null, queued: {}, briefings: {}, archivedTasks: 0, ready: false, settings: null, automation: { channels: [], quotaPaused: null }, bossMode: null, publicAccess: { supported: false, public: false }, notes: [], notePages: [], statuses: [], threads: [], noteThreads: [] }))
 
 /** Task timelines, loaded per task when one is opened (useTaskComments) and kept current by the SSE stream. */
 export const useComments = create<{ byTask: Record<string, TaskComment[]> }>(() => ({ byTask: {} }))
@@ -63,8 +67,9 @@ function applyWork(work: Partial<WorkState>) {
   if (work.bossMode !== undefined) useLive.setState({ bossMode: work.bossMode })
   if (work.publicAccess) useLive.setState({ publicAccess: work.publicAccess })
   if (work.notes) useLive.setState({ notes: work.notes })
+  if (work.notePages) useLive.setState({ notePages: work.notePages })
   if (work.statuses) useLive.setState({ statuses: work.statuses })
-  if (work.threads) useLive.setState({ threads: work.threads })
+  if (work.threads) useLive.setState({ threads: work.threads.filter((t) => !t.noteId), noteThreads: work.threads.filter((t) => !!t.noteId) })
 }
 
 const BRIEFING_MS = 8000
@@ -76,7 +81,7 @@ function apply(e: OfficeEvent) {
       office.setLiveAgents(e.agents)
       useLive.setState({ followUps: e.followUps, rateLimits: e.rateLimits, ready: true })
       // a snapshot is the whole truth: anything it leaves out is empty (never keep demo samples in live mode)
-      applyWork({ ...e.work, reports: e.work.reports ?? [], queued: e.work.queued ?? {}, notes: e.work.notes ?? [] })
+      applyWork({ ...e.work, reports: e.work.reports ?? [], queued: e.work.queued ?? {}, notes: e.work.notes ?? [], notePages: e.work.notePages ?? [] })
       break
     case 'work':
       applyWork(e.work)
@@ -299,6 +304,8 @@ export const CHUNK_BYTES = 8 * 1024 * 1024
 export const liveApi = {
   setPinned: (id: string, pinned: boolean) => call(`/api/agents/${id}/pin`, { pinned }, 'PUT'),
   setFigure: (id: string, figure: 'man' | 'woman') => call(`/api/agents/${id}/figure`, { figure }, 'PUT'),
+  /** its avatar's hair (ui/AgentFace.tsx), or null for the one drawn from its look */
+  setFace: (id: string, face: string | null) => call(`/api/agents/${id}/face`, { face }, 'PUT'),
   /** a new random look for its character (hair, hat, glasses…), same figure */
   shuffleStyle: (id: string) => call(`/api/agents/${id}/style`, {}) as Promise<{ style: number }>,
   createAgent: (a: { name: string; cwd: string; tmuxSession?: string; model?: string; permissionMode?: LiveMode; role?: string; profile?: unknown; kind?: 'worker' | 'manager'; figure?: 'man' | 'woman'; rules?: string[] }) =>
@@ -404,6 +411,9 @@ export const liveApi = {
   unsendQueued: (id: string, qid: string) => call(`/api/threads/${id}/queue/${qid}`, undefined, 'DELETE'),
   archiveThread: (id: string, archived: boolean) => call(`/api/threads/${id}/${archived ? 'archive' : 'unarchive'}`, {}) as Promise<OfficeThread>,
   deleteThread: (id: string) => call(`/api/threads/${id}`, undefined, 'DELETE'),
+  /** "Ask Marcus" in a note: its helper thread is made on the first message (server: work/noteAssist.ts) */
+  askNote: (noteId: string, b: { text: string; uploads?: string[] }) =>
+    call(`/api/notes/${encodeURIComponent(noteId)}/assist`, b) as Promise<{ threadId: string; sessionKey: string; queued: boolean }>,
   reviseTask: (taskId: string, feedback: string) => call(`/api/tasks/${taskId}/revise`, { feedback }) as Promise<{ result: 'sent' | 'queued' | 'parallel' }>,
   /** a stopped task taken up again by its agent, where it stopped */
   resumeTask: (taskId: string) => call(`/api/tasks/${taskId}/resume`, {}) as Promise<{ result: 'sent' | 'queued' }>,

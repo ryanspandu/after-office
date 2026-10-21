@@ -147,7 +147,16 @@ function ThreadRow({ t, now, sub, kids, kidsUnread = 0, folded, onFold, parentTi
   return (
     <div className={`report-row thread-row${unread ? ' report-row--unread' : ''}${sub ? ' thread-row--sub' : ''}${kids ? ' thread-row--parent' : ''}`}>
       {!!kids && (
-        <button className={`thread-row__fold${folded ? ' is-folded' : ''}`} onClick={onFold} aria-expanded={!folded} {...tip(folded ? `Show its ${kids} sub-thread${kids === 1 ? '' : 's'}` : 'Hide its sub-threads')}>
+        <button
+          className={`thread-row__fold${folded ? ' is-folded' : ''}`}
+          onClick={onFold}
+          aria-expanded={!folded}
+          aria-label={folded ? `Show its ${kids} sub-thread${kids === 1 ? '' : 's'}` : 'Hide its sub-threads'}
+          // a tap on it is only this: not the start of a drag (the list's order), and on phones no hold-for-tooltip
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          {...(phone ? {} : tip(folded ? `Show its ${kids} sub-thread${kids === 1 ? '' : 's'}` : 'Hide its sub-threads'))}
+        >
           <LuChevronDown />
         </button>
       )}
@@ -329,16 +338,20 @@ function ThreadList({ filter, q = '' }: { filter: Filter; q?: string }) {
             return (
               <Draggable key={t.id} id={t.id} disabled={!tree} className="thread-group">
                 <ThreadRow t={t} now={now} kids={kids.length} kidsUnread={kids.reduce((n, k) => n + (k.unread ?? 0), 0)} folded={isFolded} onFold={() => fold(t.id)} parentTitle={tree ? undefined : titleOf(t.parentId)} />
-                {!isFolded && kids.length > 0 && (
-                  <SortableContext items={kids.map((k) => k.id)} strategy={verticalListSortingStrategy}>
-                    <ul className="thread-group__kids">
-                      {kids.map((k) => (
-                        <Draggable key={k.id} id={k.id} disabled={false} className="thread-group__kid">
-                          <ThreadRow t={k} now={now} sub />
-                        </Draggable>
-                      ))}
-                    </ul>
-                  </SortableContext>
+                {/* kept while folded, so folding and unfolding slide (CSS grid rows); folded, they can't be dragged or
+                    dropped on, and the keyboard skips them */}
+                {kids.length > 0 && (
+                  <div className={`thread-group__fold${isFolded ? ' is-folded' : ''}`} inert={isFolded || undefined}>
+                    <SortableContext items={isFolded ? [] : kids.map((k) => k.id)} strategy={verticalListSortingStrategy}>
+                      <ul className="thread-group__kids">
+                        {kids.map((k) => (
+                          <Draggable key={k.id} id={k.id} disabled={isFolded} className="thread-group__kid">
+                            <ThreadRow t={k} now={now} sub />
+                          </Draggable>
+                        ))}
+                      </ul>
+                    </SortableContext>
+                  </div>
                 )}
               </Draggable>
             )

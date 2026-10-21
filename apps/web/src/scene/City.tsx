@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { AdditiveBlending, BoxGeometry, DoubleSide, BufferGeometry, Float32BufferAttribute, CanvasTexture, CircleGeometry, Color, MathUtils, MeshBasicMaterial, MeshToonMaterial, SRGBColorSpace, Frustum, Matrix4, type Camera, type Group, type PointLight, type Material, type Mesh, type Vector3 } from 'three'
 import { env, lampBulb, windowGlass } from './DayNight'
@@ -9,7 +9,8 @@ import { StaticBatch } from './StaticBatch'
 import poplinkLogo from '../assets/brands/poplink.png'
 import orenjusLogo from '../assets/brands/orenjus.svg'
 import driftlessLogo from '../assets/brands/driftless.svg'
-import { setSeats, type Seat } from './outings'
+import { setSeats, townView, type Seat } from './outings'
+import { CITY_HIDE, CITY_SHOW } from './zoom'
 import { setStreets, Traffic, type Streets } from './Traffic'
 import { toonRamp } from './toon'
 
@@ -1555,7 +1556,14 @@ export function City({ layout }: { layout: Layout }) {
   }, [X0, X1, Z0, Z1, xRoads, zRoads, L, R, lot.minX, lot.maxX])
 
   // lit windows, signs and shop lights at night; the town faded while the view is on the office
+  // built (once) and shown only from a zoom out: at first just the office, its car park and the cars
+  const [built, setBuilt] = useState(false)
+  const root = useRef<Group>(null)
   useFrame(({ camera }, dt) => {
+    const shown = camera.zoom < (townView.shown ? CITY_HIDE : CITY_SHOW)
+    if (shown !== townView.shown) townView.shown = shown
+    if (shown && !built) setBuilt(true)
+    if (root.current && root.current.visible !== shown) root.current.visible = shown
     const target = MathUtils.lerp(1, FADED, MathUtils.clamp((camera.zoom - TOWN_ZOOM) / (FOCUS_ZOOM - TOWN_ZOOM), 0, 1))
     fade.now += (target - fade.now) * (1 - Math.exp(-8 * Math.min(dt, 0.05)))
     if (Math.abs(target - fade.now) < 0.002) fade.now = target
@@ -1593,40 +1601,9 @@ export function City({ layout }: { layout: Layout }) {
   const roadsX = [zRoads.b2, zRoads.b1, zRoads.f2]
   const roadsZ = [xRoads.l2, xRoads.l1, xRoads.r1, xRoads.r2]
   return (
-    <group>
-      <StaticBatch version={v}>
-        {/* the ground: paving everywhere, under the roads and blocks */}
-        <Box size={[X1 - X0, 0.4, Z1 - Z0]} position={[(X0 + X1) / 2, -0.23, (Z0 + Z1) / 2]} color={PAVING} noShadow />
-        {roadsX.map(([z0, z1]) => (
-          <Road key={`x${z0}`} x0={X0} x1={X1} z0={z0} z1={z1} along="x" />
-        ))}
-        <Road x0={X0} x1={lot.minX} z0={zRoads.f1[0]} z1={zRoads.f1[1]} along="x" />
-        <Road x0={lot.maxX} x1={X1} z0={zRoads.f1[0]} z1={zRoads.f1[1]} along="x" />
-        {roadsZ.map(([x0, x1]) => (
-          <Road key={`z${x0}`} x0={x0} x1={x1} z0={Z0} z1={Z1} along="z" />
-        ))}
-        {/* the office's crossroads: zebra stripes over every arm, a traffic light on the outer corners */}
-        {[xRoads.l1, xRoads.r1].flatMap(([x0, x1], k) => [
-          <Crossing key={`cb${k}`} x={(x0 + x1) / 2} z={zRoads.b1[0] - 1.4} width={x1 - x0} along="z" />,
-          <Crossing key={`cf${k}`} x={(x0 + x1) / 2} z={zRoads.f1[1] + 1.4} width={x1 - x0} along="z" />,
-          <Crossing key={`cs${k}`} x={k ? x1 + 1.4 : x0 - 1.4} z={(zRoads.f1[0] + zRoads.f1[1]) / 2} width={zRoads.f1[1] - zRoads.f1[0]} along="x" />,
-          <Crossing key={`cz${k}`} x={k ? x1 + 1.4 : x0 - 1.4} z={(zRoads.b1[0] + zRoads.b1[1]) / 2} width={ROAD_W} along="x" />,
-        ])}
-        {town.mart && (
-          <group position={[town.mart.x, 0, town.mart.z]}>
-            <Minimart w={town.mart.w} d={town.mart.d} />
-          </group>
-        )}
-        <group position={[town.cafe.x, 0, town.cafe.z]}>
-          <Cafe w={town.cafe.w} d={town.cafe.d} />
-        </group>
-        {/* the coffee shop and the warung on the left road, facing it (+x: towards the usual view) */}
-        <group position={[shopX, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
-          <CoffeeShop x={rows.o[1] - 6} z={3} />
-          <WarungPecelLele x={rows.o[0] + 6} z={2.1} />
-        </group>
-      </StaticBatch>
-      {/* the café's terrace and the coffee shop's tables: lit for real at night */}
+    <>
+      {/* the café's terrace and the coffee shop's tables: lit for real at night, the town built or not (a light that
+          comes and goes would rebuild every material's shader) */}
       {cfg.fixedLights !== 'none' && (
         <group>
           {/* one over the middle of the café's terrace, reaching most of it (each real light costs every pixel) */}
@@ -1634,64 +1611,103 @@ export function City({ layout }: { layout: Layout }) {
           <NightLight position={[shopX + 2.6, 3, town.rows.o[1] - 6]} power={6} distance={8} />
         </group>
       )}
-      {/* a few cars and motorbikes about town (not on the office's own stretch of the front road: the agents' way in) */}
-      <Traffic net={streets} cars={6} motos={5} />
-      {/* the street furniture: trees and lamp posts in front of the office fade with the buildings there */}
-      <Fade>
-        {/* painted shadows only where the sun casts none (the low render tier): real ones fall on the buildings too */}
-        {!cfg.shadowMap && <GroundShadows buildings={town.front} />}
-        <StaticBatch version={v}>
-          {town.frontTrees.map(([x, z], i) => (
-            <StreetTree key={`t${i}`} x={x} z={z} seed={i} />
-          ))}
-          {town.frontLamps.map(([x, z, rot], i) => (
-            <StreetLamp key={`l${i}`} x={x} z={z} rotY={rot} />
-          ))}
-          {town.front.map((b, i) => (
-            <Building key={`w${i}`} b={b} />
-          ))}
-        </StaticBatch>
-      </Fade>
-      {!cfg.shadowMap && <GroundShadows buildings={[...town.behind, ...town.left, ...town.aside, { ...town.mall, floors: 5, color: '', roof: '', seed: 0 }, { ...town.plaza, floors: 6, color: '', roof: '', seed: 0 }]} />}
-      <StaticBatch version={v}>
-        {town.otherTrees.map(([x, z], i) => (
-          <StreetTree key={`t${i}`} x={x} z={z} seed={i + 1000} />
-        ))}
-        {town.otherLamps.map(([x, z, rot], i) => (
-          <StreetLamp key={`l${i}`} x={x} z={z} rotY={rot} />
-        ))}
-        <TrafficLight x={xRoads.l1[0] - 0.7} z={zRoads.b1[0] - 0.7} rotY={Math.PI / 2} lit={2} />
-        <TrafficLight x={xRoads.r1[1] + 0.7} z={zRoads.b1[0] - 0.7} rotY={-Math.PI / 2} lit={0} />
-        <TrafficLight x={xRoads.l1[0] - 0.7} z={zRoads.f1[1] + 0.7} rotY={Math.PI / 2} lit={0} />
-        <TrafficLight x={xRoads.r1[1] + 0.7} z={zRoads.f1[1] + 0.7} rotY={-Math.PI / 2} lit={2} />
-        {town.aside.map((b, i) => (
-          <Building key={`w${i}`} b={b} />
-        ))}
-      </StaticBatch>
-      {/* the tall sides: cut away while the view looks at the office through them (from behind); seen from the front
-          they hide nothing and stay solid */}
-      <Side inward={[0, 1]} version={v}>
-        {town.behind.map((b, i) => (
-          <Building key={`b${i}`} b={b} />
-        ))}
-        <group position={[town.mall.x, 0, town.mall.z]}>
-          <Mall w={town.mall.w} d={town.mall.d} />
-        </group>
-        <group position={[town.plaza.x, 0, town.plaza.z]}>
-          <Mall w={town.plaza.w} d={town.plaza.d} name="AFTER PLAZA" H={16} first={2} />
-        </group>
-        <VideoScreen w={Math.min(town.near.w - 1.2, 9.5)} position={[town.near.x, town.near.floors * FLOOR * 0.66, town.near.z + town.near.d / 2 + 0.2]} />
-      </Side>
-      <Side inward={[1, 0]} version={v}>
-        {town.left.map((b, i) => (
-          <Building key={`l${i}`} b={b} />
-        ))}
-        <VideoScreen
-          w={Math.min(town.leftScreen.w - 1.2, 7)}
-          offset={9}
-          position={[town.leftScreen.x, town.leftScreen.floors * FLOOR * 0.62, town.leftScreen.z + town.leftScreen.d / 2 + 0.2]}
-        />
-      </Side>
-    </group>
+      {/* the town itself: built the first time the view zooms out to it, hidden again close in (scene/zoom.ts) */}
+      <group ref={root} visible={false}>
+        {built && (
+          <>
+            <StaticBatch version={v}>
+              {/* the ground: paving everywhere, under the roads and blocks */}
+              <Box size={[X1 - X0, 0.4, Z1 - Z0]} position={[(X0 + X1) / 2, -0.23, (Z0 + Z1) / 2]} color={PAVING} noShadow />
+              {roadsX.map(([z0, z1]) => (
+                <Road key={`x${z0}`} x0={X0} x1={X1} z0={z0} z1={z1} along="x" />
+              ))}
+              <Road x0={X0} x1={lot.minX} z0={zRoads.f1[0]} z1={zRoads.f1[1]} along="x" />
+              <Road x0={lot.maxX} x1={X1} z0={zRoads.f1[0]} z1={zRoads.f1[1]} along="x" />
+              {roadsZ.map(([x0, x1]) => (
+                <Road key={`z${x0}`} x0={x0} x1={x1} z0={Z0} z1={Z1} along="z" />
+              ))}
+              {/* the office's crossroads: zebra stripes over every arm, a traffic light on the outer corners */}
+              {[xRoads.l1, xRoads.r1].flatMap(([x0, x1], k) => [
+                <Crossing key={`cb${k}`} x={(x0 + x1) / 2} z={zRoads.b1[0] - 1.4} width={x1 - x0} along="z" />,
+                <Crossing key={`cf${k}`} x={(x0 + x1) / 2} z={zRoads.f1[1] + 1.4} width={x1 - x0} along="z" />,
+                <Crossing key={`cs${k}`} x={k ? x1 + 1.4 : x0 - 1.4} z={(zRoads.f1[0] + zRoads.f1[1]) / 2} width={zRoads.f1[1] - zRoads.f1[0]} along="x" />,
+                <Crossing key={`cz${k}`} x={k ? x1 + 1.4 : x0 - 1.4} z={(zRoads.b1[0] + zRoads.b1[1]) / 2} width={ROAD_W} along="x" />,
+              ])}
+              {town.mart && (
+                <group position={[town.mart.x, 0, town.mart.z]}>
+                  <Minimart w={town.mart.w} d={town.mart.d} />
+                </group>
+              )}
+              <group position={[town.cafe.x, 0, town.cafe.z]}>
+                <Cafe w={town.cafe.w} d={town.cafe.d} />
+              </group>
+              {/* the coffee shop and the warung on the left road, facing it (+x: towards the usual view) */}
+              <group position={[shopX, 0, 0]} rotation={[0, -Math.PI / 2, 0]}>
+                <CoffeeShop x={rows.o[1] - 6} z={3} />
+                <WarungPecelLele x={rows.o[0] + 6} z={2.1} />
+              </group>
+            </StaticBatch>
+            {/* a few cars and motorbikes about town (not on the office's own stretch of the front road: the agents' way in) */}
+            <Traffic net={streets} cars={6} motos={5} />
+            {/* the street furniture: trees and lamp posts in front of the office fade with the buildings there */}
+            <Fade>
+              {/* painted shadows only where the sun casts none (the low render tier): real ones fall on the buildings too */}
+              {!cfg.shadowMap && <GroundShadows buildings={town.front} />}
+              <StaticBatch version={v}>
+                {town.frontTrees.map(([x, z], i) => (
+                  <StreetTree key={`t${i}`} x={x} z={z} seed={i} />
+                ))}
+                {town.frontLamps.map(([x, z, rot], i) => (
+                  <StreetLamp key={`l${i}`} x={x} z={z} rotY={rot} />
+                ))}
+                {town.front.map((b, i) => (
+                  <Building key={`w${i}`} b={b} />
+                ))}
+              </StaticBatch>
+            </Fade>
+            {!cfg.shadowMap && <GroundShadows buildings={[...town.behind, ...town.left, ...town.aside, { ...town.mall, floors: 5, color: '', roof: '', seed: 0 }, { ...town.plaza, floors: 6, color: '', roof: '', seed: 0 }]} />}
+            <StaticBatch version={v}>
+              {town.otherTrees.map(([x, z], i) => (
+                <StreetTree key={`t${i}`} x={x} z={z} seed={i + 1000} />
+              ))}
+              {town.otherLamps.map(([x, z, rot], i) => (
+                <StreetLamp key={`l${i}`} x={x} z={z} rotY={rot} />
+              ))}
+              <TrafficLight x={xRoads.l1[0] - 0.7} z={zRoads.b1[0] - 0.7} rotY={Math.PI / 2} lit={2} />
+              <TrafficLight x={xRoads.r1[1] + 0.7} z={zRoads.b1[0] - 0.7} rotY={-Math.PI / 2} lit={0} />
+              <TrafficLight x={xRoads.l1[0] - 0.7} z={zRoads.f1[1] + 0.7} rotY={Math.PI / 2} lit={0} />
+              <TrafficLight x={xRoads.r1[1] + 0.7} z={zRoads.f1[1] + 0.7} rotY={-Math.PI / 2} lit={2} />
+              {town.aside.map((b, i) => (
+                <Building key={`w${i}`} b={b} />
+              ))}
+            </StaticBatch>
+            {/* the tall sides: cut away while the view looks at the office through them (from behind); seen from the front
+                they hide nothing and stay solid */}
+            <Side inward={[0, 1]} version={v}>
+              {town.behind.map((b, i) => (
+                <Building key={`b${i}`} b={b} />
+              ))}
+              <group position={[town.mall.x, 0, town.mall.z]}>
+                <Mall w={town.mall.w} d={town.mall.d} />
+              </group>
+              <group position={[town.plaza.x, 0, town.plaza.z]}>
+                <Mall w={town.plaza.w} d={town.plaza.d} name="AFTER PLAZA" H={16} first={2} />
+              </group>
+              <VideoScreen w={Math.min(town.near.w - 1.2, 9.5)} position={[town.near.x, town.near.floors * FLOOR * 0.66, town.near.z + town.near.d / 2 + 0.2]} />
+            </Side>
+            <Side inward={[1, 0]} version={v}>
+              {town.left.map((b, i) => (
+                <Building key={`l${i}`} b={b} />
+              ))}
+              <VideoScreen
+                w={Math.min(town.leftScreen.w - 1.2, 7)}
+                offset={9}
+                position={[town.leftScreen.x, town.leftScreen.floors * FLOOR * 0.62, town.leftScreen.z + town.leftScreen.d / 2 + 0.2]}
+              />
+            </Side>
+          </>
+        )}
+      </group>
+    </>
   )
 }

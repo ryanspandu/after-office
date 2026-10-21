@@ -64,6 +64,8 @@ export interface AgentInfo {
   kind?: AgentKind
   /** its character in the office; unset: the dashboard picks one per desk */
   figure?: AgentFigure
+  /** its avatar's hair, picked by the owner ("variant01"…"variant63"); unset: drawn from its look */
+  face?: string
   /** its character's look: the dashboard draws hair, hat, glasses… from this number (random for each new agent) */
   style?: number
   /** thinking effort it runs with; unset: Claude Code's default */
@@ -270,9 +272,27 @@ export interface OwnerNoteSummary {
   author?: string
   /** the agent who changed it last (unset: the owner) */
   editedBy?: string
+  /** the page it's on (NotePage id; unset: no page) */
+  pageId?: string
+  /** its day on the calendar, "YYYY-MM-DD" in the office timezone (unset: none) */
+  date?: string
+  /** a range: its last day ("YYYY-MM-DD", after `date`); unset: one day */
+  dateEnd?: string
+  /** "HH:MM" (office time), only on a single day; unset: all day */
+  time?: string
   createdAt: number
   updatedAt: number
 }
+/** A page of the owner's notes (Notes → its cards): a notebook a note can be on. One level, no pages in pages. */
+export interface NotePage {
+  id: string
+  name: string
+  /** its place among the pages (lower first); unset: by when it was made, after the placed ones */
+  order?: number
+  createdAt: number
+  updatedAt: number
+}
+
 export interface OwnerNote extends Omit<OwnerNoteSummary, 'excerpt'> {
   /** TipTap's HTML */
   html: string
@@ -298,6 +318,8 @@ export interface WorkState {
   publicAccess: PublicAccess
   /** the owner's notes, newest first (without their text: GET /api/notes/:id) */
   notes: OwnerNoteSummary[]
+  /** the pages the notes are kept on, in their order */
+  notePages: NotePage[]
   /** the task statuses, in the board's order: the four built-in ones (renamed, recoloured) and the owner's own */
   statuses: TaskStatusDef[]
   /** Read / Unread / Delete on many reports, running on the server (every device shows it), or null */
@@ -338,6 +360,8 @@ export interface OfficeThread {
   /** the owner's messages waiting for the manager's turn to end (oldest first); they go in by themselves */
   queued?: { id: string; text: string; at: number; heldAt?: number }[]
   archivedAt?: number
+  /** a note's writing helper ("Ask Marcus" in a note): hidden from the owner's threads, one per note */
+  noteId?: string
 }
 
 /** An action on many reports at once (Reports → pick → Read / Unread / Delete), run by the server in steps. */
@@ -908,3 +932,5 @@ export interface ActivityPage {
   /** pass as `before` for the next (older) page; null when there's no more */
   next: number | null
 }
+
+export { CALLOUT_EMOJIS, htmlToMarkdown, markdownToHtml } from './noteText'

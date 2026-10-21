@@ -1,5 +1,5 @@
 import type { OfficeTask, OfficeThread } from '@after-office/shared'
-import { agentsRepo, sideSessionsRepo, tasksRepo, threadQueueRepo, threadsRepo } from '../db'
+import { agentsRepo, ownerNotesRepo, sideSessionsRepo, tasksRepo, threadQueueRepo, threadsRepo } from '../db'
 import { AgentError } from '../agents/errors'
 import { closeSideSession, compactSession, forgetSideSession, openSideSession, renameSideSession, reopenSideSession, sendChat, sendPrompt } from '../agents/manager'
 import { sideRuntimeOf } from '../agents/registry'
@@ -67,7 +67,7 @@ export function parentFor(id: string | undefined) {
   return p.parentId ? getThread(p.parentId) : p
 }
 
-export async function createThread(input: { title: unknown; folder?: string; tags?: string[]; parentId?: string }) {
+export async function createThread(input: { title: unknown; folder?: string; tags?: string[]; parentId?: string; noteId?: string }) {
   const manager = agentsRepo.manager()
   if (!manager) throw new AgentError('Threads are led by the manager: add one first', 409)
   const title = cleanTitle(input.title)
@@ -86,6 +86,7 @@ export async function createThread(input: { title: unknown; folder?: string; tag
     ...(parent ? { parentId: parent.id } : {}),
     ...(folder ? { folder } : {}),
     ...(tags?.length ? { tags } : {}),
+    ...(input.noteId ? { noteId: input.noteId } : {}),
     createdAt: now,
     lastActivityAt: now,
   }
@@ -132,6 +133,31 @@ export function threadContext(t: OfficeThread) {
   ]
     .filter(Boolean)
     .join('\n')
+}
+
+/**
+ * A note's writing helper (work/noteAssist.ts): its block instead of a thread's. One paragraph (no blank line in it):
+ * the dashboard folds it away from the owner's words.
+ */
+export function noteHelperContext(t: OfficeThread) {
+  const title = (t.noteId ? ownerNotesRepo.get(t.noteId)?.title.trim() : '') || 'Untitled'
+  return [
+    `[Note helper: "${title}"] The owner is writing one of their notes in the dashboard and wants help with the writing. Answer in chat.`,
+    'Put any text meant for the note in a fenced block that starts with ```note (Markdown); the owner inserts it with a button.',
+    "Don't edit or create notes with tools and don't delegate unless the owner asks.",
+  ].join('\n')
+}
+
+/** Where the office's part of a message ends (its context block, a note's text): the owner's own words come after. */
+export function officeHeadEnd(text: string) {
+  if (/^\[(Note helper|The note now)/.test(text)) {
+    const note = text.indexOf('NOTE>>>')
+    const end = text.indexOf('\n\n', note === -1 ? 0 : note)
+    return end === -1 ? 0 : end + 2
+  }
+  if (!text.startsWith('[Thread: ')) return 0
+  const end = text.indexOf('\n\n')
+  return end === -1 ? 0 : end + 2
 }
 
 /** What a sub-thread's session is told about the thread it's part of: its topic, place, latest word and work. */
@@ -185,11 +211,12 @@ export function ensureOpen(t: OfficeThread): Promise<void> {
  * when the session can't take it now: closed (it opens meanwhile), starting up, compacting, a question or menu open,
  * or messages already waiting.
  */
-export async function sendToThread(id: string, text: string): Promise<'sent' | 'queued'> {
+export async function sendToThread(id: string, text: string, before?: string): Promise<'sent' | 'queued'> {
   const t = getThread(id)
   if (t.archivedAt) save({ ...t, archivedAt: undefined })
   if (!sideSessionsRepo.get(t.managerId, t.sessionKey)) throw new AgentError("This thread's session is gone", 409)
-  const message = t.started ? text : `${threadContext(t)}\n\n${text}`
+  // the context block on the first message; `before`: what the office adds ahead of the owner's words (a note's text)
+  const message = [t.started ? null : t.noteId ? noteHelperContext(t) : threadContext(t), before, text].filter(Boolean).join('\n\n')
   // its session isn't open (closed when idle, or a reboot): the message waits in the queue (editable there, never
   // lost) while the session opens in the background, and goes in once it's up. The owner isn't kept waiting for it
   if (!(await isOpen(t))) {
@@ -439,8 +466,7 @@ export function editQueued(threadId: string, id: string, words: string) {
   const q = queuedItem(threadId, id)
   const clean = words.trim()
   if (!clean) throw new AgentError('Write something, or take the message back', 400)
-  const ctxEnd = q.text.startsWith('[Thread: ') ? q.text.indexOf('\n\n') : -1
-  const head = ctxEnd === -1 ? '' : q.text.slice(0, ctxEnd + 2)
+  const head = q.text.slice(0, officeHeadEnd(q.text))
   const filesAt = q.text.lastIndexOf('[Attached files]')
   const tail = filesAt === -1 || filesAt < head.length ? '' : `\n\n${q.text.slice(filesAt)}`
   threadQueueRepo.setText(id, `${head}${clean.slice(0, 50_000)}${tail}`)

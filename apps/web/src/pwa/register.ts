@@ -6,6 +6,17 @@ import { create } from 'zustand'
 
 export const useAppUpdate = create<{ ready: boolean; apply: () => void }>(() => ({ ready: false, apply: () => {} }))
 
+/**
+ * Set when this tab asked the waiting worker to take over (the user picked "Reload"/"Update"). Only then does the
+ * worker taking over reload the page: the very first install (clients.claim) or another tab picking "Update" also
+ * fire controllerchange here, and those must never refresh this tab by themselves.
+ */
+let updateAsked = false
+export const askUpdate = (worker: ServiceWorker) => {
+  updateAsked = true
+  worker.postMessage({ type: 'SKIP_WAITING' })
+}
+
 /** while the app is shown: look for a new version this often */
 const UPDATE_EVERY_MS = 5 * 60_000
 /** coming back to the app: at most this often */
@@ -25,7 +36,7 @@ export function registerServiceWorker() {
     const offer = (worker: ServiceWorker) =>
       useAppUpdate.setState({
         ready: true,
-        apply: () => worker.postMessage({ type: 'SKIP_WAITING' }),
+        apply: () => askUpdate(worker),
       })
 
     // a newer worker already waiting (e.g. installed while this tab was closed)
@@ -38,10 +49,18 @@ export function registerServiceWorker() {
       })
     })
 
-    // the new worker took over: load the new version once
+    // the new worker took over because this tab asked for it: load the new version once. Taken over for any other
+    // reason (first install, another tab updated): stay on this page; the next natural load gets the new version.
     let reloading = false
+    let controlled = !!navigator.serviceWorker.controller
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (reloading) return
+      if (!updateAsked) {
+        // another tab took the update: this one still runs the old code, so the button offers a plain reload
+        if (controlled) useAppUpdate.setState({ ready: true, apply: () => window.location.reload() })
+        controlled = true
+        return
+      }
       reloading = true
       window.location.reload()
     })

@@ -34,8 +34,9 @@ import { FocusCard, ViewReset } from './ui/FocusCard'
 import { BossModeBadge } from './ui/BossMode'
 import { PublicAccessBadge } from './ui/PublicAccess'
 import { AppReload } from './ui/AppReload'
-import { FoldersFab, MobileDock } from './ui/MobileDock'
+import { CalendarFab, FoldersFab, MobileDock, NotesFab } from './ui/MobileDock'
 import { StageDock } from './ui/StageDock'
+import { ZoomBadge } from './ui/ZoomBadge'
 
 export function App() {
   useLiveSync()
@@ -70,6 +71,7 @@ export function App() {
       <Office />
       <LabelLayer />
       <RenderSwitch />
+      <ZoomBadge />
       <ViewReset />
       <AppReload />
       <FocusCard />
@@ -77,7 +79,9 @@ export function App() {
       {/* phones: Boss mode and Public access float at the stage's top left (in the navbar they'd push it onto more lines) */}
       {/* phones: threads, a round button above the menu button */}
       {mobile && <FoldersFab />}
+      {mobile && <NotesFab />}
       {mobile && <ThreadsFab />}
+      {mobile && <CalendarFab />}
       {mobile && (
         <div className="stage-badges">
           <BossModeBadge compact />

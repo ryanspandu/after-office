@@ -1,0 +1,200 @@
+/* ── the Daily card's Calendar tab (ui/CalendarView.tsx); the phones' Calendar button on the stage ── */
+/* the Daily tab's count of active jobs (it used to be "N active" in the header) */
+/* the Daily | Calendar tabs: as wide as their two tabs, not the header's whole width (its buttons stay at the right) */
+.scroll-tabs:has(> .daily-tabs) { flex: 0 1 auto; margin-right: auto; }
+.scroll-tabs__row.daily-tabs { flex: 0 1 auto; }
+.dock-sheet .scroll-tabs__row.daily-tabs button { flex: 0 0 auto; }
+.daily-tabs__count { margin-left: 1px; padding: 0 5px; border-radius: 999px; font-size: 10.5px; line-height: 15px; font-weight: 600; background: var(--card); color: var(--muted); }
+.cal { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; overflow-x: hidden; container-type: inline-size; }
+.cal__layout { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cal__pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* the month bar: room from the card's edges, a line of air above the grid */
+.cal__bar { display: flex; align-items: center; gap: 4px; flex: none; padding: 4px 2px 6px; border-bottom: 1px solid var(--line); }
+.cal__grid { padding: 0 2px; }
+/* the month's name opens the month picker */
+.cal__month {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0; padding: 3px 8px; border: 1px solid transparent; border-radius: 999px; background: transparent;
+  font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal__month svg { flex: none; font-size: 12px; color: var(--muted); }
+.cal__month:hover:not(:disabled), .cal__month[aria-expanded='true'] { border-color: var(--line); background: var(--accent-soft); }
+.cal__bar > button.small:not(.icon-btn) { padding: 2px 9px; font-size: 11.5px; }
+/* seven columns that share whatever width there is (the narrow column's card too) */
+.cal__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; flex: none; }
+.cal__wd { padding: 1px 0 3px; font-size: 10.5px; color: var(--muted); text-align: center; }
+.cal__day {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; min-width: 0; min-height: 30px;
+  padding: 3px 0 4px; border-radius: 8px; border: 1px solid transparent; background: transparent; font-size: 12px; font-weight: 500;
+}
+.cal__day:hover:not(:disabled) { border-color: var(--line); background: var(--accent-soft); }
+.cal__day--blank { min-height: 0; }
+.cal__num { line-height: 15px; font-variant-numeric: tabular-nums; }
+.cal__day.is-past .cal__num { color: var(--muted); }
+.cal__day.is-today .cal__num { color: var(--hl-ink); font-weight: 700; }
+.cal__day.is-picked, .cal__day.is-picked:hover:not(:disabled) { background: var(--hl-soft); border-color: var(--hl); }
+.cal__dots { display: flex; align-items: center; justify-content: center; gap: 2px; height: 6px; }
+.cal__dot { width: 5px; height: 5px; border-radius: 50%; flex: none; }
+.cal__dot--task { background: var(--hl); }
+.cal__dot--task.is-overdue { background: var(--danger); }
+.cal__dot--task.is-done { background: var(--muted); opacity: 0.5; }
+.cal__dot--daily { background: var(--hl-2); }
+.cal__dot--note { background: var(--working); }
+.cal__dot--other { background: var(--muted); opacity: 0.55; }
+.cal__count { display: none; margin-left: 2px; font-size: 10px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* wider (the dock sheets, a wide column): taller days, and how many things each one has */
+@container (min-width: 340px) {
+  .cal__day { min-height: 40px; padding-top: 5px; gap: 4px; font-size: 12.5px; }
+  .cal__count { display: inline; }
+}
+/* the picked day's list */
+.cal__agenda { display: flex; flex-direction: column; gap: 2px; padding-top: 8px; border-top: 1px solid var(--line); }
+.cal__agenda-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; padding: 0 2px 2px; }
+.cal__agenda .empty { padding: 10px 4px; font-size: 12px; margin: 0; }
+.cal__agenda .cal__add-link { display: inline; padding: 0; font-size: 12px; color: var(--hl-ink); }
+.cal__agenda .cal__add-link:hover:not(:disabled) { text-decoration: underline; }
+.list.cal__list { overflow: visible; margin: 0 -6px; padding: 0; }
+.cal-row { display: flex; align-items: center; gap: 2px; padding-right: 4px; border-radius: 10px; }
+.cal-row + .cal-row { border-top: 1px solid var(--line); }
+.cal-row__main {
+  flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 7px; padding: 6px;
+  border: 0; border-radius: 10px; background: transparent; text-align: left; font-weight: 400;
+}
+.cal-row__main:hover:not(:disabled) { background: var(--accent-soft); }
+.cal-row__time { flex: none; width: 34px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-row__time.is-overdue { color: var(--danger); }
+/* "All day" in the time's narrow column: on two short lines rather than cut off */
+.cal-row__time.is-all-day { white-space: normal; line-height: 1.1; font-size: 10.5px; }
+.cal-row__icon { flex: none; display: grid; font-size: 13px; color: var(--muted); }
+.cal-row--task .cal-row__icon { color: var(--hl-ink); }
+.cal-row--daily .cal-row__icon { color: var(--meeting); }
+.cal-row--note .cal-row__icon { color: var(--working); }
+.cal-row__text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.cal-row__title { font-size: 12.5px; font-weight: 500; }
+.cal-row__meta { display: block; font-size: 11px; color: var(--muted); }
+.cal-row__meta svg { vertical-align: -1px; margin-right: 3px; color: var(--hl-ink); }
+.cal-row.is-dim .cal-row__main { opacity: 0.55; }
+.cal-row--task.is-dim .cal-row__title { text-decoration: line-through; }
+.cal-row__more { flex: none; }
+/* inside a dock sheet (phones, desktop's fullscreen office) the sheet scrolls, not the calendar */
+.dock-sheet .cal { overflow: visible; flex: none; }
+/* the month picker (MonthPicker): a year, then its twelve months */
+.popover.cal-mp { width: 236px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.cal-mp__year { display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+.cal-mp__months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.cal-mp__months button { padding: 6px 0; font-size: 12.5px; font-weight: 500; border-color: transparent; background: var(--card-2); }
+.cal-mp__months button.is-now { color: var(--hl-ink); border-color: var(--hl); }
+.cal-mp__months button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+/* "New event" (ui/NewEvent.tsx): its date control as wide as the fields */
+.new-event { display: flex; flex-direction: column; gap: 12px; }
+.new-event .note-date { height: 34px; width: 100%; box-sizing: border-box; }
+.new-event .note-date > .chat-ctx__pick { flex: 1; max-width: none; font-size: 13px; }
+/* the big window (?calendar=1): days tall enough for their items' names; the picked day's list beside the month when
+   there's room, under it otherwise */
+.cal-modal { display: flex; flex-direction: column; min-height: 0; }
+.cal--big { overflow: visible; flex: none; }
+.cal--big .cal__month { font-size: 15px; }
+.cal--big .cal__bar { padding: 0 0 8px; }
+.cal--big .cal__day { min-height: 92px; align-items: stretch; padding: 4px 4px 5px; gap: 3px; border-color: var(--line); background: var(--card); }
+.cal--big .cal__day--blank { border: 0; background: transparent; }
+.cal--big .cal__num { align-self: flex-start; padding-left: 2px; }
+.cal--big .cal__dots { display: none; }
+.cal__names { display: grid; gap: 2px; min-width: 0; }
+.cal__name {
+  display: block; min-width: 0; padding: 1px 5px; border-radius: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: 11px; font-weight: 400; line-height: 16px; text-align: left; color: var(--text); background: var(--card-2); border-left: 2px solid var(--muted);
+}
+.cal__name b { font-weight: 600; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.cal__name--task { border-left-color: var(--hl); background: var(--hl-soft); }
+.cal__name--task.is-overdue { border-left-color: var(--danger); }
+.cal__name--daily { border-left-color: var(--hl-2); }
+.cal__name--note { border-left-color: var(--working); }
+.cal__name.is-dim { opacity: 0.55; }
+.cal__name--more { border: 0; background: transparent; color: var(--muted); padding-left: 2px; }
+.cal--big .cal__day.is-picked { background: var(--hl-soft); }
+@container (min-width: 760px) {
+  .cal--big .cal__layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+  .cal--big .cal__agenda { padding: 0 0 0 16px; border-top: 0; border-left: 1px solid var(--line); position: sticky; top: 0; }
+}
+/* narrow (a phone at full size): the names don't fit, the dots come back */
+@container (max-width: 520px) {
+  .cal--big .cal__day { min-height: 44px; align-items: center; }
+  .cal--big .cal__names { display: none; }
+  .cal--big .cal__dots { display: flex; }
+}
+/* phones: a round button at the stage's bottom left, like the ones on the right (styles/projects.css .folders-fab);
+   the installed app's reload (ui/AppReload.tsx, bottom left too) goes above it */
+.calendar-fab {
+  all: unset; box-sizing: border-box; position: absolute; left: 12px; bottom: 12px; z-index: 5;
+  display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; cursor: pointer; font-size: 18px; color: var(--text);
+  background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.calendar-fab:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+.stage:has(> .calendar-fab) > .app-reload { bottom: 62px; }
+@media (min-width: 769px) { .calendar-fab { display: none; } }
+/* ── the big window, polished: no boxes round the days (just their numbers and soft chips), the picked day's list as a
+   card of its own beside it ── */
+.cal--big .cal__bar { border-bottom: 0; padding: 0 0 4px; }
+.cal--big .cal__grid { gap: 0; padding: 0; }
+.cal--big .cal__wd { padding-bottom: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
+/* the days as one sheet: square cells sharing faint lines (each draws its right and bottom one; the first week its
+   top, the first column its left — the 7 weekday names come first in the grid) */
+.cal--big .cal__day, .cal--big .cal__day--blank {
+  border: 0; border-right: 1px solid var(--cal-line); border-bottom: 1px solid var(--cal-line); border-radius: 0;
+  background: transparent; padding: 6px 6px 8px; gap: 4px;
+}
+.cal--big .cal__grid { --cal-line: color-mix(in srgb, var(--text) 9%, transparent); }
+.cal--big .cal__grid > .cal__day:nth-child(-n + 14) { border-top: 1px solid var(--cal-line); }
+.cal--big .cal__grid > .cal__day:nth-child(7n + 1) { border-left: 1px solid var(--cal-line); }
+.cal--big .cal__day:hover:not(:disabled) { background: var(--card-2); }
+.cal--big .cal__day.is-picked, .cal--big .cal__day.is-picked:hover:not(:disabled) { background: var(--hl-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hl) 40%, transparent); }
+.cal--big .cal__num { display: grid; place-items: center; min-width: 24px; height: 24px; margin: -2px 0 0 -2px; padding: 0 4px; border-radius: 999px; font-size: 12.5px; }
+.cal--big .cal__day.is-today .cal__num { background: var(--hl); color: #fff; }
+.cal--big .cal__name {
+  display: flex; align-items: center; gap: 5px; padding: 2px 6px; border: 0; border-radius: 6px; background: var(--card-2); line-height: 16px;
+}
+.cal--big .cal__name::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.cal--big .cal__name-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cal--big .cal__name b { display: none; flex: none; margin-right: 0; color: var(--muted); font-weight: 500; }
+/* the time in the chip only when the days are wide enough to keep the name readable too (it's in the list anyway) */
+@container (min-width: 1100px) { .cal--big .cal__name b { display: inline; } }
+.cal--big .cal__name--task { background: var(--hl-soft); }
+.cal--big .cal__name--task::before { background: var(--hl); }
+.cal--big .cal__name--task.is-overdue::before { background: var(--danger); }
+.cal--big .cal__name--daily::before { background: var(--hl-2); }
+.cal--big .cal__name--note::before { background: var(--working); }
+.cal--big .cal__name--more { background: transparent; padding-left: 6px; }
+.cal--big .cal__name--more::before { display: none; }
+/* the picked day: a card beside the month, its rows without lines between them */
+.cal--big .cal__agenda { padding: 14px 12px; border: 0; border-radius: 16px; background: var(--card-2); }
+.cal--big .cal__agenda-head { padding: 0 4px 6px; font-size: 13.5px; }
+.cal--big .list.cal__list { margin: 0; }
+.cal--big .cal-row + .cal-row { border-top: 0; }
+.cal--big .cal-row__main { gap: 10px; padding: 7px 6px; }
+.cal--big .cal-row__main:hover:not(:disabled) { background: var(--card); }
+.cal--big .cal-row__time { width: 38px; text-align: right; }
+.cal--big .cal-row__icon { place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--card); font-size: 13px; }
+@container (min-width: 760px) {
+  /* the picked day's card on the left, as tall as the month beside it (its list scrolls when it's longer) */
+  .cal--big .cal__layout { grid-template-columns: 320px minmax(0, 1fr); gap: 20px; align-items: stretch; }
+  .cal--big .cal__agenda { order: -1; position: static; height: 0; min-height: 100%; box-sizing: border-box; overflow-y: auto; border-left: 0; padding: 14px 12px; }
+}
+/* a day's list in its own small window (the Daily card): the window says which day; no line above the list */
+.cal--popup { overflow: visible; }
+.cal--popup .cal__agenda { padding-top: 0; border-top: 0; }
+.cal--popup .cal__agenda-head { display: none; }
+/* the month's year beside its name, quieter */
+.cal__year { font-weight: 500; color: var(--muted); }
+/* a day with nothing on it: a big calendar, a line, and a button to add one */
+.cal__empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 12px 24px; text-align: center; font-size: 12.5px; }
+.cal__empty-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 4px; border-radius: 18px; font-size: 26px; color: var(--hl-ink); background: var(--hl-soft); }
+.cal__empty b { font-size: 13.5px; font-weight: 600; }
+.cal__empty .muted { font-size: 12px; }
+.cal__empty button { margin-top: 8px; display: inline-flex; align-items: center; gap: 5px; }
+/* the big window's day card: the empty state in its middle */
+.cal--big .cal__agenda:has(> .cal__empty) { display: flex; flex-direction: column; }
+.cal--big .cal__agenda > .cal__empty { flex: 1; justify-content: center; }
+/* the agenda's Add event, at its bottom (pinned there in the big calendar's sidebar) */
+.cal__agenda-foot { margin-top: auto; padding-top: 10px; display: flex; }
+.cal__agenda .cal__agenda-add { flex: 1; justify-content: center; padding-block: 9px; background: var(--hl); border-color: var(--hl); color: #fff; }
+.cal__agenda .cal__agenda-add:hover:not(:disabled) { background: color-mix(in srgb, var(--hl) 88%, #000); border-color: transparent; color: #fff; }
+.cal--big .cal__agenda-foot { position: sticky; bottom: 0; background: var(--card-2); }

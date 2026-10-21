@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { LuFilm, LuDownload, LuFile, LuFileText, LuFileX, LuGlobe, LuSheet, LuTable } from 'react-icons/lu'
 import { CsvTable } from './preview/CsvTable'
 import { HtmlFrame } from './preview/HtmlFrame'
@@ -10,6 +10,7 @@ import type { Attachment } from '@after-office/shared'
 import { useBackStep } from '../state/useBackStep'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { api } from '../state/auth'
+import { lazyRetry } from '../pwa/lazyRetry'
 
 // Files an agent made or pointed to: shown under its chat messages and reports, with a preview for pictures and a
 // download for everything. The server decides which files may be shown (only inside the agent's folders).
@@ -51,8 +52,8 @@ export const canPreview = (f: Pick<Attachment, 'path' | 'size'>) => {
   return !!kind && (kind === 'video' || f.size <= (kind === 'markdown' || kind === 'html' || kind === 'text' || kind === 'sheet' ? TEXT_MAX : FILE_MAX))
 }
 // the heavy viewers load only when such a file is opened
-const PdfView = lazy(() => import('./preview/PdfView'))
-const DocxView = lazy(() => import('./preview/DocxView'))
+const PdfView = lazyRetry(() => import('./preview/PdfView'))
+const DocxView = lazyRetry(() => import('./preview/DocxView'))
 
 /** Where a file is fetched from: the agent's file route, or (reports) the report's own. */
 export type UrlFor = (path: string, inline?: boolean) => string

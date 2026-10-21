@@ -5,13 +5,15 @@ import { create } from 'zustand'
 // shows what the parameters ask for, and Back closes what was opened last.
 //
 //   ?task=<id>  ?report=<id>  ?reports=<filter>&folder=&q=&range=&from=&to=&page=&per=&ri=<id> (the one read in the inbox)  ?tasks=1&tq=&tsort=title|deadline|status|priority|agent&tdir=asc|desc&tpage=&tper=  ?archive=1  ?statuses=1 (the task statuses' editor)
-//   ?folder=<path>  ?newfolder=1  ?newtask=1&nt_agent=&nt_folder=&nt_status=&nt_tag=  ?note=<id>|new&nfolder=&ntag=  ?notes=1&nq=&nview=  ?daily=<id>|new  ?addagent=1|manager
+//   ?folder=<path>  ?newfolder=1  ?newtask=1&nt_agent=&nt_folder=&nt_status=&nt_tag=  ?note=<id>|new&nfolder=&ntag=&npage=  ?notes=1&nq=&nview=<page>|none|*&nbytag=<tag>|none  ?daily=<id>|new  ?calendar=1 (the Daily card's Calendar, big: ui/CalendarView.tsx)  ?addagent=1|manager
 //   ?agent=<id>&tab=<tab>  ?manager=1&mtab=chat|team  ?automation=1  ?profile=1  ?settings=1 (office branding)  ?tools=1 (proxy, API keys)  ?password=1  ?twofa=1  ?activity=1
 //   reports view also: &tag=<id,id>
 //   ?thread=<id>|new (ui/ThreadView.tsx, ui/Threads.tsx)  ?newtask=1&nt_thread=<id> (a task made in a thread)
 //   desktop: ?full=1 (the office fullscreen, panels as round buttons on it: ui/StageDock.tsx)
+//   ?note=<id>&nai=1 (Ask Marcus in the note: the chat beside it, phones a sheet over it; ui/NoteAssist.tsx)
 //   phones: ?nwrite=1 (writing a note on the whole screen: Back ends it, ui/FolderNotes.tsx)
-//   phones: ?sheet=attention|cron|tasks|reports|agents|threads (the dock's bottom sheets, ui/MobileDock.tsx; threads: the stage's button)
+//   phones: ?sheet=attention|cron|tasks|reports|agents|threads|folders|calendar (the dock's bottom sheets, ui/MobileDock.tsx; threads,
+//   folders, calendar: the stage's round buttons)
 
 type Params = Record<string, string>
 

@@ -75,3 +75,6 @@
   .row.agent { cursor: default; }
   .row.agent .row__meta, .row.agent .row__mono { padding-right: 42px; }
 }
+/* an agent's drawn face (ui/AgentFace.tsx) filling its avatar */
+.avatar:has(> .avatar__face), .report-row__who:has(> .avatar__face) { overflow: hidden; padding: 0; }
+.avatar__face { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; user-select: none; }

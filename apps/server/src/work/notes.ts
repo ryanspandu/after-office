@@ -1,11 +1,13 @@
-import type { OwnerNote, OwnerNoteSummary } from '@after-office/shared'
-import { agentsRepo, folderNotesRepo, ownerNotesRepo } from '../db'
+import type { NotePage, OwnerNote, OwnerNoteSummary } from '@after-office/shared'
+import { agentsRepo, folderNotesRepo, notePagesRepo, ownerNotesRepo } from '../db'
 import { AgentError } from '../agents/manager'
 import { cleanTagIds, tagNames } from './tags'
 import { folderOf } from './workspaces'
 import { htmlToMarkdown, markdownToHtml } from './noteText'
 import { publishWork } from './work'
 import { cleanFolder } from './folders'
+import { forgetNoteHelper } from './noteAssist'
+import { keepOwnImages } from './noteImages'
 
 // The owner's own notes (Reports → Notes): rich text written in the dashboard (the same editor as a folder's notes),
 // with a folder and tags like a report. Kept in the dashboard's database only: no agent is given them.
@@ -52,10 +54,58 @@ interface NoteInput {
   shared?: unknown
   pinned?: unknown
   folder?: unknown
+  pageId?: unknown
+  date?: unknown
+  dateEnd?: unknown
+  time?: unknown
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+/** A real calendar day as "YYYY-MM-DD" (no 2026-02-30). */
+const isDay = (v: string) => {
+  if (!DAY.test(v)) return false
+  const [y, m, d] = v.split('-').map(Number)
+  const t = new Date(Date.UTC(y, m - 1, d))
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d
+}
+
+type NoteDate = Pick<OwnerNote, 'date' | 'dateEnd' | 'time'>
+
+/**
+ * Its day (or days) on the calendar, checked against what it had: a day, an end day after it for a range, a time
+ * only on a single day. null / '' clears a field; clearing the day clears the rest with it.
+ */
+function cleanDate(input: NoteInput, prev: NoteDate = {}): NoteDate | undefined {
+  if (input.date === undefined && input.dateEnd === undefined && input.time === undefined) return undefined
+  const pick = (v: unknown, cur: string | undefined, ok: (s: string) => boolean, what: string) => {
+    if (v === undefined) return cur
+    if (v === null || v === '') return undefined
+    if (typeof v !== 'string' || !ok(v)) throw new AgentError(what, 400)
+    return v
+  }
+  const date = pick(input.date, prev.date, isDay, 'A date is YYYY-MM-DD')
+  let dateEnd = pick(input.dateEnd, prev.dateEnd, isDay, 'An end date is YYYY-MM-DD')
+  let time = pick(input.time, prev.time, (s) => HHMM.test(s), 'A time is HH:MM')
+  if (!date) return {}
+  if (dateEnd === date) dateEnd = undefined
+  if (dateEnd && dateEnd < date) throw new AgentError('The end date comes after the start', 400)
+  // a time belongs to one day; a range is all-day
+  if (dateEnd) {
+    if (input.time !== undefined && time) throw new AgentError('A time goes with a single day, not a range', 400)
+    time = undefined
+  }
+  return { date, ...(dateEnd ? { dateEnd } : {}), ...(time ? { time } : {}) }
 }
 
 function clean(input: NoteInput) {
-  const out: Partial<Pick<OwnerNote, 'title' | 'html' | 'tags' | 'shared' | 'pinned' | 'folder'>> & { clearTags?: boolean; clearFolder?: boolean } = {}
+  const out: Partial<Pick<OwnerNote, 'title' | 'html' | 'tags' | 'shared' | 'pinned' | 'folder' | 'pageId'>> & { clearTags?: boolean; clearFolder?: boolean; clearPage?: boolean } = {}
+  // its page: one that exists; none: "No page"
+  if (input.pageId === null || input.pageId === '') out.clearPage = true
+  else if (input.pageId !== undefined) {
+    if (typeof input.pageId !== 'string' || !notePagesRepo.get(input.pageId)) throw new AgentError('No such page', 400)
+    out.pageId = input.pageId
+  }
   // its folder: only one the dashboard shows (its real path); none: cleared
   if (input.folder === null || input.folder === '') out.clearFolder = true
   else if (input.folder !== undefined) {
@@ -74,7 +124,8 @@ function clean(input: NoteInput) {
   if (input.html !== undefined) {
     if (typeof input.html !== 'string') throw new AgentError('A note is text', 400)
     if (input.html.length > HTML_MAX) throw new AgentError(`A note is limited to ${HTML_MAX / 1000}k characters`, 400)
-    out.html = input.html
+    // its own pictures only (work/noteImages.ts): no outside images, no data: URIs
+    out.html = keepOwnImages(input.html)
   }
   if (input.tags !== undefined) {
     const tags = cleanTagIds(input.tags)
@@ -85,7 +136,8 @@ function clean(input: NoteInput) {
 }
 
 export function createNote(input: NoteInput) {
-  const { clearTags: _t, clearFolder: _f, ...c } = clean(input)
+  const { clearTags: _t, clearFolder: _f, clearPage: _p, ...c } = clean(input)
+  const when = cleanDate(input)
   const now = Date.now()
   const note: OwnerNote = {
     id: crypto.randomUUID(),
@@ -95,6 +147,8 @@ export function createNote(input: NoteInput) {
     ...(c.shared ? { shared: true } : {}),
     ...(c.pinned ? { pinned: true } : {}),
     ...(c.folder ? { folder: c.folder } : {}),
+    ...(c.pageId ? { pageId: c.pageId } : {}),
+    ...when,
     rank: -now,
     createdAt: now,
     updatedAt: now,
@@ -107,12 +161,20 @@ export function createNote(input: NoteInput) {
 export function updateNote(id: string, input: NoteInput) {
   const prev = ownerNotesRepo.get(id)
   if (!prev) throw new AgentError('No such note', 404)
-  const { clearTags, clearFolder, ...c } = clean(input)
+  const { clearTags, clearFolder, clearPage, ...c } = clean(input)
+  const when = cleanDate(input, prev)
   const next: OwnerNote = { ...prev, ...c, updatedAt: Date.now() }
+  if (when) {
+    delete next.date
+    delete next.dateEnd
+    delete next.time
+    Object.assign(next, when)
+  }
   // the owner's change: no agent is the last to have edited it
   if (c.title !== undefined || c.html !== undefined) delete next.editedBy
   if (clearTags) delete next.tags
   if (clearFolder) delete next.folder
+  if (clearPage) delete next.pageId
   if (next.shared === false) delete next.shared
   if (next.pinned === false) delete next.pinned
   ownerNotesRepo.put(next)
@@ -123,6 +185,77 @@ export function updateNote(id: string, input: NoteInput) {
 export function deleteNote(id: string) {
   ownerNotesRepo.remove(id)
   publishWork('notes')
+  dropHelper(id)
+}
+
+/** A note gone: its writing helper (work/noteAssist.ts) goes with it, in the background. */
+const dropHelper = (id: string) => void forgetNoteHelper(id).catch((e) => console.warn('[notes] could not remove the note helper:', e instanceof Error ? e.message : e))
+
+// ── pages: the notebooks the owner keeps notes on (one level) ──
+
+const PAGE_NAME_MAX = 80
+
+/** In their order: the placed ones first, then by when they were made. */
+export const listNotePages = () =>
+  notePagesRepo.all().sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER) || a.createdAt - b.createdAt)
+
+function pageName(v: unknown) {
+  if (typeof v !== 'string' || !v.trim()) throw new AgentError('A page needs a name', 400)
+  return v.trim().slice(0, PAGE_NAME_MAX)
+}
+function pageOrder(v: unknown) {
+  if (v === null) return undefined
+  if (typeof v !== 'number' || !Number.isFinite(v)) throw new AgentError('order is a number', 400)
+  return v
+}
+
+export function createPage(input: { name?: unknown; order?: unknown }) {
+  const now = Date.now()
+  const order = input.order === undefined ? undefined : pageOrder(input.order)
+  const page: NotePage = { id: crypto.randomUUID(), name: pageName(input.name), ...(order !== undefined ? { order } : {}), createdAt: now, updatedAt: now }
+  notePagesRepo.put(page)
+  publishWork('notePages')
+  return page
+}
+
+/** The pages in the owner's order (dragged on the Notes cards): each gets its place. */
+export function reorderPages(ids: unknown) {
+  if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string')) throw new AgentError('Send the page ids in their new order', 400)
+  ;(ids as string[]).forEach((id, i) => {
+    const p = notePagesRepo.get(id)
+    if (p && p.order !== i) notePagesRepo.put({ ...p, order: i })
+  })
+  publishWork('notePages')
+}
+
+export function updatePage(id: string, input: { name?: unknown; order?: unknown }) {
+  const prev = notePagesRepo.get(id)
+  if (!prev) throw new AgentError('No such page', 404)
+  const next: NotePage = { ...prev, updatedAt: Date.now() }
+  if (input.name !== undefined) next.name = pageName(input.name)
+  if (input.order !== undefined) {
+    const order = pageOrder(input.order)
+    if (order === undefined) delete next.order
+    else next.order = order
+  }
+  notePagesRepo.put(next)
+  publishWork('notePages')
+  return next
+}
+
+/** A page goes; its notes stay, on no page. */
+export function deletePage(id: string) {
+  if (!notePagesRepo.get(id)) throw new AgentError('No such page', 404)
+  let moved = 0
+  for (const n of ownerNotesRepo.all()) {
+    if (n.pageId !== id) continue
+    const { pageId: _gone, ...rest } = n
+    ownerNotesRepo.put(rest)
+    moved++
+  }
+  notePagesRepo.remove(id)
+  publishWork('notePages', 'notes')
+  return { moved }
 }
 
 // ── the agents' side (their MCP tools): shared notes only, read and written as Markdown ──
@@ -197,6 +330,7 @@ export function agentDeleteNote(id: string) {
   const n = sharedNote(id)
   ownerNotesRepo.remove(n.id)
   publishWork('notes')
+  dropHelper(n.id)
   return n
 }
 

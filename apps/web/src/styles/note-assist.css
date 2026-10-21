@@ -1,0 +1,90 @@
+/* ── Ask Marcus in a note (ui/NoteAssist.tsx): a chat panel beside the note (desktop), a sheet over it (phones) ── */
+/* the note's window: its own column, and Ask Marcus's beside it (none until opened). The window widens by just as much
+   as the panel's column grows, at the same pace, so the note's column keeps its width while it slides in or out. */
+.modal__body.note-modal--window { display: grid; grid-template-columns: minmax(0, 1fr) 0px; grid-template-rows: minmax(0, 1fr); column-gap: 0; }
+.note-modal--window > .note-modal__main { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+.note-modal--window.note-modal--assist { grid-template-columns: minmax(0, 1fr) 360px; column-gap: 16px; }
+.modal--full .note-modal--window.note-modal--assist { grid-template-columns: minmax(0, 1fr) minmax(340px, 30%); }
+.note-modal__editor { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+.note-assist { min-width: 0; min-height: 0; overflow: hidden; }
+/* its own width while its column is still narrower (clipped, not squeezed) */
+.note-assist__inner {
+  display: flex; flex-direction: column; box-sizing: border-box; width: max(360px, 100%); height: 100%;
+  border-left: 1px solid var(--line); padding-left: 16px;
+}
+.note-assist__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; padding-bottom: 8px; }
+.note-assist__who { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+.note-assist__who .muted { font-size: 12px; white-space: nowrap; }
+.note-assist__body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* what he's doing, in one line under the header (the chat's session bar isn't shown here) */
+.note-assist__doing { display: flex; align-items: center; gap: 6px; padding: 0 0 6px; font-size: 12px; }
+.note-modal--window.note-modal--assist { padding-right: 16px; }
+
+/* the chat, bare (ChatView thread.bare): the messages on the panel itself, his text full width, the owner's small
+   bubbles on the right; one compact composer row */
+.chat--bare { gap: 8px; }
+.chat--bare .chat__log { padding: 2px 6px 6px 0; background: none; border: 0; border-radius: 0; gap: 10px; }
+.chat--bare .msg { font-size: 13px; }
+.chat--bare .msg--agent { max-width: 100%; align-self: stretch; padding: 0; background: none; border: 0; border-radius: 0; }
+.chat--bare .msg--user { max-width: 85%; padding: 6px 10px; border-radius: 12px 12px 4px 12px; }
+.chat--bare:not(.chat--mobile) .chat__composer { align-items: center; gap: 4px; }
+.chat--bare:not(.chat--mobile) .chat__composer textarea { min-height: 36px; max-height: 128px; padding: 8px 10px; font-size: 13px; border-radius: 12px; }
+.chat--bare:not(.chat--mobile) .chat__composer .icon-btn { width: 34px; height: 34px; font-size: 15px; }
+
+/* the ✨ in the window's header: lit while the panel is open, its sparkle turning a little */
+.note-assist-btn svg { transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.note-assist-btn.is-on { background: var(--card-2); }
+.note-assist-btn.is-on svg { transform: rotate(72deg) scale(1.12); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .modal.note-window:not(.modal--full) { transition: width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .modal__body.note-modal--window { transition: grid-template-columns 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), column-gap 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .note-assist { animation: note-assist-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .note-assist--closing { animation: note-assist-out 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .note-assist-btn { transition: background-color 0.18s, color 0.18s; }
+}
+@keyframes note-assist-in { from { opacity: 0; transform: translateX(16px); } }
+@keyframes note-assist-out { to { opacity: 0; transform: translateX(16px); } }
+
+/* before the first message: what he can do and a few ways to start, centred above the message box (which sits where
+   the chat's will) */
+.note-assist__start { flex: 1; min-height: 0; }
+.note-assist__empty {
+  flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 12px 4px; text-align: center; font-size: 13px; line-height: 1.5;
+}
+.note-assist__spark { font-size: 30px; color: var(--hl-ink); }
+.note-assist__empty p { margin: 0; max-width: 300px; color: var(--muted); }
+.note-assist__chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.note-assist__chips > button { border-radius: 999px; font-size: 12.5px; background: var(--card-2); border-color: transparent; }
+.note-assist__chips > button:hover:not(:disabled) { color: var(--hl-ink); }
+.note-assist__starting { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+
+/* a ```note block in his reply: the text to insert, with its buttons */
+.note-block { display: flex; flex-direction: column; margin: 6px 0; border-radius: 10px; background: var(--card-2); overflow: hidden; }
+.note-block__text { margin: 0; padding: 6px 8px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 13px; line-height: 1.5; border-left: 3px solid var(--hl); }
+.note-block__actions { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 5px 6px; border-top: 1px solid var(--line); }
+.note-block__actions > button { display: inline-flex; align-items: center; gap: 5px; }
+
+/* phones (and a folder's inline note): the chat as a sheet over the note */
+.modal.note-assist-sheet { height: min(70dvh, 680px); }
+.note-assist-sheet .modal__head > div { min-width: 0; }
+.note-assist-sheet .modal__scroll { display: flex; flex-direction: column; overflow: hidden; }
+.note-assist-sheet .note-assist__body { padding: 8px 16px 12px; gap: 0; overflow: hidden; }
+@media (max-width: 768px) {
+  /* the keyboard up: the sheet stays within what's left of the screen, its message box just above the keyboard */
+  .modal.note-assist-sheet { height: min(70dvh, calc(var(--vvh, 100dvh) - 24px)); }
+}
+
+/* phones: the round ✨ at the bottom right of the note's text (not while writing: the keyboard and toolbar have it) */
+.note-assist-fab {
+  all: unset; box-sizing: border-box; position: absolute; right: 10px; bottom: 10px; z-index: 2; display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 50%; background: var(--hl); color: #fff; font-size: 19px; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+.note-assist-fab:disabled { opacity: 0.45; cursor: default; }
+.note-assist-fab:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.note-modal__editor:has(.fnotes:focus-within) .note-assist-fab { display: none; }
+/* the last lines can scroll out from under it */
+.note-modal__editor:has(.note-assist-fab) .fnotes__editor .tiptap { padding-bottom: 60px; }

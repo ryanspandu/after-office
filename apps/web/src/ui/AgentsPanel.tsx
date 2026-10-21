@@ -36,6 +36,7 @@ import { openUrl, setUrl } from '../state/url'
 import { tip } from './Tooltip'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { useFlip } from '../state/useFlip'
+import { AgentFace } from './AgentFace'
 
 export const STATUS_META: Record<AgentStatus, { label: string; icon: ReactNode }> = {
   working: { label: 'Working', icon: <LuKeyboard /> },
@@ -295,7 +296,7 @@ function AgentRow({
     >
       <div className="agent__side">
         <span className="avatar" style={avatarStyle(a.look.shirt)} aria-hidden>
-          {busy ? <LuRotateCw className="spin" /> : a.name[0]}
+          {busy ? <LuRotateCw className="spin" /> : <AgentFace look={a.look} />}
         </span>
         <AgentMenu
           at={menuAt}

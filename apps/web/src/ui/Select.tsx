@@ -22,16 +22,20 @@ interface Props<T extends string> {
   display?: (o: Option<T>) => ReactNode
   /** The open list wider than the control (a small button). */
   menuWidth?: number
+  /** An option as shown in the open list; defaults to its label. */
+  optionLabel?: (o: Option<T>) => ReactNode
 }
 
-export function Select<T extends string>({ value, options, onChange, ariaLabel, size = 'md', className, disabled, searchable, display, menuWidth }: Props<T>) {
+export function Select<T extends string>({ value, options, onChange, ariaLabel, size = 'md', className, disabled, searchable, display, menuWidth, optionLabel }: Props<T>) {
   return (
     <ReactSelect<Option<T>, false>
       unstyled
       isSearchable={!!searchable}
       placeholder={searchable ? 'Search…' : undefined}
       noOptionsMessage={() => 'No matches'}
-      formatOptionLabel={display ? (o, meta) => (meta.context === 'value' ? display(o) : o.label) : undefined}
+      formatOptionLabel={
+        display || optionLabel ? (o, meta) => (meta.context === 'value' ? (display ?? ((x) => x.label))(o) : (optionLabel ?? ((x) => x.label))(o)) : undefined
+      }
       isDisabled={disabled}
       aria-label={ariaLabel}
       className={`rs rs--${size}${className ? ` ${className}` : ''}`}

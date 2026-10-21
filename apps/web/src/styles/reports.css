@@ -161,7 +161,11 @@
 .reports-modal__reader .modal__foot { position: sticky; bottom: 0; margin-top: auto; padding: 12px 0 16px; background: var(--card); border-top: 1px solid var(--line); }
 .report__title { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .report__title .outcome { vertical-align: 2px; margin-left: 4px; }
-.reports-modal__none { margin: auto; display: flex; align-items: center; gap: 8px; }
+/* no report picked: a big icon over a line or two, in the middle of the reader */
+.reports-modal__none { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px; text-align: center; font-size: 13px; }
+.reports-modal__none-icon { display: grid; place-items: center; width: 64px; height: 64px; margin-bottom: 6px; border-radius: 20px; font-size: 30px; color: var(--hl-ink); background: var(--hl-soft); }
+.reports-modal__none b { font-size: 14.5px; font-weight: 600; }
+.reports-modal__none .muted { font-size: 12.5px; }
 .reports-modal__reader .report__text { max-height: none; overflow: visible; }
 /* the day a run of reports belongs to (Today, Yesterday, …): an inbox, not a log */
 .report-day { list-style: none; position: sticky; top: 0; z-index: 3; padding: 8px 4px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); background: var(--card); }

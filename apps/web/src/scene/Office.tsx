@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { MapControls, PerformanceMonitor } from '@react-three/drei'
 import { MathUtils, Spherical, Vector3 } from 'three'
 import { agentWorld, useView } from './focus'
+import { useZoom } from './zoom'
 import { isAway, useOffice } from '../state/store'
 import { Agent } from './Agent'
 import { Cat } from './Cat'
@@ -126,6 +127,7 @@ export function Office() {
       <FocusCamera />
       <NudgeCamera />
       <LabelDetail />
+      <ZoomProbe />
 
       <Room layout={layout} />
       <Parking layout={layout} slots={agents.length + departing.length} />
@@ -216,6 +218,15 @@ function FitCamera({ layout }: { layout: Layout }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera, controls, size.width, size.height, b.minX, b.maxX, b.minZ, b.maxZ, resetAt])
+  return null
+}
+
+/** Tells the stage the zoom level (ui/ZoomBadge.tsx), when it has changed by a tenth or more. */
+function ZoomProbe() {
+  useFrame(({ camera }) => {
+    const z = Math.round(camera.zoom * 10) / 10
+    if (z !== useZoom.getState().zoom) useZoom.setState({ zoom: z })
+  })
   return null
 }
 

@@ -46,7 +46,7 @@
 .modal--full .modal__scroll { display: flex; flex-direction: column; }
 .modal--full .file-preview { flex: 1; min-height: 0; }
 .modal--full .file-preview__md, .modal--full .file-preview__text { flex: 1; max-height: none; min-height: 0; }
-.modal--full .file-preview__md .md { max-width: 980px; margin: 0 auto; }
+.modal--full .file-preview__md .md { max-width: none; margin: 0; padding-inline: 24px; }
 /* the footer stays at the bottom, however little the file holds */
 .file-preview > .file-foot { margin-top: auto; }
 @media (max-width: 768px) {

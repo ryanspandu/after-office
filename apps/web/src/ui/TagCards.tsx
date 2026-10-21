@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { LuArrowLeft, LuArrowRight, LuLayers, LuPlus } from 'react-icons/lu'
-import type { OfficeTask, OwnerNoteSummary } from '@after-office/shared'
-import { ago } from './FollowUps'
+import type { OfficeTask } from '@after-office/shared'
 import { useDashboard } from '../state/dashboard'
 import { useNow } from '../state/clock'
 import { useOffice, avatarStyle } from '../state/store'
 import { OwnerAvatar } from './EditProfile'
 import { TagModal } from './TagModal'
 import { TagIcon } from './tagIcons'
+import { AgentFace } from './AgentFace'
 
 // Tasks → List: the tags as cards, like projects (the office groups work by tag): how much is open, done and late,
 // what's next, who's on it. A card's footer opens its tasks (All tags to start with); the last card makes a new tag.
@@ -107,7 +107,7 @@ function TagCard({ i, title, icon, color, s, on, leaving, onFocus, onPick }: { i
               <OwnerAvatar key={id} className="avatar--xs" />
             ) : (
               <span key={id} className="avatar avatar--xs" style={agents.find((a) => a.id === id) ? avatarStyle(agents.find((a) => a.id === id)!.look.shirt) : undefined}>
-                {agents.find((a) => a.id === id)?.name[0] ?? '?'}
+                {agents.find((a) => a.id === id) ? <AgentFace look={agents.find((a) => a.id === id)!.look} /> : '?'}
               </span>
             ),
           )}
@@ -154,85 +154,6 @@ export function TagHeader({ tagId, onBack, children }: { tagId: string; onBack: 
       </span>
       {/* how its tasks show (List / Board) */}
       {children && <span className="tag-head__view">{children}</span>}
-    </div>
-  )
-}
-
-// ── Notes → View all: the same cards for notes (how many, the latest, how many shared) ──
-
-function noteSummary(notes: OwnerNoteSummary[]) {
-  const latest = [...notes].sort((a, b) => b.updatedAt - a.updatedAt)[0]
-  return { count: notes.length, shared: notes.filter((n) => n.shared).length, latest }
-}
-
-/** `onChange`: a card's footer clicked (open its notes). */
-export function NoteTagCards({ notes, onChange }: { notes: OwnerNoteSummary[]; onChange: (tagId: string) => void }) {
-  const tags = useDashboard((s) => s.tags)
-  const now = useNow(60_000).getTime()
-  const [showAll, setShowAll] = useState(false)
-  const { focus, setFocus, box } = useCardFocus()
-  const LIMIT = 7
-  const shown = showAll ? tags : tags.slice(0, LIMIT)
-  const card = (i: number, id: string, title: string, icon: ReactNode, color: string, list: OwnerNoteSummary[]) => {
-    const s = noteSummary(list)
-    const on = focus === id
-    return (
-      <div key={id} role="option" aria-selected={on} className={`tag-card tag-card--static${on ? ' is-on' : ''}`} style={{ ['--c' as string]: color, ['--i' as string]: Math.min(i, 12) }} onClick={() => setFocus(id)}>
-        <span className="tag-card__top">
-          <span className="tag-card__icon">{icon}</span>
-          <span className={`tag-card__badge${s.shared ? ' tag-card__badge--active' : ''}`}>{!s.count ? 'empty' : s.shared ? `${s.shared} shared` : 'private'}</span>
-        </span>
-        <span className="tag-card__title">{title}</span>
-        <span className="tag-card__next">{s.latest ? `Latest: ${s.latest.title || 'Untitled'}` : 'No notes yet'}</span>
-        <button type="button" className="tag-card__foot tag-card__open" onClick={() => onChange(id)} aria-label={`Open ${title}`}>
-          <span className="tag-card__count">
-            <b>{s.count}</b> note{s.count === 1 ? '' : 's'}
-            {s.latest ? <span className="muted"> · {ago(now - s.latest.updatedAt)}</span> : null}
-          </span>
-          <span className="tag-card__go" aria-hidden>
-            <LuArrowRight />
-          </span>
-        </button>
-      </div>
-    )
-  }
-  return (
-    <div className="tag-cards" role="listbox" aria-label="Notes by tag" ref={box}>
-      {card(0, '*', 'All tags', <LuLayers />, 'var(--text)', notes)}
-      {shown.map((t, n) =>
-        card(
-          n + 1,
-          t.id,
-          t.name,
-          <TagIcon tag={t} />,
-          t.color,
-          notes.filter((x) => x.tags?.includes(t.id)),
-        ),
-      )}
-      {tags.length > LIMIT && (
-        <button type="button" className="tag-card tag-card--more" onClick={() => setShowAll((v) => !v)}>
-          {showAll ? 'Show fewer' : `Show all ${tags.length} tags`}
-        </button>
-      )}
-      <NewTagCard />
-    </div>
-  )
-}
-
-/** Inside a tag (Notes → View all): back to the cards, which tag this is, how many notes. */
-export function NoteTagHeader({ notes, tagId, onBack }: { notes: OwnerNoteSummary[]; tagId: string; onBack: () => void }) {
-  const tag = useDashboard((s) => s.tags.find((t) => t.id === tagId))
-  const s = noteSummary(tag ? notes.filter((n) => n.tags?.includes(tag.id)) : notes)
-  return (
-    <div className="tag-head" style={{ ['--c' as string]: tag?.color ?? 'var(--text)' }}>
-      <button type="button" className="small tag-head__back" onClick={onBack}>
-        <LuArrowLeft /> Tags
-      </button>
-      <span className="tag-card__icon">{tag ? <TagIcon tag={tag} /> : <LuLayers />}</span>
-      <span className="tag-head__title">{tag?.name ?? 'All tags'}</span>
-      <span className="tag-head__stats muted">
-        {s.count} note{s.count === 1 ? '' : 's'} · {s.shared} shared
-      </span>
     </div>
   )
 }

@@ -29,6 +29,7 @@ import { confirm } from './Confirm'
 import { Select } from './Select'
 import { AgentSelect, assigneeOf, assigneePatch, OWNER, useStatusDef, useStatuses, statusDefOf, statusPatch, withBases, BlockedBadge, CheckBadge, dueInfo, PRIORITY_OPTIONS, PRIORITY_RANK, StatusSelect } from './taskMeta'
 import { TagChips } from './tags'
+import { AgentFace } from './AgentFace'
 
 // All tasks, as a grouped list or a Trello-style board. Grouping (status / agent) drives both
 // the list sections and the board columns; dragging a card to another column rewrites that field.
@@ -490,7 +491,7 @@ function TaskRow({ task: t, onOpen }: { task: OfficeTask; onOpen: () => void }) 
           <OwnerAvatar className="avatar--xs" />
         ) : agent ? (
           <span className="avatar avatar--xs" style={avatarStyle(agent.look.shirt)} aria-label={agent.name}>
-            {agent.name[0]}
+            <AgentFace look={agent.look} />
           </span>
         ) : (
           <span className="task-m__none" aria-label="Unassigned">
@@ -672,7 +673,7 @@ function Card({ task: t, overlay, onOpen, grip }: { task: OfficeTask; overlay?: 
                 </span>
               ) : agent ? (
             <span className="avatar avatar--xs" style={avatarStyle(agent.look.shirt)} data-tip={agent.name}>
-              {agent.name[0]}
+              <AgentFace look={agent.look} />
             </span>
           ) : (
             <span className="muted">Unassigned</span>

@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { LuArrowLeft, LuFolder, LuLoader, LuMinus, LuNotebookPen, LuPencil, LuPin, LuPinOff, LuUsers, LuPlus, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
+import { LuArrowLeft, LuBookOpen, LuBookPlus, LuCalendarDays, LuCheck, LuFolder, LuLoader, LuMinus, LuNotebookPen, LuPencil, LuPin, LuPinOff, LuUsers, LuPlus, LuListFilter, LuSearch, LuSettings2, LuTag, LuTrash2, LuX } from 'react-icons/lu'
 import type { OwnerNote, OwnerNoteSummary } from '@after-office/shared'
 import { api } from '../state/auth'
 import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -18,14 +18,22 @@ import { Modal } from './Modal'
 import { Select } from './Select'
 import { ProjectFolderPicker } from './ProjectFolderPicker'
 import { TagChips, TagPicker } from './tags'
-import { NoteTagCards, NoteTagHeader } from './TagCards'
+import { NoteDateButton, noteWhenLabel, type NoteWhen, type NoteWhenPatch } from './NoteDate'
+import { inView, NotePageCards, NotePageChip, NotePageHeader, NotePageSelect, NoteTagCards, NoteTagHeader, PageNameModal } from './NotePages'
+import { lazyRetry } from '../pwa/lazyRetry'
+import { NoteMenu, noteMenuAt } from './NoteMenu'
+import type { RichNotesApi } from './FolderNotes'
+import { NoteAssistButton, NoteAssistFab, NoteAssistPanel, NoteAssistSheet } from './NoteAssist'
+import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
+import { usePresence } from '../state/usePresence'
 
 // The owner's own notes (Reports → Notes): written in the dashboard with the same rich text editor as a folder's notes,
 // with a folder and tags like a report. Only the owner writes them; no agent is given them.
 
 // the editor (TipTap) loads only when a note is opened
-const RichNotes = lazy(() => import('./FolderNotes').then((m) => ({ default: m.RichNotes })))
+const RichNotes = lazyRetry(() => import('./FolderNotes').then((m) => ({ default: m.RichNotes })))
 
+const GROUP_KEY = 'after-office:notes-group'
 const folderName = (path: string) => path.split('/').filter(Boolean).pop() ?? path
 const tilde = (path: string) => path.replace(/^\/(Users|home)\/[^/]+/, '~')
 
@@ -71,21 +79,24 @@ function NotePlaceButton({ note }: { note: NoteState }) {
 const pinnedFirst = (notes: OwnerNoteSummary[]) => [...notes].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned))
 
 /** A note in a list; dragged (anywhere on it, after a few pixels / a long press) to put it elsewhere. */
-export function NoteRow({ n, now, onOpen, sortable = false }: { n: OwnerNoteSummary; now: number; onOpen: () => void; sortable?: boolean }) {
+export function NoteRow({ n, now, onOpen, sortable = false, showPage = false }: { n: OwnerNoteSummary; now: number; onOpen: () => void; sortable?: boolean; showPage?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: n.id, disabled: !sortable })
   // written (or last changed) by an agent: its name instead of "You"
   const by = useOffice((s) => {
     const id = n.editedBy ?? n.author
     return id ? (s.agents.find((a) => a.id === id)?.name ?? 'An agent') : 'You'
   })
+  // right click: pin, share, page, tags, folder, delete (ui/NoteMenu.tsx)
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   return (
+    <>
     <li
       ref={setNodeRef}
       className={`report-row${isDragging ? ' is-dragging' : ''}`}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       {...(sortable ? { ...attributes, ...listeners } : {})}
     >
-      <button className="report-row__main" onClick={onOpen}>
+      <button className="report-row__main" onClick={onOpen} onContextMenu={(e) => setMenu(noteMenuAt(e))}>
         <LuNotebookPen className="report__icon" />
         <span className="report-row__body">
           <span className="report-row__title-line">
@@ -98,12 +109,21 @@ export function NoteRow({ n, now, onOpen, sortable = false }: { n: OwnerNoteSumm
             <span className="truncate">
               {by} · {ago(now - n.updatedAt)}
             </span>
+            {n.date && (
+              <span className="note-row__date">
+                <LuCalendarDays /> {noteWhenLabel(n)}
+              </span>
+            )}
+            {showPage && <NotePageChip pageId={n.pageId} />}
             <NotePlace folder={n.folder} />
             <TagChips ids={n.tags} max={1} />
           </span>
         </span>
       </button>
     </li>
+    {/* beside the row, not in it: clicks in its menu and windows (portals) mustn't reach the row's drag */}
+    <NoteMenu n={n} at={menu} onClose={() => setMenu(null)} onOpen={onOpen} />
+    </>
   )
 }
 
@@ -120,7 +140,7 @@ function moveNote(activeId: string, overId: string | null) {
 }
 
 /** The notes, in their order; `sortable`: dragged into another order. */
-function NoteItems({ notes, now, sortable, onOpen }: { notes: OwnerNoteSummary[]; now: number; sortable: boolean; onOpen?: (id: string) => void }) {
+function NoteItems({ notes, now, sortable, onOpen, showPage }: { notes: OwnerNoteSummary[]; now: number; sortable: boolean; onOpen?: (id: string) => void; showPage?: boolean }) {
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }),
@@ -129,7 +149,7 @@ function NoteItems({ notes, now, sortable, onOpen }: { notes: OwnerNoteSummary[]
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => moveNote(String(e.active.id), e.over ? String(e.over.id) : null)}>
       <SortableContext items={notes.map((n) => n.id)} strategy={verticalListSortingStrategy} disabled={!sortable}>
         {notes.map((n) => (
-          <NoteRow key={n.id} n={n} now={now} sortable={sortable} onOpen={() => (onOpen ? onOpen(n.id) : openUrl({ note: n.id }))} />
+          <NoteRow key={n.id} n={n} now={now} sortable={sortable} showPage={showPage} onOpen={() => (onOpen ? onOpen(n.id) : openUrl({ note: n.id }))} />
         ))}
       </SortableContext>
     </DndContext>
@@ -156,7 +176,7 @@ export function NotesList({ limit = 20 }: { limit?: number }) {
 }
 
 /**
- * A folder's details → Notes: that folder's notes (also in Docs → Notes, with the folder on them). One opens right
+ * A folder's details → Notes: that folder's notes (also in the Notes window, with the folder on them). One opens right
  * here, with Back to the list.
  */
 export function FolderNoteList({ folder }: { folder: string }) {
@@ -199,11 +219,11 @@ const matches = (n: OwnerNoteSummary, q: string) => {
   return words.every((w) => hay.includes(w))
 }
 
-/** "View all" on the Notes tab: the tags as cards, then a tag's notes (by search and folder too). */
+/** "View all" on the Notes tab: the pages as cards (ui/NotePages.tsx), then a page's notes (by search, folder and tag too). */
 export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMinimize?: () => void }) {
   const notes = useLive((s) => s.notes)
   const now = useNow(60_000).getTime()
-  // its view lives in the address bar (?notes=1&nq=…&nview=<tag>|*), so a minimized one comes back as it was left
+  // its view lives in the address bar (?notes=1&nq=…&nview=<page>|none|*), so a minimized one comes back as it was left
   const nq = useParam('nq') ?? ''
   const [q, setQ] = useState(nq)
   useEffect(() => setQ(nq), [nq])
@@ -216,15 +236,40 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
   useEffect(() => useMinimized.getState().remove(NOTES), [])
   // a folder's notes, or those about no folder ("none")
   const [place, setPlace] = useState('')
-  // the tags as cards first (like Tasks); one opens its notes ('*': every note). A search looks through all of them.
+  // the pages as cards first; one opens its notes ('*': every note, 'none': those on no page). A search looks
+  // through all of them (each row says its page).
   const nview = useParam('nview')
-  const inTag = nview !== null
-  const tagId = nview ?? '*'
-  // (replacing the entry: closing the window from inside a tag must leave no copy of it behind for Back)
-  const openTag = (id: string | null) => setUrl({ nview: id })
+  const inPage = nview !== null
+  const pages = useLive((s) => s.notePages)
+  const view = nview === 'none' || pages.some((p) => p.id === nview) ? nview! : '*'
+  // (replacing the entry: closing the window from inside a page must leave no copy of it behind for Back)
+  const openPage = (id: string | null) => setUrl({ nview: id })
+  // tags stay a filter inside a page
   const allTags = useDashboard((s) => s.tags)
-  const tag = allTags.some((t) => t.id === tagId) ? tagId : '*'
-  const atCards = !inTag && !q.trim()
+  const [tagFilter, setTagFilter] = useState('')
+  // the cards by page or by tag (remembered); inside a tag: ?nbytag=<tag>|none
+  const [group, setGroup] = useState<'pages' | 'tags'>(() => {
+    try {
+      return localStorage.getItem(GROUP_KEY) === 'tags' ? 'tags' : 'pages'
+    } catch {
+      return 'pages'
+    }
+  })
+  const pickGroup = (g: 'pages' | 'tags') => {
+    setGroup(g)
+    try {
+      localStorage.setItem(GROUP_KEY, g)
+    } catch {
+      /* not remembered */
+    }
+  }
+  const ntag = useParam('nbytag')
+  const [addingPage, setAddingPage] = useState(false)
+  // phones: the folder and tag filters shown (folded away to start with)
+  const [filtering, setFiltering] = useState(false)
+  const inTag = ntag !== null && !inPage
+  const openTag = (id: string | null) => setUrl({ nbytag: id, nview: id ? null : '*' })
+  const atCards = !inPage && !inTag && !q.trim()
   const folders = [...new Set(notes.map((n) => n.folder).filter((f): f is string => !!f))]
   // full size (remembered), like the dock's sheets
   const max = useModalMaximize(720, 'after-office:sheet-max:Notes list')
@@ -232,7 +277,9 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
     (n) =>
       (!q.trim() || matches(n, q)) &&
       (!place || (place === 'none' ? !n.folder : n.folder === place)) &&
-      (!inTag || q.trim() || tag === '*' || !!n.tags?.includes(tag)),
+      (!inPage || q.trim() || inView(n, view)) &&
+      (!inTag || q.trim() || (ntag === 'none' ? !n.tags?.length : !!n.tags?.includes(ntag!))) &&
+      (!tagFilter || !!n.tags?.includes(tagFilter)),
   )
   return (
     <Modal
@@ -255,7 +302,7 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
       }
     >
       <div className="modal__body reports-modal notes-modal" ref={max.bodyRef}>
-        <div className="reports-modal__bar notes-modal__bar">
+        <div className={`reports-modal__bar notes-modal__bar${filtering ? ' is-filtering' : ''}`}>
           <label className="search-box">
             <LuSearch />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes" aria-label="Search notes" maxLength={200} />
@@ -279,20 +326,71 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
             onChange={setPlace}
           />
           )}
+          {!atCards && !inTag && allTags.length > 0 && (
+            <Select
+              ariaLabel="Tag"
+              searchable
+              className="reports-modal__project"
+              value={tagFilter}
+              options={[{ value: '', label: 'All tags' }, ...allTags.map((t) => ({ value: t.id, label: t.name }))]}
+              onChange={setTagFilter}
+            />
+          )}
           <span className="grow notes-modal__gap" />
-          {/* like Tasks: search on the left, New note on the right (inside a tag, the new note starts in it) */}
-          <button className="small primary notes-modal__new" onClick={() => openUrl({ note: 'new', ntag: inTag && tag !== '*' ? tag : null })}>
-            <LuPlus /> New note
+          {/* phones: the folder and tag filters fold away behind this, left of the add buttons (a dot: one is set) */}
+          {!atCards && (
+            <button
+              type="button"
+              className={`small notes-modal__new notes-modal__filter${filtering ? ' is-on' : ''}`}
+              aria-label="Filters"
+              aria-expanded={filtering}
+              onClick={() => setFiltering(!filtering)}
+            >
+              <LuListFilter />
+              {(place || tagFilter) && <span className="notes-modal__filter-dot" aria-hidden />}
+            </button>
+          )}
+          {/* like Tasks: search on the left, New note on the right (inside a page, the new note starts on it) */}
+          {/* the cards: a new page beside New note */}
+          {atCards && (
+            <button className="small notes-modal__new" aria-label="New page" {...(max.full ? {} : { 'data-tip': 'New page' })} onClick={() => setAddingPage(true)}>
+              <LuBookPlus /> <span className="notes-modal__new-label">New page</span>
+            </button>
+          )}
+          {addingPage && <PageNameModal onClose={() => setAddingPage(false)} onSaved={(id) => (pickGroup('pages'), openPage(id))} />}
+          {/* desktop, not full size: one row, the button just its + (styles/notes.css) */}
+          <button
+            className="small primary notes-modal__new"
+            aria-label="New note"
+            {...(max.full ? {} : { 'data-tip': 'New note' })}
+            onClick={() => openUrl({ note: 'new', npage: inPage && view !== '*' && view !== 'none' ? view : null, ntag: inTag && ntag !== 'none' ? ntag : null })}
+          >
+            <LuPlus /> <span className="notes-modal__new-label">New note</span>
           </button>
         </div>
+        {atCards && (
+          <div className="seg-toggle notes-modal__group" role="tablist" aria-label="Notes by page or by tag">
+            <button role="tab" aria-selected={group === 'pages'} className={group === 'pages' ? 'active' : ''} onClick={() => pickGroup('pages')}>
+              <LuBookOpen /> By page
+            </button>
+            <button role="tab" aria-selected={group === 'tags'} className={group === 'tags' ? 'active' : ''} onClick={() => pickGroup('tags')}>
+              <LuTag /> By tag
+            </button>
+          </div>
+        )}
         {atCards ? (
-          <NoteTagCards notes={notes} onChange={(id) => openTag(id)} />
+          group === 'tags' ? <NoteTagCards notes={notes} onOpen={(id) => openTag(id ?? null)} /> : <NotePageCards notes={notes} onOpen={(id) => openPage(id)} />
         ) : (
         <div className="tag-detail">
-        {!q.trim() && <NoteTagHeader notes={notes} tagId={tag} onBack={() => openTag(null)} />}
+        {!q.trim() &&
+          (inTag ? (
+            <NoteTagHeader notes={shown} tag={ntag!} onBack={() => setUrl({ nbytag: null })} />
+          ) : (
+            <NotePageHeader notes={notes} view={view} onBack={() => (setTagFilter(''), openPage(null))} />
+          ))}
         <ul className="list reports-modal__list">
           {/* dragged into another order only when every note is shown (not while searching or filtering) */}
-          <NoteItems notes={shown} now={now} sortable={shown.length === notes.length} />
+          <NoteItems notes={shown} now={now} sortable={shown.length === notes.length} showPage={!!q.trim() || view === '*'} />
           {!shown.length && <li className="empty">{notes.length ? 'No notes match.' : 'No notes yet.'}</li>}
         </ul>
         </div>
@@ -302,22 +400,26 @@ export function NotesModal({ onClose, onMinimize }: { onClose: () => void; onMin
   )
 }
 
-type Draft = Pick<OwnerNote, 'title' | 'html'> & { tags: string[]; shared: boolean; pinned: boolean; folder?: string | null }
+type Draft = Pick<OwnerNote, 'title' | 'html'> & { tags: string[]; shared: boolean; pinned: boolean; folder?: string | null; pageId?: string | null } & NoteWhenPatch
 
 /**
  * One note being edited (a window, or a folder's details): loaded, saved as it changes (one save at a time, in order:
  * the first makes a new note, the rest change it). A new one is stored on its first change; left empty, it's dropped.
  */
-function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?: string; tags?: string[] }; onCreated?: (id: string) => void }) {
+function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?: string; tags?: string[]; pageId?: string }; onCreated?: (id: string) => void }) {
   const noteId = useRef<string | null>(id === 'new' ? null : id)
   const [loaded, setLoaded] = useState<OwnerNote | null>(id === 'new' ? { id: '', title: '', html: '', createdAt: 0, updatedAt: 0 } : null)
   const [error, setError] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [tags, setTags] = useState<string[]>(defaults?.tags ?? [])
   const [folder, setFolder] = useState<string | undefined>(defaults?.folder)
+  // the page it's on (ui/NotePages.tsx); a note made inside a page starts on it
+  const [pageId, setPageId] = useState<string | undefined>(defaults?.pageId)
   // optional for each note, off to start with: the agents may read and change it
   const [shared, setShared] = useState(false)
   const [pinned, setPinned] = useState(false)
+  // its day on the calendar (ui/NoteDate.tsx)
+  const [when, setWhen] = useState<NoteWhen>({})
   const draft = useRef<Draft>({
     title: '',
     html: '',
@@ -325,10 +427,13 @@ function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?
     shared: false,
     pinned: false,
     ...(defaults?.folder ? { folder: defaults.folder } : {}),
+    ...(defaults?.pageId ? { pageId: defaults.pageId } : {}),
   })
   // the editor has text (typed, maybe not saved yet)
   const editorEmpty = useRef(true)
   const closed = useRef(false)
+  // its editor, once loaded: Ask Marcus's Insert / Replace note go through it (and save like typing)
+  const editor = useRef<RichNotesApi | null>(null)
 
   /** the newest version this window has (opened on, or its own last save) */
   const known = useRef(0)
@@ -342,10 +447,12 @@ function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?
     setTitle(n.title)
     setTags(n.tags ?? [])
     setFolder(n.folder)
+    setPageId(n.pageId)
     setShared(!!n.shared)
     setPinned(!!n.pinned)
+    setWhen({ date: n.date, dateEnd: n.dateEnd, time: n.time })
     editorEmpty.current = !n.html.trim()
-    draft.current = { title: n.title, html: n.html, folder: n.folder ?? null, tags: n.tags ?? [], shared: !!n.shared, pinned: !!n.pinned }
+    draft.current = { title: n.title, html: n.html, folder: n.folder ?? null, pageId: n.pageId ?? null, tags: n.tags ?? [], shared: !!n.shared, pinned: !!n.pinned }
   }
   const fetchNote = (noteKey: string) =>
     api(`/api/notes/${encodeURIComponent(noteKey)}`).then(async (r) => {
@@ -476,6 +583,7 @@ function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?
     shared,
     pinned,
     editorEmpty,
+    editor,
     persist,
     leave,
     remove,
@@ -489,9 +597,27 @@ function useNote({ id, defaults, onCreated }: { id: string; defaults?: { folder?
     },
     setTags: (t: string[]) => (setTags(t), persistQuietly({ tags: t })),
     setShared: (v: boolean) => (setShared(v), persistQuietly({ shared: v })),
+    pageId,
+    /** its page (null: no page) */
+    setPage: (p: string | null) => (setPageId(p ?? undefined), persistQuietly({ pageId: p })),
+    when,
+    /** a new day, range or time (null clears one; no day: none of it), shown at once and saved */
+    setWhen: (patch: NoteWhenPatch) => {
+      setWhen((w) => {
+        const next = { ...w }
+        for (const k of ['date', 'dateEnd', 'time'] as const) if (patch[k] !== undefined) next[k] = patch[k] ?? undefined
+        if (!next.date) return {}
+        if (next.dateEnd) next.time = undefined
+        return next
+      })
+      persistQuietly(patch)
+    },
   }
 }
 type NoteState = ReturnType<typeof useNote>
+
+/** How much wider the note's window grows for Ask Marcus's panel (its column and the gap before it). */
+const ASSIST_WIDTH = 376
 
 function PinButton({ note }: { note: NoteState }) {
   return (
@@ -530,6 +656,7 @@ function NoteTitle({ note, autoFocus }: { note: NoteState; autoFocus: boolean })
   }
   if (editing)
     return (
+      <div className="note-modal__name note-modal__name--editing">
       <textarea
         ref={box}
         className="note-modal__title"
@@ -547,6 +674,19 @@ function NoteTitle({ note, autoFocus }: { note: NoteState; autoFocus: boolean })
         rows={1}
         autoFocus={autoFocus}
       />
+      {/* ✓ keeps the name (as Enter does); pressed before the box loses its focus, so the click lands */}
+      <button
+        type="button"
+        className="icon-btn small ghost note-modal__name-save"
+        data-tip="Save title"
+        aria-label="Save title"
+        disabled={!note.title.trim()}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={done}
+      >
+        <LuCheck />
+      </button>
+      </div>
     )
   return (
     <div className="note-modal__name">
@@ -560,8 +700,10 @@ function NoteTitle({ note, autoFocus }: { note: NoteState; autoFocus: boolean })
   )
 }
 
-/** The note itself: title, folder, tags, Share with agents, and the rich text. */
-function NoteFields({ note, autoFocus }: { note: NoteState; autoFocus: boolean }) {
+/** The note itself: title, folder, tags, Share with agents, and the rich text (`overEditor`: e.g. Ask Marcus's ✨ on it). */
+function NoteFields({ note, autoFocus, overEditor }: { note: NoteState; autoFocus: boolean; overEditor?: ReactNode }) {
+  // phones: its folder, page, date, tags and sharing fold away behind a settings button by the title
+  const [settings, setSettings] = useState(false)
   if (note.error && !note.loaded) return <div className="row__error">{note.error}</div>
   if (!note.loaded)
     return (
@@ -573,9 +715,24 @@ function NoteFields({ note, autoFocus }: { note: NoteState; autoFocus: boolean }
     <>
       {note.error && <div className="row__error">{note.error}</div>}
       <div className="note-modal__fields">
-        <NoteTitle note={note} autoFocus={autoFocus} />
-        <div className="note-modal__meta">
+        <div className="note-modal__titlerow">
+          <NoteTitle note={note} autoFocus={autoFocus} />
+          <button
+            type="button"
+            className={`icon-btn small ghost note-modal__settings${settings ? ' is-on' : ''}`}
+            aria-label="Note settings"
+            aria-expanded={settings}
+            onClick={() => setSettings(!settings)}
+          >
+            <LuSettings2 />
+            {/* a dot: something is set (folder, page, date, tags or shared) */}
+            {(note.folder || note.pageId || note.when.date || note.tags.length > 0 || note.shared) && <span className="note-modal__settings-dot" aria-hidden />}
+          </button>
+        </div>
+        <div className={`note-modal__meta${settings ? ' is-open' : ''}`}>
           <NotePlaceButton note={note} />
+          <NotePageSelect value={note.pageId} onChange={note.setPage} />
+          <NoteDateButton value={note.when} onChange={note.setWhen} />
           <TagPicker size="sm" value={note.tags} onChange={note.setTags} />
           <label
             className="note-modal__share"
@@ -590,6 +747,7 @@ function NoteFields({ note, autoFocus }: { note: NoteState; autoFocus: boolean }
           </label>
         </div>
       </div>
+      <div className="note-modal__editor">
       <Suspense
         fallback={
           <div className="muted">
@@ -606,8 +764,11 @@ function NoteFields({ note, autoFocus }: { note: NoteState; autoFocus: boolean }
           placeholder="Write your note: ideas, decisions, todos, links…"
           save={(html) => note.persist({ html })}
           onEdit={(empty) => ((note.editorEmpty.current = empty), (note.typedAt.current = Date.now()))}
+          onReady={(api) => void (note.editor.current = api)}
         />
       </Suspense>
+      {overEditor}
+      </div>
     </>
   )
 }
@@ -624,8 +785,8 @@ export function NoteModal({
   defaults,
 }: {
   id: string
-  /** a new note made from somewhere: its folder (a folder's details) */
-  defaults?: { folder?: string; tags?: string[] }
+  /** a new note made from somewhere: its folder (a folder's details), its page (inside a page in Notes) */
+  defaults?: { folder?: string; tags?: string[]; pageId?: string }
   onClose: () => void
   onCreated: (id: string) => void
   /** put aside (a chip brings it back) */
@@ -635,6 +796,14 @@ export function NoteModal({
 }) {
   const max = useModalMaximize(760)
   const note = useNote({ id, defaults, onCreated })
+  const mobile = useMediaQuery(MOBILE)
+  // Ask Marcus (?nai=1, ui/NoteAssist.tsx): only for a note that's stored (a new one gets its id on its first save)
+  const saved = id !== 'new' ? id : null
+  const assist = useParam('nai') === '1' && !hidden && !!saved
+  const toggleAssist = () => (assist ? setUrl({ nai: null }) : openUrl({ nai: 1 }))
+  const panel = assist && !mobile
+  // the panel slides in as the window widens, and out before it goes (styles/note-assist.css)
+  const panelShown = usePresence(panel, 200)
 
   const close = () => {
     note.leave()
@@ -658,11 +827,15 @@ export function NoteModal({
       title={note.title.trim() || (id === 'new' ? 'New note' : 'Note')}
       hideTitle
       {...max.modalProps}
+      // the chat on the right: the window widens for it
+      width={panel && !max.full ? 760 + ASSIST_WIDTH : max.modalProps.width}
+      className={`note-window${max.modalProps.className ? ` ${max.modalProps.className}` : ''}`}
       hidden={hidden}
       // a click beside it puts it aside instead of closing it (like a folder's window)
       onBackdrop={onMinimize ? () => void minimize() : undefined}
       actions={
         <>
+          {!mobile && <NoteAssistButton saved={!!saved} on={assist} onToggle={toggleAssist} />}
           <PinButton note={note} />
           {onMinimize && (
             <button className="icon-btn small ghost" data-tip="Minimize" aria-label="Minimize" onClick={() => void minimize()}>
@@ -673,8 +846,9 @@ export function NoteModal({
         </>
       }
     >
-      <div className="modal__body note-modal" ref={max.bodyRef}>
-        <NoteFields note={note} autoFocus={id === 'new'} />
+      <div className={`modal__body note-modal note-modal--window${panel ? ' note-modal--assist' : ''}`} ref={max.bodyRef}>
+        <div className="note-modal__main">
+        <NoteFields note={note} autoFocus={id === 'new'} overEditor={mobile && note.loaded ? <NoteAssistFab saved={!!saved} onOpen={toggleAssist} /> : null} />
         {note.loaded && (
           <footer className="modal__foot">
             <button className="ghost" onClick={async () => (await note.remove()) && onClose()}>
@@ -686,14 +860,20 @@ export function NoteModal({
             </button>
           </footer>
         )}
+        </div>
+        {panelShown.mounted && saved && <NoteAssistPanel noteId={saved} editor={note.editor} closing={panelShown.closing} onClose={() => setUrl({ nai: null })} />}
       </div>
+      {assist && mobile && <NoteAssistSheet noteId={saved} editor={note.editor} onClose={() => setUrl({ nai: null })} />}
     </Modal>
   )
 }
 
 /** A folder's note opened right in its details (no window of its own): Back goes to the folder's notes. */
 function InlineNote({ id, folder, onBack }: { id: string; folder: string; onBack: () => void }) {
-  const note = useNote({ id, defaults: { folder } })
+  // Ask Marcus: a sheet over the folder's window (no address of its own here); a new note has none until it's stored
+  const [assist, setAssist] = useState(false)
+  const [savedId, setSavedId] = useState(id === 'new' ? null : id)
+  const note = useNote({ id, defaults: { folder }, onCreated: setSavedId })
   const back = () => {
     note.leave()
     onBack()
@@ -707,6 +887,7 @@ function InlineNote({ id, folder, onBack }: { id: string; folder: string; onBack
         <span className="grow" />
         {note.loaded && (
           <>
+            <NoteAssistButton saved={!!savedId} on={assist} onToggle={() => setAssist((v) => !v)} />
             <PinButton note={note} />
             <button className="icon-btn small ghost" data-tip="Delete" aria-label="Delete" onClick={async () => (await note.remove()) && onBack()}>
               <LuTrash2 />
@@ -715,6 +896,7 @@ function InlineNote({ id, folder, onBack }: { id: string; folder: string; onBack
         )}
       </div>
       <NoteFields note={note} autoFocus={id === 'new'} />
+      {assist && savedId && <NoteAssistSheet noteId={savedId} editor={note.editor} onClose={() => setAssist(false)} />}
     </div>
   )
 }

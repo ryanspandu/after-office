@@ -15,9 +15,13 @@ import { cleanCustomStatus, saveStatuses } from '../work/statuses'
 import { cleanTagIds, deleteTag, putTag } from '../work/tags'
 import { listPreviews, stopPort, stopPreview } from '../work/previews'
 import { AgentError, resolveCwd } from '../agents/manager'
-import { createNote, deleteNote, reorderNotes, updateNote } from '../work/notes'
+import { createNote, createPage, deleteNote, deletePage, reorderNotes, reorderPages, updateNote, updatePage } from '../work/notes'
 import { cleanFolder } from '../work/folders'
 import { touchThread } from '../work/threads'
+import { askAboutNote, noteHelperOf } from '../work/noteAssist'
+import { NOTE_IMAGE_MAX, noteImageFile, saveNoteImage } from '../work/noteImages'
+import { commitStaged, committedPaths, MAX_UPLOADS, withAttachments } from '../agents/uploads'
+import { noteOwnerMessage } from '../work/activity'
 import { toolsReport } from '../system/tools'
 import { endTerminal, runningReport } from '../system/running'
 import { taskFolder, addComment, endParallelSession, deliver, deliverToManager, checkQuota, endBossMode, makesCycle, markAllReportsRead, markReport, startReportJob, publishWork, setReportTags, reviseTask, runCron, cleanCron, startBossMode, startPublicAccess, startTask, resumeTask, stopPublicAccess, tickTasks } from '../work/work'
@@ -282,11 +286,49 @@ workRoutes.put('/notes/order', async (c) => {
   reorderNotes(((await c.req.json().catch(() => ({}))) as { ids?: unknown }).ids)
   return c.json({ ok: true })
 })
+// the notes' pages (Notes → its cards): made, renamed or put in order, deleted (their notes stay, on no page)
+workRoutes.post('/note-pages', async (c) => c.json(createPage(await c.req.json().catch(() => ({})))))
+workRoutes.put('/note-pages/order', async (c) => {
+  reorderPages(((await c.req.json().catch(() => ({}))) as { ids?: unknown }).ids)
+  return c.json({ ok: true })
+})
+workRoutes.put('/note-pages/:id', async (c) => c.json(updatePage(c.req.param('id'), await c.req.json().catch(() => ({})))))
+workRoutes.delete('/note-pages/:id', (c) => c.json(deletePage(c.req.param('id'))))
 workRoutes.post('/notes', async (c) => c.json(createNote(await c.req.json().catch(() => ({})))))
 workRoutes.put('/notes/:id', async (c) => c.json(updateNote(c.req.param('id'), await c.req.json().catch(() => ({})))))
 workRoutes.delete('/notes/:id', (c) => {
   deleteNote(c.req.param('id'))
   return c.json({ ok: true })
+})
+// pictures in the notes (work/noteImages.ts): raw bytes in, a URL out; shown to a signed-in dashboard only
+workRoutes.post('/note-images', requireSameOriginOnly, async (c) => {
+  if (Number(c.req.header('content-length') ?? 0) > NOTE_IMAGE_MAX) throw new AgentError(`A picture is limited to ${NOTE_IMAGE_MAX / 1024 / 1024} MB`, 413)
+  return c.json(saveNoteImage(new Uint8Array(await c.req.arrayBuffer())))
+})
+workRoutes.get('/note-images/:file', (c) => {
+  const f = noteImageFile(c.req.param('file'))
+  if (!f) return c.json({ error: 'No such picture' }, 404)
+  // a stored picture never changes (a new one gets a new name)
+  return new Response(Bun.file(f.path), {
+    headers: { 'content-type': f.type, 'cache-control': 'private, max-age=31536000, immutable', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'" },
+  })
+})
+// "Ask Marcus" in a note (work/noteAssist.ts): its hidden helper thread, made on the first message
+workRoutes.get('/notes/:id/assist', (c) => {
+  const t = noteHelperOf(c.req.param('id'))
+  return c.json(t ? { threadId: t.id, sessionKey: t.sessionKey } : null)
+})
+workRoutes.post('/notes/:id/assist', async (c) => {
+  const b = await c.req.json<{ text?: unknown; uploads?: unknown }>().catch(() => ({}) as { text?: unknown; uploads?: unknown })
+  const text = typeof b.text === 'string' ? b.text.slice(0, 50_000) : ''
+  const ids = Array.isArray(b.uploads) ? b.uploads.filter((f): f is string => typeof f === 'string').slice(0, MAX_UPLOADS) : []
+  if (!text.trim() && !ids.length) throw new AgentError('Write something first', 400)
+  const manager = agentsRepo.manager()
+  if (!manager) throw new AgentError('Ask Marcus needs the manager: add one to the office first', 409)
+  // attachments (staged by /uploads) go into the manager's folder, as in a thread
+  const paths = committedPaths(ids.map((id) => commitStaged(manager, id)))
+  noteOwnerMessage(manager.id, requestWho(c))
+  return c.json(await askAboutNote(c.req.param('id'), withAttachments(text, paths)))
 })
 workRoutes.put('/reports/:id/tags', async (c) => {
   const { tags } = await c.req.json<{ tags?: unknown }>().catch(() => ({ tags: undefined }))

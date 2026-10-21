@@ -100,10 +100,18 @@ const HIDE_SYSTEM_KEY = 'after-office:chat-hide-system'
 /** A thread's first message (server: work/threads.ts threadContext): its "[Thread: …]" block, apart from the owner's
  *  words after it. */
 function splitThreadBlock(text: string): { block: string | null; rest: string } {
+  // a note's helper (server: work/noteAssist.ts): its block and the note's text (to "NOTE>>>"), then the owner's words
+  if (/^\s*\[(Note helper|The note now)/.test(text)) {
+    const note = text.indexOf('NOTE>>>')
+    const at = text.indexOf('\n\n', note === -1 ? 0 : note)
+    return at === -1 ? { block: text.trim(), rest: '' } : { block: text.slice(0, at).trim(), rest: text.slice(at + 2).trim() }
+  }
   if (!/^\s*\[Thread: /.test(text)) return { block: null, rest: text }
   const at = text.indexOf('\n\n')
   return at === -1 ? { block: text.trim(), rest: '' } : { block: text.slice(0, at).trim(), rest: text.slice(at + 2).trim() }
 }
+/** The note's text sent along (a note's helper): folded to its first line unless opened, whatever "System" says. */
+const isNoteBlock = (block: string) => /^\[(Note helper|The note now)/.test(block)
 const isSystemMessage = (text: string) => /^\s*(\[After Office\]|\[From the manager\]|New task: )/.test(text)
 
 /** A chat in a thread (ui/ThreadView.tsx): sent through the thread (which opens its session again when needed), with
@@ -126,6 +134,8 @@ export interface ThreadChat {
     edit: (id: string, text: string) => Promise<unknown>
     unsend: (id: string) => Promise<unknown>
   }
+  /** a small side panel (a note's writing help): no session bar (mode, status, Compact, System, search), no mic */
+  bare?: boolean
 }
 
 /** A message to bring into view (a report's, by its task id; or the one nearest a time), asked again with a new `n`. */
@@ -355,6 +365,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
   const [contextOpen, setContextOpen] = useState(false)
   // phones: the row only while opened (the + button shows a dot when something is picked); elsewhere also while set
   const ctxShown = !thread && (contextOpen || (context.active && !mobile))
+  const bare = !!thread?.bare
   const fileInput = useRef<HTMLInputElement>(null)
   // opening the chat puts the cursor in the message box (not on phones: that would pop the keyboard up over it)
   useEffect(() => {
@@ -724,7 +735,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
   return (
     <div
       ref={chatRef}
-      className={`chat${mobile ? ' chat--mobile' : ''}${dragging ? ' chat--drop' : ''}`}
+      className={`chat${mobile ? ' chat--mobile' : ''}${bare ? ' chat--bare' : ''}${dragging ? ' chat--drop' : ''}`}
       // drop files anywhere on the chat to attach them
       onDragOver={(e) => {
         if (offline || !e.dataTransfer.types.includes('Files')) return
@@ -742,7 +753,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
       }}
     >
       {header}
-      {mobile ? (
+      {bare ? null : mobile ? (
         <>
           <div className={`chat__float${findOpen ? ' chat__float--find' : ''}`}>
             {findOpen ? (
@@ -773,7 +784,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
         bar
       )}
 
-      {findOpen && !mobile && findBar}
+      {findOpen && !mobile && !bare && findBar}
       <div
         className="chat__log"
         onPointerDown={() => infoOpen && setInfoOpen(false)}
@@ -796,9 +807,10 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
             const files = paths.filter((p) => !isFrameSheet(p)).map((p) => ownerFiles.get(p)).filter((f) => !!f)
             const system = isSystemMessage(said)
             const blockId = `${i.id}:thread`
-            const contextPart = threadBlock ? (
+            // the note's helper panel: the note's text sent along is the office's business, not shown at all
+            const contextPart = threadBlock && !(bare && isNoteBlock(threadBlock)) ? (
               <div className="msg-user msg-user--system">
-                {hideSystem && !opened.has(blockId) ? (
+                {(hideSystem || isNoteBlock(threadBlock)) && !opened.has(blockId) ? (
                   <button type="button" className="msg msg--user msg--system-line" onClick={() => setOpened((o) => new Set(o).add(blockId))} data-tip="Show it all">
                     <span className="truncate">{threadBlock.split('\n')[0]}</span>
                   </button>
@@ -979,7 +991,7 @@ export function ChatView({ agent, session, header, thread, jump }: { agent: Offi
           onHasText={setHasText}
           mentions={thread?.names}
         />
-        {dict.supported && <MicButton dict={dict} disabled={offline} />}
+        {dict.supported && !bare && <MicButton dict={dict} disabled={offline} />}
         {/* the agent is at work and nothing is typed: this button stops it (Esc in its session); typing something turns it back into Send (a follow-up joins the answer) */}
         {active && !offline && !compacting && !hasText && pending.ids.length === 0 ? (
           <button className="icon-btn chat__stop" onClick={stop} disabled={busy === 'stop'} data-tip={`Stop ${agent.name} (Esc in the session)`} aria-label="Stop the agent">

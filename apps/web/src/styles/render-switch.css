@@ -23,3 +23,13 @@
 .stage-badges { position: absolute; top: 10px; left: 10px; z-index: 5; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none; }
 .stage-badges > * { pointer-events: auto; box-shadow: var(--shadow); }
 .stage-badges:empty { display: none; }
+/* the stage's zoom level (ui/ZoomBadge.tsx): top left, out of the way; fullscreen moves the camera buttons there, so
+   it goes to the bottom left; phones keep their own badges up there */
+.zoom-badge {
+  position: absolute; top: 12px; left: 12px; z-index: 5; padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text);
+  background: color-mix(in srgb, var(--card) 82%, transparent); backdrop-filter: blur(8px); border: 1px solid var(--line);
+  pointer-events: auto;
+}
+.app--full .zoom-badge { top: auto; bottom: 12px; }
+@media (max-width: 768px) { .zoom-badge { display: none; } }

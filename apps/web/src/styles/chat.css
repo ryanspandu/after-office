@@ -159,7 +159,8 @@
 /* a report at full size: its text takes the room (ReportModal) */
 .modal--full .report { flex: 1; min-height: 0; }
 .modal--full .report .report__text { flex: 1; max-height: none; }
-.modal--full .report .report__text .md { max-width: 980px; margin: 0 auto; }
+/* full size: the text across the whole width, with room at the sides (like the notes) */
+.modal--full .report .report__text .md { max-width: none; margin: 0; padding-inline: 24px; }
 /* search in the chat (ChatTab) */
 .chat__find { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; padding: 4px 4px 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
 .chat__find:focus-within { border-color: var(--hl); }

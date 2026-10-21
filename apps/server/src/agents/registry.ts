@@ -5,6 +5,9 @@ import { applyTick, initialRuntime, type Runtime } from './state'
 import { gitIdentitiesRepo } from '../db'
 import { toIdentity } from './git'
 
+/** An avatar's hair the owner can pick: one of the Notionists drawings (ui/AgentFace.tsx). */
+export const FACE = /^variant(0[1-9]|[1-5]\d|6[0-3])$/
+
 // In-memory live state (runtime per agent, pending follow-ups, subscription rate limits) plus a tiny pub/sub that
 // feeds the SSE stream. Persistent agent config lives in SQLite (db.ts).
 
@@ -124,6 +127,7 @@ export function toInfo(row: AgentRow, rt = runtimeOf(row.id)): AgentInfo {
     name: row.name,
     kind: row.kind ?? 'worker',
     ...(row.figure === 'man' || row.figure === 'woman' ? { figure: row.figure } : {}),
+    ...(typeof row.face === 'string' && FACE.test(row.face) ? { face: row.face } : {}),
     ...(typeof row.style === 'number' ? { style: row.style } : {}),
     ...(isEffort(row.effort) ? { effort: row.effort } : {}),
     ...(row.git_name || row.git_email ? { git: { ...(row.git_name ? { name: row.git_name } : {}), ...(row.git_email ? { email: row.git_email } : {}) } } : {}),
@@ -234,7 +238,7 @@ export function setRateLimits(r: RateLimits) {
 }
 
 /** Filled in by work.ts (avoids an import cycle: work → manager → registry). */
-let workProvider: () => WorkState = () => ({ tasks: [], projects: [], crons: [], timezone: 'UTC', queued: {}, reports: [], archivedTasks: 0, settings: DEFAULT_SETTINGS, automation: { channels: [], quotaPaused: null }, tags: [], bossMode: null, publicAccess: { supported: false, public: false }, notes: [], statuses: [], reportJob: null, threads: [] })
+let workProvider: () => WorkState = () => ({ tasks: [], projects: [], crons: [], timezone: 'UTC', queued: {}, reports: [], archivedTasks: 0, settings: DEFAULT_SETTINGS, automation: { channels: [], quotaPaused: null }, tags: [], bossMode: null, publicAccess: { supported: false, public: false }, notes: [], notePages: [], statuses: [], reportJob: null, threads: [] })
 export const setWorkProvider = (fn: () => WorkState) => void (workProvider = fn)
 
 export function snapshot(): OfficeEvent {

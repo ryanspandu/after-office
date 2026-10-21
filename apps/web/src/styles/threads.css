@@ -201,6 +201,11 @@ button.report__thread:hover { text-decoration: underline; }
 .thread-group, .thread-group__kid { list-style: none; touch-action: manipulation; }
 .thread-group + .thread-group { border-top: 1px solid var(--line); }
 .thread-group__kids { margin: 0; padding: 0; }
+/* a thread's sub-threads fold away and open again with a slide (and a fade) */
+.thread-group__fold { display: grid; grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease; }
+.thread-group__fold > * { min-height: 0; overflow: hidden; }
+.thread-group__fold.is-folded { grid-template-rows: 0fr; opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .thread-group__fold { transition: none; } }
 .thread-group.is-dragging, .thread-group__kid.is-dragging {
   position: relative; z-index: 3; opacity: 0.85; background: var(--card); border-radius: 10px; box-shadow: var(--shadow); cursor: grabbing;
 }
@@ -242,3 +247,8 @@ button.link.link--inline.thread-file__go { display: inline-flex; align-items: ce
 @media (max-width: 768px) { .thread-files > .attachments { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* a picture among the grid: as wide as its cell */
 .thread-files .attachment--image { width: 100%; }
+/* phones: a bigger arrow to tap */
+@media (max-width: 768px) {
+  .thread-row__fold { width: 40px; height: 40px; right: 0; font-size: 16px; }
+  .thread-row--parent > .report-row__main { padding-right: 44px; }
+}

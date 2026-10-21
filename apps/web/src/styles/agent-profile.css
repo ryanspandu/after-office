@@ -55,3 +55,19 @@ input:disabled { opacity: 0.6; }
 .skills__toggle { flex: 0 0 auto; align-self: center; margin-top: 12px; }
 .skills__edit .ghost { align-self: flex-start; }
 @media (max-width: 640px) { .skills { grid-template-columns: 1fr; } }
+/* Overview → Avatar (ui/AvatarPicker.tsx): the current one, then the choices */
+.avatar-pick { display: grid; gap: 10px; }
+.avatar-pick__current { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 10px; justify-self: start; padding: 4px 12px 4px 4px; border-radius: 999px; background: var(--card-2); font-size: 13px; cursor: pointer; }
+.avatar-pick__current:hover { color: var(--text); background: color-mix(in srgb, var(--card-2) 80%, var(--text)); }
+.avatar-pick__current:focus-visible { outline: 2px solid var(--hl); outline-offset: 2px; }
+.avatar-pick__current .avatar { border-radius: 999px; }
+.avatar-pick__chev { color: var(--muted); transition: transform 0.15s; }
+.avatar-pick__chev.is-open { transform: rotate(180deg); }
+.avatar-pick__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 8px; padding: 10px; border-radius: 14px; background: var(--card-2); max-height: 240px; overflow-y: auto; }
+.avatar-pick__opt { all: unset; box-sizing: border-box; position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: 12px; cursor: pointer; transition: transform 0.12s; }
+.avatar-pick__opt .avatar { width: 100%; height: 100%; border-radius: 12px; }
+.avatar-pick__opt:hover { transform: translateY(-1px); }
+.avatar-pick__opt.is-on .avatar { box-shadow: 0 0 0 2px var(--card-2), 0 0 0 4px var(--hl); }
+.avatar-pick__opt:focus-visible .avatar { box-shadow: 0 0 0 2px var(--card-2), 0 0 0 4px var(--hl); }
+.avatar-pick__auto { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; background: var(--hl); color: #151515; font-size: 11px; }
+@media (prefers-reduced-motion: reduce) { .avatar-pick__opt, .avatar-pick__chev { transition: none; } }

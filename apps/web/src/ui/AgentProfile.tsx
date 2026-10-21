@@ -30,6 +30,8 @@ import { SecretsSection } from './agent/SecretsSection'
 import { getParam, setUrl, useUrl } from '../state/url'
 import { tip } from './Tooltip'
 import { RulesPicker } from './RulesPicker'
+import { AgentFace } from './AgentFace'
+import { AvatarPicker } from './AvatarPicker'
 
 // Agent drawer. Live: Chat + Terminal with the real Claude Code session, plus Overview / CLAUDE.md / Skills read from
 // and saved to the agent's folder on the server. Demo: the profile tabs edit local state only.
@@ -172,7 +174,7 @@ function Drawer({ agent, onClose: close }: { agent: OfficeAgent; onClose: () => 
         <div className="drawer__grab" aria-hidden="true" {...dragProps} />
         <header className="drawer__head" {...dragProps}>
           <span className="avatar avatar--lg" style={avatarStyle(agent.look.shirt)}>
-            {agent.name[0]}
+            <AgentFace look={agent.look} />
           </span>
           <div className="drawer__title">
             <h3>
@@ -332,8 +334,13 @@ function Overview({ agent, live, draft, set }: { agent: OfficeAgent; live: boole
             value={agent.look.figure}
             onChange={(figure) => {
               // shown right away (same look, that figure's hairstyles); live, the server keeps it and tells every dashboard
-              useOffice.setState((s) => ({ agents: s.agents.map((a) => (a.id === agent.id ? { ...a, figure, look: makeLook(a.desk, a.style, figure) } : a)) }))
-              if (live) void liveApi.setFigure(agent.id, figure).catch(() => {})
+              // a picked avatar is the other figure's hair: back to the automatic one
+              const face = agent.look.face && figure !== agent.look.figure ? null : agent.look.face
+              useOffice.setState((s) => ({ agents: s.agents.map((a) => (a.id === agent.id ? { ...a, figure, face: face ?? undefined, look: { ...makeLook(a.desk, a.style, figure), face: face ?? undefined } } : a)) }))
+              if (live) {
+                void liveApi.setFigure(agent.id, figure).catch(() => {})
+                if (agent.look.face && !face) void liveApi.setFace(agent.id, null).catch(() => {})
+              }
             }}
           />
           <button
@@ -343,7 +350,7 @@ function Overview({ agent, live, draft, set }: { agent: OfficeAgent; live: boole
             onClick={() => {
               if (!live) {
                 const style = Math.floor(Math.random() * 0x7fffffff)
-                useOffice.setState((s) => ({ agents: s.agents.map((a) => (a.id === agent.id ? { ...a, style, look: makeLook(a.desk, style, a.look.figure) } : a)) }))
+                useOffice.setState((s) => ({ agents: s.agents.map((a) => (a.id === agent.id ? { ...a, style, look: { ...makeLook(a.desk, style, a.look.figure), face: a.look.face } } : a)) }))
                 return
               }
               void liveApi.shuffleStyle(agent.id).catch(() => {})
@@ -352,6 +359,17 @@ function Overview({ agent, live, draft, set }: { agent: OfficeAgent; live: boole
             <LuShuffle />
           </button>
         </div>
+      </div>
+      <div className="field">
+        <span className="field__label">Avatar</span>
+        <AvatarPicker
+          agent={agent}
+          onPick={(face) => {
+            // shown right away; live, the server keeps it and tells every dashboard
+            useOffice.setState((s) => ({ agents: s.agents.map((a) => (a.id === agent.id ? { ...a, face: face ?? undefined, look: { ...a.look, face: face ?? undefined } } : a)) }))
+            if (live) void liveApi.setFace(agent.id, face).catch(() => {})
+          }}
+        />
       </div>
 
       {live && (

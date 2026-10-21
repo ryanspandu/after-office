@@ -34,6 +34,8 @@ export interface Look {
   shoes: string
   /** body style: a skirt and girls' hairstyles for 'woman' */
   figure: AgentFigure
+  /** its avatar's hair, picked by the owner (ui/AgentFace.tsx); unset: drawn from this look */
+  face?: string
   /** what it was drawn from (the agent's style number, or its desk): the same one gives the same look */
   seed: number
 }
@@ -349,8 +351,9 @@ const demoAgents = () => {
 function lookFor(desk: number, info: AgentInfo, prev?: Look): Look {
   const seed = info.style ?? desk * 7919 + 17
   const figure = info.figure ?? prev?.figure
-  if (prev && prev.seed === seed && prev.figure === (figure ?? prev.figure)) return prev
-  return makeLook(desk, info.style, figure)
+  if (prev && prev.seed === seed && prev.figure === (figure ?? prev.figure) && prev.face === info.face) return prev
+  const look = makeLook(desk, info.style, figure)
+  return info.face ? { ...look, face: info.face } : look
 }
 
 /** Server AgentInfo → scene agent. Look and desk are stable per desk index, so reloads look the same. */

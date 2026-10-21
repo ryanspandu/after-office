@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { LuChevronDown, LuChevronUp, LuCrown, LuLocateFixed, LuMessageSquare, LuMinus, LuPlus, LuRotateCcw, LuRotateCw, LuX } from 'react-icons/lu'
+import { LuChevronDown, LuChevronUp, LuLocateFixed, LuMessageSquare, LuMinus, LuPlus, LuRotateCcw, LuRotateCw, LuX } from 'react-icons/lu'
 import { useView } from '../scene/focus'
 import { useDashboard } from '../state/dashboard'
 import { avatarStyle, useOffice } from '../state/store'
@@ -7,6 +7,7 @@ import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { activityOf } from './agentActivity'
 import { STATUS_META } from './AgentsPanel'
 import { tip } from './Tooltip'
+import { AgentFace } from './AgentFace'
 
 // A clicked agent in the office: the camera follows it (scene/Office.tsx FocusCamera) and this card says who it is and
 // what it's doing, with its chat a click away. ✕, Esc or a click on empty floor lets it go (the camera goes back).
@@ -30,7 +31,7 @@ export function FocusCard() {
   return (
     <div className="focus-card" role="dialog" aria-label={agent.name}>
       <span className="avatar" style={avatarStyle(agent.look.shirt)}>
-        {agent.kind === 'manager' ? <LuCrown /> : agent.name[0]}
+        <AgentFace look={agent.look} />
       </span>
       <span className="focus-card__text">
         <span className="focus-card__name">

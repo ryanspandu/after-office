@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { avatarStyle } from '../../state/store'
+import { avatarStyle, type Look } from '../../state/store'
+import { AgentFace } from '../AgentFace'
 
 // The chat's message box. It holds what's typed itself, so a keystroke renders this textarea and nothing else (the
 // chat above it, with every message and its Markdown, is left alone: on a phone that made typing heavy). Its text is
@@ -21,6 +22,8 @@ export interface Mentionable {
   name: string
   role?: string
   color: string
+  /** its character's look: its drawn face in the list (ui/AgentFace.tsx) */
+  look?: Look
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -268,7 +271,7 @@ export const ComposerBox = forwardRef<ComposerHandle, {
               onMouseEnter={() => setMenu({ ...menu, index: i })}
             >
               <span className="avatar avatar--xs" style={avatarStyle(o.color)}>
-                {o.name[0]}
+                {o.look ? <AgentFace look={o.look} /> : o.name[0]}
               </span>
               <span className="truncate">{o.name}</span>
               {o.role && <span className="muted truncate">{o.role}</span>}

@@ -10,6 +10,8 @@ interface Props {
   title: string
   /** the title names the dialog (screen readers) but isn't shown: the body shows it its own way */
   hideTitle?: boolean
+  /** shown in place of the title (an avatar and a name…); `title` still names the dialog */
+  heading?: ReactNode
   description?: string
   onClose: () => void
   children: ReactNode
@@ -28,7 +30,7 @@ interface Props {
   onGrow?: () => void
 }
 
-export function Modal({ open, title, hideTitle, description, onClose, children, width = 460, className, actions, hidden, onBackdrop, onShrink, onGrow }: Props) {
+export function Modal({ open, title, hideTitle, heading, description, onClose, children, width = 460, className, actions, hidden, onBackdrop, onShrink, onGrow }: Props) {
   const backdrop = useRef<HTMLDivElement | null>(null)
   const shownAt = useRef(0)
   const setBackdrop = useCallback((el: HTMLDivElement | null) => {
@@ -105,7 +107,7 @@ export function Modal({ open, title, hideTitle, description, onClose, children, 
         <div className="modal__grab" aria-hidden="true" {...dragProps} />
         <header className="modal__head" {...dragProps}>
           <div>
-            {!hideTitle && <h3>{title}</h3>}
+            {heading ?? (!hideTitle && <h3>{title}</h3>)}
             {description && <p className="muted">{description}</p>}
           </div>
           <span className="modal__actions">

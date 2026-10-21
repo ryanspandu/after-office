@@ -1,6 +1,6 @@
 import { haptic } from '../state/haptic'
 import { useMemo, useState, type ReactNode, useEffect } from 'react'
-import { LuBot, LuBriefcase, LuCalendarClock, LuCrown, LuFolderGit2, LuInbox, LuLibrary } from 'react-icons/lu'
+import { LuBot, LuBriefcase, LuCalendarClock, LuCalendarDays, LuCrown, LuFolderGit2, LuInbox, LuLibrary, LuNotebookPen } from 'react-icons/lu'
 import { useNow } from '../state/clock'
 import { useDashboard } from '../state/dashboard'
 import { unreadOf, useOffice } from '../state/store'
@@ -16,13 +16,14 @@ import { openUrl, setUrl, useParam } from '../state/url'
 import { ThreadsPanel } from './Threads'
 import { FoldersTab } from './ProjectsTab'
 import { SearchBox } from './SearchBox'
+import { CalendarCard } from './CalendarView'
 
 // Phones: the office gets the whole screen. Every side panel (attention queue, cron, tasks, reports, agents) opens
 // as a bottom sheet from this floating dock; each button carries a count badge. The open sheet is in the address bar
 // (?sheet=tasks), like every other modal (state/url.ts): the phone's Back (button or swipe) closes it.
 
-type Sheet = 'attention' | 'cron' | 'tasks' | 'reports' | 'agents' | 'threads' | 'folders'
-const SHEETS: Sheet[] = ['attention', 'cron', 'tasks', 'reports', 'agents', 'threads', 'folders']
+type Sheet = 'attention' | 'cron' | 'tasks' | 'reports' | 'agents' | 'threads' | 'folders' | 'calendar'
+const SHEETS: Sheet[] = ['attention', 'cron', 'tasks', 'reports', 'agents', 'threads', 'folders', 'calendar']
 
 function DockButton({ icon, label, count, alert, onClick }: { icon: ReactNode; label: string; count: number; alert?: boolean; onClick: () => void }) {
   return (
@@ -67,7 +68,7 @@ export function MobileDock() {
         <DockButton icon={<LuInbox />} label="For you" count={attention} alert={attention > 0} onClick={() => setSheet('attention')} />
         <DockButton icon={<LuCalendarClock />} label="Daily" count={activeCrons} onClick={() => setSheet('cron')} />
         <DockButton icon={<LuBriefcase />} label="Work" count={urgent || openTasks.length} alert={urgent > 0} onClick={() => setSheet('tasks')} />
-        <DockButton icon={<LuLibrary />} label="Docs" count={unreadReports} onClick={() => setSheet('reports')} />
+        <DockButton icon={<LuLibrary />} label="Reports" count={unreadReports} onClick={() => setSheet('reports')} />
         <DockButton icon={<LuBot />} label="Agents" count={unreadChats} alert={waiting} onClick={() => setSheet('agents')} />
         {manager && (
           <DockButton icon={<LuCrown />} label="Manager" count={unreadOf(manager)} alert={unreadOf(manager) > 0 || manager.status === 'waiting'} onClick={() => openManager(true)} />
@@ -83,12 +84,17 @@ export function MobileDock() {
       <DockSheet open={sheet === 'tasks'} onClose={close} title="Work" bodyClass="dock-sheet">
         <TaskPanel noFolders />
       </DockSheet>
+      {/* opened by the round Calendar button at the stage's bottom left: the Daily card's Calendar on its own */}
+      <DockSheet open={sheet === 'calendar'} onClose={close} title="Calendar" bodyClass="dock-sheet">
+        <CalendarCard />
+      </DockSheet>
       {/* opened by the round Folders button on the stage */}
       <DockSheet open={sheet === 'folders'} onClose={close} title="Folders" bodyClass="dock-sheet">
         <FoldersSheet />
       </DockSheet>
-      <DockSheet open={sheet === 'reports'} onClose={close} title="Docs" bodyClass="dock-sheet">
-        <ReportsPanel />
+      {/* the notes have their own round button on the stage (NotesFab) */}
+      <DockSheet open={sheet === 'reports'} onClose={close} title="Reports" bodyClass="dock-sheet">
+        <ReportsPanel only="reports" />
       </DockSheet>
       {/* opened by the round Threads button on the stage (above the menu button), not from the dock */}
       <DockSheet open={sheet === 'threads'} onClose={close} title="Threads" bodyClass="dock-sheet">
@@ -123,6 +129,24 @@ export function FoldersFab() {
   return (
     <button className="folders-fab" aria-label="Folders" onClick={() => openUrl({ sheet: 'folders' })}>
       <LuFolderGit2 />
+    </button>
+  )
+}
+
+/** Phones: the round Notes button on the stage, left of the menu button (the minimized windows' one left of it). */
+export function NotesFab() {
+  return (
+    <button className="notes-fab" aria-label="Notes" onClick={() => openUrl({ notes: '1' })}>
+      <LuNotebookPen />
+    </button>
+  )
+}
+
+/** Phones: the round Calendar button at the stage's bottom left (the installed app's reload moves right of it). */
+export function CalendarFab() {
+  return (
+    <button className="calendar-fab" aria-label="Calendar" onClick={() => openUrl({ sheet: 'calendar' })}>
+      <LuCalendarDays />
     </button>
   )
 }

@@ -16,6 +16,7 @@ import { useOffice, type OfficeAgent } from '../state/store'
 import { sessionNames } from './agent/SessionTabs'
 import { Field, Modal } from './Modal'
 import { DockSheet } from './DockSheet'
+import { MdPre } from './noteBlocks'
 import { Select } from './Select'
 import { FigurePicker } from './FigurePicker'
 import { useConnectors } from './agent/ConnectorsTab'
@@ -855,7 +856,8 @@ const MD_COMPONENTS: Components = {
       <table>{children}</table>
     </div>
   ),
-  pre: ({ children }) => <pre className="md-code">{children}</pre>,
+  // a ```note block in a note's helper chat gets Insert / Replace note (ui/noteBlocks.tsx)
+  pre: ({ node, children }) => <MdPre node={node}>{children}</MdPre>,
   // agent text is untrusted: an image would be fetched on sight (and could carry data out in its URL),
   // so show it as a link the owner can choose to open
   img: ({ src, alt }) => (

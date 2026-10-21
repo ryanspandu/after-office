@@ -27,6 +27,8 @@ import { TaskDetailModal } from './TaskDetail'
 import { TasksModal } from './TasksModal'
 import { NewThreadModal } from './Threads'
 import { ThreadModal } from './ThreadView'
+import { CalendarModal } from './CalendarView'
+import { NewEventHost } from './NewEvent'
 
 // Every modal, shown from the address bar (state/url.ts). Stacking follows the order below: lists first, then what
 // is opened from them (a task, a report), then forms and settings on top.
@@ -71,6 +73,8 @@ export function UrlModals() {
       {p.newfolder && (
         <NewFolderModal onClose={clear(['newfolder'])} onCreated={(folder) => setUrl({ newfolder: null, folder: folder.path }, 'push')} />
       )}
+      {/* the Daily card's Calendar, big; what it opens (a thread, a task, a note…) comes above it */}
+      {p.calendar && <CalendarModal onClose={clear(['calendar'])} />}
       {/* a thread (?thread=<id>), or a new one: tasks and reports opened from it go on top */}
       {p.thread === 'new' && !p.tparent && <NewThreadModal onClose={clear(['thread'])} />}
       {/* a new sub-thread: made inside its thread's drawer (which stays open) */}
@@ -109,6 +113,8 @@ export function UrlModals() {
       {p.twofa && <TwoFactorModal onClose={clear(['twofa'])} />}
       {p.editprofile && <EditProfileModal onClose={clear(['editprofile'])} />}
       {p.activity && <ActivityModal onClose={clear(['activity'])} />}
+      {/* the calendar's "+" (ui/NewEvent.tsx): over whatever it was opened from */}
+      <NewEventHost />
       <AddAgentModal open={p.addagent === '1'} onClose={clear(['addagent'])} />
       <AddAgentModal open={p.addagent === 'manager'} onClose={clear(['addagent'])} manager />
     </>
@@ -170,6 +176,8 @@ function NoteWindows({ current }: { current?: string }) {
   // a new note from a folder's details: that folder
   const nfolder = useUrl((s) => s.params.nfolder)
   const ntag = useUrl((s) => s.params.ntag)
+  // a new note from inside a page (Notes → View all): that page
+  const npage = useUrl((s) => s.params.npage)
   // a note made in a window opened as "new": the key that window had
   const born = useRef(new Map<string, string>())
   const fresh = useRef<string | null>(null)
@@ -186,20 +194,20 @@ function NoteWindows({ current }: { current?: string }) {
             // the note itself (a window that was opened as "new" keeps its key, but loads the note when it opens again)
             id={id}
             hidden={id !== current}
-            defaults={id === 'new' ? { folder: nfolder ?? undefined, tags: ntag ? [ntag] : undefined } : undefined}
+            defaults={id === 'new' ? { folder: nfolder ?? undefined, tags: ntag ? [ntag] : undefined, pageId: npage ?? undefined } : undefined}
             onCreated={(nid) => {
               born.current.set(nid, key)
               fresh.current = null
-              setUrl({ note: nid, nfolder: null, ntag: null })
+              setUrl({ note: nid, nfolder: null, ntag: null, npage: null })
             }}
             onClose={() => {
               born.current.delete(id)
               useMinimized.getState().remove(id)
-              if (id === current) setUrl({ note: null, nfolder: null, ntag: null })
+              if (id === current) setUrl({ note: null, nfolder: null, ntag: null, npage: null, nai: null })
             }}
             onMinimize={(nid, title) => {
               useMinimized.getState().addNote(nid, title)
-              setUrl({ note: null, nfolder: null, ntag: null })
+              setUrl({ note: null, nfolder: null, ntag: null, npage: null, nai: null })
             }}
           />
         )

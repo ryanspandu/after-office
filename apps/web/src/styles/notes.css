@@ -64,12 +64,33 @@
 .notes-modal__bar > .search-box { flex: 1 1 200px; max-width: 320px; min-width: 0; }
 .notes-modal__bar > .rs { flex: 0 1 200px; min-width: 0; }
 .notes-modal__new { flex-shrink: 0; white-space: nowrap; }
+/* the Filters button is for phones (a computer shows the filters in the row) */
+.notes-modal__filter { display: none; }
+@media (max-width: 768px) { .notes-modal__filter { display: inline-flex; } }
+/* desktop, not full size: everything on one row, New note only its + */
+@media (min-width: 769px) {
+  .modal:not(.modal--full) .notes-modal__bar { flex-wrap: nowrap; }
+  .modal:not(.modal--full) .notes-modal__bar > .search-box { flex: 1 1 160px; }
+  .modal:not(.modal--full) .notes-modal__bar > .rs { flex: 0 1 170px; }
+  .modal:not(.modal--full) .notes-modal__new { width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: 50%; }
+  .modal:not(.modal--full) .notes-modal__new-label { display: none; }
+}
 @media (max-width: 768px) {
   /* phones: search and New note on one line, the folder filter under them */
   .notes-modal__bar > .search-box { flex: 1 1 0; max-width: none; }
   .notes-modal__gap { display: none; }
   .notes-modal__bar > .rs { order: 3; flex: 1 1 100%; }
+  /* New page and New note: just their icons, round and as tall as the search box beside them */
+  .notes-modal__new { align-self: stretch; flex: none; aspect-ratio: 1; width: auto; height: auto; min-height: 0; padding: 0; justify-content: center; border-radius: 999px; font-size: 16px; }
+  .notes-modal__new .notes-modal__new-label { display: none; }
+  /* the folder and tag filters: behind the Filters button until it's pressed */
+  .notes-modal__bar:not(.is-filtering) > .rs { display: none; }
+  .notes-modal__filter { position: relative; }
+  .notes-modal__filter.is-on { background: var(--text); color: var(--card); }
+  .notes-modal__filter-dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 999px; background: var(--hl); }
 }
+/* a page's card while dragged: above the others */
+.page-card.is-dragging { z-index: 2; opacity: 0.9; box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3); cursor: grabbing; }
 /* full size: the list takes the rest of the window */
 .modal--full .notes-modal { flex: 1; min-height: 0; }
 .modal--full .notes-modal .reports-modal__list { max-height: none; flex: 1; min-height: 0; overflow-y: auto; }
@@ -89,6 +110,10 @@
   .note-modal__meta > .chat-ctx__project { grid-column: 1; grid-row: 1; flex: none; width: 100%; height: 36px; }
   .note-modal__meta > .note-modal__share { grid-column: 2; grid-row: 1; height: 36px; }
   .note-modal__meta > .rs { grid-column: 1 / -1; grid-row: 2; }
+  /* its page, then its date: a row each under the folder, the tags under them */
+  .note-modal__meta > .note-page-select { grid-column: 1 / -1; grid-row: 2; height: 36px; }
+  .note-modal__meta > .note-date { grid-column: 1 / -1; grid-row: 3; width: 100%; height: 36px; }
+  .note-modal__meta > .note-date ~ .rs { grid-row: 4; }
   :is(.note-modal__title, .note-modal__name-text) { font-size: 18px; }
   /* full size on a phone: a writing view, the note's name and its text only (folder, tags, Share and the footer
      come back at the smaller size) */
@@ -110,15 +135,204 @@
 .note-inline__bar { display: flex; align-items: center; gap: 6px; flex: none; margin: -2px 0 -4px; }
 .note-inline__bar > button.ghost { padding-left: 6px; }
 /* the editor's toolbar: one row; what doesn't fit opens from "⋯" at its end (ui/FolderNotes.tsx FittingToolbar) */
-.fnotes__tools { flex-wrap: nowrap; position: relative; }
+/* one row, never wrapped (FittingToolbar tucks what doesn't fit behind ⋯); over styles/projects.css's wrap */
+.fnotes__tools, .fnotes__box .fnotes__tools { flex-wrap: nowrap; position: relative; }
+.fnotes__trail { flex: none; }
 .fnotes__group[hidden] { display: none; }
 .fnotes__more { position: relative; display: inline-flex; margin-left: auto; padding-left: 4px; border-left: 1px solid var(--line); }
 .fnotes__menu {
   position: absolute; top: calc(100% + 8px); right: -4px; z-index: 30; display: flex; flex-direction: column; gap: 2px; padding: 6px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px rgba(0, 0, 0, .18);
+  background: var(--card-2); border: 0; border-radius: 12px; box-shadow: 0 12px 30px rgba(0, 0, 0, .28);
   animation: popover-in .14s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.fnotes__menu > .fnotes__group { border-left: 0; padding: 2px; }
-.fnotes__menu > .fnotes__group + .fnotes__group { border-top: 1px solid var(--line); padding-top: 4px; }
+/* no lines in it: its groups are rows, apart by a little space */
+.fnotes__menu .fnotes__group { border: 0 !important; padding: 2px; }
+.fnotes__menu > .fnotes__group + .fnotes__group { padding-top: 4px; }
+/* phones (PhoneToolbar): the most used tools in a row that scrolls sideways (faded where more is beyond), then ⋯ and
+   Done kept at the right end; 36px targets */
+.fnotes__tools--phone { gap: 4px; padding: 3px 4px; }
+.fnotes__row { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
+.fnotes__row::-webkit-scrollbar { display: none; }
+.fnotes__row.fade-right { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+.fnotes__row.fade-left { mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+.fnotes__row.fade-left.fade-right { mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+.fnotes__tools--phone .fnotes__btn { flex: none; width: 36px; height: 36px; font-size: 17px; }
+/* the toolbar's selects (ui/Select.tsx, size sm): Text style and Font size, flat like its buttons */
+.fnotes__tools .rs { flex: none; }
+.fnotes__blocksel { width: 100px; }
+.fnotes__sizesel { width: 88px; }
+.fnotes__tools .rs__control { min-height: 30px !important; padding: 0 2px 0 8px; border-color: transparent; border-radius: 7px; background: transparent; font-size: 12.5px; }
+.fnotes__tools .rs__control:hover, .fnotes__tools .rs__control--focused { border-color: transparent; background: var(--card-2); }
+.fnotes__tools .rs__input-container { color: var(--text); }
+.fnotes__tools .rs__placeholder { color: var(--muted); }
+.fnotes__tools--phone .rs__control { min-height: 36px !important; font-size: 13px; }
+.fnotes__tools--phone .fnotes__blocksel { width: 104px; }
+.fnotes__menu .rs { width: 110px; }
+/* the Text style list: each kind shown in its own size */
+.fnotes__blockopt { display: block; line-height: 1.25; font-weight: 600; }
+.fnotes__blockopt--p { font-weight: 400; }
+.fnotes__blockopt--1 { font-size: 17px; font-weight: 700; }
+.fnotes__blockopt--2 { font-size: 15.5px; }
+.fnotes__blockopt--3 { font-size: 14px; }
+.fnotes__blockopt--4 { font-size: 13px; }
+.fnotes__blockopt--5 { font-size: 12px; }
+.fnotes__blockopt--6 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.rs__option--selected .fnotes__blockopt { color: inherit; }
+.fnotes__px { color: var(--muted); font-size: 11px; }
+.rs__option--selected .fnotes__px { color: inherit; opacity: 0.7; }
+.fnotes__tools--phone .fnotes__more { flex: none; margin-left: 0; padding-left: 4px; }
+.fnotes__tools--phone .fnotes__menu .fnotes__btn { width: 36px; height: 36px; }
+.fnotes__done-pill { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px; border-radius: 999px; }
 /* light mode: the folder icon on notes in grey (orange stays for what's active or needs you) */
 :root:not([data-theme='night']) :is(.note-row__folder, .note-modal__folder > svg) { color: var(--muted); }
+/* a note's date (ui/NoteDate.tsx): beside the folder; its picker is the navbar range picker's calendar */
+.note-modal__meta > .note-date { flex: 0 1 200px; min-width: 170px; max-width: 100%; }
+/* the label (and its value) from the left, the ✕ at the right */
+.note-modal__meta > .note-date > .chat-ctx__pick { flex: 1; justify-content: flex-start; }
+.note-modal__meta > .note-date > .chat-ctx__unpick { margin-left: auto; }
+.popover.note-date-pop { flex-direction: column; align-items: stretch; gap: 8px; }
+.note-date-pop__mode { align-self: center; }
+.note-date-pop__mode button { padding: 4px 14px; }
+.note-date-pop__foot { min-height: 34px; }
+.note-date-pop__time { display: inline-flex; align-items: center; gap: 2px; }
+.note-row__date { flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; color: var(--hl-ink); }
+/* a note's page (ui/NotePages.tsx): its picker beside the folder, a chip on rows in lists that mix pages */
+.note-modal__meta > .note-page-select { flex: 0 1 180px; min-width: 150px; }
+/* as tall as the folder and date buttons beside it */
+.note-modal__meta > .note-page-select { display: flex; }
+.note-modal__meta > .note-page-select > .rs__control { flex: 1; min-height: 100% !important; font-size: 12.5px; }
+.note-page-select__value { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.note-page-select__value > svg { flex: none; color: var(--hl-ink); }
+.note-row__page { flex: none; display: inline-flex; align-items: center; gap: 3px; max-width: 120px; font-size: 11.5px; color: var(--muted); }
+.note-row__page > svg { flex: none; }
+/* a page's card: its latest notes by name, one per line */
+.page-card__titles { display: grid; gap: 1px; min-width: 0; }
+.page-head__more { margin-left: auto; flex: none; }
+@media (max-width: 768px) { .page-card__titles { display: none; } }
+/* Notes → View all: the cards by page or by tag */
+.notes-modal__group { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; margin-bottom: 10px; border-radius: 999px; background: var(--card-2); }
+.notes-modal__group button { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12px; color: var(--muted); cursor: pointer; transition: background 0.15s, color 0.15s; }
+.notes-modal__group button:hover { color: var(--text); }
+.notes-modal__group button.active { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+.notes-modal__group button:focus-visible { outline: 2px solid var(--hl); outline-offset: 1px; }
+.note-tags__empty { grid-column: 1 / -1; margin: 4px 2px; font-size: 12px; }
+/* the note's tags: a pill like the folder, page and date beside it */
+.note-modal__meta > .rs--multi > .rs__control { border-radius: 999px; padding-left: 12px; }
+.note-modal__meta > .rs--multi .rs__multi-value { border-radius: 999px; }
+
+/* ── the notes' editor blocks (ui/NoteEditorBlocks.ts, ui/NoteSlash.tsx, ui/FolderNotes.tsx) ── */
+/* the "/" menu: under the caret, like the app's other menus */
+.slash-menu { width: 260px; max-width: calc(100vw - 16px); max-height: min(320px, 50vh); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 4px; animation: ui-pop-in 0.14s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.slash-menu button { gap: 10px; padding: 6px 8px; }
+.slash-menu button.is-active { background: var(--card-2); }
+.slash-menu__icon { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 14px; }
+.slash-menu button.is-active .slash-menu__icon { color: var(--hl-ink); }
+.slash-menu__text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.slash-menu__hint { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slash-menu__none { padding: 8px 10px; font-size: 12.5px; color: var(--muted); }
+.fnotes__editor .tiptap .suggestion { color: var(--hl-ink); }
+@media (pointer: coarse) { .slash-menu button { padding: 8px; } }
+
+/* a link's address (Cmd/Ctrl+K) */
+.link-pop {
+  position: fixed; z-index: 1500; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; width: min(340px, calc(100vw - 16px)); box-sizing: border-box;
+  padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+}
+.link-pop input { flex: 1; min-width: 0; height: 30px; padding: 0 8px; border: 0; border-radius: 7px; background: var(--card-2); color: var(--text); font-size: 13px; outline: none; }
+.link-pop input[aria-invalid='true'] { box-shadow: inset 0 0 0 1px var(--danger); }
+.link-pop a.fnotes__btn { text-decoration: none; }
+.link-pop__bad { flex-basis: 100%; padding: 2px 8px 2px; font-size: 11.5px; color: var(--danger); }
+
+/* links: clickable while reading (a new tab); while writing Cmd/Ctrl+click */
+.fnotes--view .fnotes__editor .tiptap a { cursor: pointer; }
+
+/* callout: an icon and text on a tinted box */
+.fnotes__editor .tiptap .callout { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--hl) 7%, var(--card)); }
+.callout__icon { all: unset; flex: none; display: grid; place-items: center; width: 24px; height: 24px; margin-top: -1px; border-radius: 6px; font-size: 16px; line-height: 1; cursor: pointer; user-select: none; }
+.callout__icon:hover { background: var(--card-2); }
+.fnotes--view .callout__icon { cursor: default; background: none; }
+.callout__body { flex: 1; min-width: 0; }
+.callout__body > * + * { margin-top: 0.4em; }
+
+/* code: its language in the corner, coloured (lowlight / highlight.js classes) */
+.fnotes__editor .tiptap .code-block { position: relative; }
+.fnotes__editor .tiptap .code-block pre { margin: 0; padding-top: 26px; font-family: var(--mono, ui-monospace, 'SF Mono', monospace); line-height: 1.5; tab-size: 2; }
+.code-block__lang { position: absolute; top: 4px; right: 6px; z-index: 1; }
+.code-block__lang select { appearance: none; height: 20px; padding: 0 6px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
+.code-block__lang select:hover { background: var(--card-2); color: var(--text); }
+.fnotes--view .code-block__lang { pointer-events: none; }
+.fnotes__editor .tiptap pre code { font-size: 12.5px; }
+.fnotes__editor { --code-key: #b0431f; --code-str: #3c7a3a; --code-num: #a3610a; --code-fn: #2f5fb3; --code-com: #8b8a84; --code-type: #8a3fae; }
+:root[data-theme='night'] .fnotes__editor { --code-key: #ff8f5c; --code-str: #9fd38a; --code-num: #f5c26b; --code-fn: #7fb3ff; --code-com: #6d6d68; --code-type: #d39bff; }
+.fnotes__editor .hljs-keyword, .fnotes__editor .hljs-selector-tag, .fnotes__editor .hljs-literal, .fnotes__editor .hljs-built_in, .fnotes__editor .hljs-doctag { color: var(--code-key); }
+.fnotes__editor .hljs-string, .fnotes__editor .hljs-regexp, .fnotes__editor .hljs-addition, .fnotes__editor .hljs-attr, .fnotes__editor .hljs-template-tag { color: var(--code-str); }
+.fnotes__editor .hljs-number, .fnotes__editor .hljs-symbol, .fnotes__editor .hljs-variable, .fnotes__editor .hljs-template-variable, .fnotes__editor .hljs-attribute { color: var(--code-num); }
+.fnotes__editor .hljs-title, .fnotes__editor .hljs-section, .fnotes__editor .hljs-name, .fnotes__editor .hljs-selector-id, .fnotes__editor .hljs-selector-class { color: var(--code-fn); }
+.fnotes__editor .hljs-type, .fnotes__editor .hljs-class, .fnotes__editor .hljs-meta, .fnotes__editor .hljs-tag { color: var(--code-type); }
+.fnotes__editor .hljs-comment, .fnotes__editor .hljs-quote { color: var(--code-com); font-style: italic; }
+.fnotes__editor .hljs-deletion { color: var(--danger); }
+.fnotes__editor .hljs-emphasis { font-style: italic; }
+.fnotes__editor .hljs-strong { font-weight: 600; }
+
+/* tables: scroll sideways inside the text (never the page), columns resized by their edge */
+.fnotes__editor .tiptap .tableWrapper { max-width: 100%; overflow-x: auto; margin: 0.6em 0; }
+.fnotes__editor .tiptap table { border-collapse: collapse; table-layout: fixed; margin: 0; font-size: 13.5px; }
+.fnotes__editor .tiptap :is(td, th) { position: relative; min-width: 60px; padding: 5px 8px; border: 1px solid var(--line); vertical-align: top; box-sizing: border-box; }
+.fnotes__editor .tiptap th { background: var(--card); font-weight: 600; text-align: left; }
+.fnotes__editor .tiptap :is(td, th) > * + * { margin-top: 0.3em; }
+.fnotes__editor .tiptap .selectedCell::after { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--hl) 14%, transparent); pointer-events: none; }
+.fnotes__editor .tiptap .column-resize-handle { position: absolute; top: 0; bottom: -1px; right: -2px; width: 4px; background: var(--hl); pointer-events: none; }
+.fnotes__editor .tiptap.resize-cursor { cursor: col-resize; }
+.fnotes--view .fnotes__editor .tiptap .column-resize-handle { display: none; }
+/* the caret in a table: its bar above it */
+.table-bar {
+  position: fixed; z-index: 1000; display: flex; align-items: center; gap: 1px; padding: 3px; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; box-sizing: border-box;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+}
+.table-bar .fnotes__btn { flex: none; width: 28px; height: 28px; font-size: 14px; }
+.table-bar .fnotes__btn.is-danger:hover { color: var(--danger); }
+.table-bar__sep { flex: none; width: 1px; height: 16px; margin: 0 3px; background: var(--line); }
+@media (pointer: coarse) { .table-bar .fnotes__btn { width: 34px; height: 34px; } }
+
+/* the toolbar's Full size, at its right end before "⋯" */
+.fnotes__trail { display: inline-flex; margin-left: auto; padding-left: 4px; }
+.fnotes__trail + .fnotes__more { margin-left: 0; }
+/* full size (computers): the toolbar and the text fill the window (z-index: over the note's window, inside its
+   backdrop); the text across its width, with room at the sides */
+.fnotes__box--full {
+  position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; background: var(--card-2);
+}
+/* in and out: it grows from its place in the note and shrinks back into it (FolderNotes.tsx useFullSize) */
+.fnotes__box--full.is-leaving { pointer-events: none; }
+.fnotes__box.fnotes__box--full .fnotes__tools { border-radius: 0; border: 0; border-bottom: 1px solid var(--line); padding: 6px 12px; }
+.fnotes__box.fnotes__box--full .fnotes__editor { border: 0; border-radius: 0; }
+/* the text uses the full width, with room at the sides (the drag handle sits in the left one) */
+.fnotes__box--full .fnotes__editor .tiptap { max-width: none; margin: 0; padding: 28px 56px 96px; font-size: 15px; }
+/* Ask Marcus's panel open (styles/note-assist.css): full size takes the room left of it, and the panel stays at the
+   window's right edge, full height, above it */
+.note-modal--assist .fnotes__box--full { right: var(--note-assist-w, 380px); }
+.note-modal--assist:has(.fnotes__box--full:not(.is-leaving)) > .note-assist {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: var(--note-assist-w, 380px);
+  padding: 16px 16px 16px 0; box-sizing: border-box; background: var(--card);
+}
+.note-modal--assist:has(.fnotes__box--full:not(.is-leaving)) > .note-assist .note-assist__inner { width: 100%; }
+.fnotes__hold { flex: none; }
+.note-assist.is-moving { position: relative; z-index: 51; }
+/* the title, and (phones) the settings button beside it: the folder, page, date, tags and sharing fold away */
+.note-modal__titlerow { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.note-modal__titlerow > :first-child { flex: 1; min-width: 0; }
+.note-modal__settings { display: none; position: relative; flex: none; margin-top: 2px; }
+.note-modal__settings.is-on { background: var(--card-2); color: var(--text); }
+.note-modal__settings-dot { position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 999px; background: var(--hl); }
+@media (max-width: 768px) {
+  .note-modal__settings { display: inline-grid; place-items: center; }
+  .note-modal__meta:not(.is-open) { display: none; }
+}
+/* the title being written: the box takes the row, ✓ after it */
+.note-modal__name--editing { align-items: center; }
+.note-modal__name--editing > .note-modal__title { flex: 1; min-width: 0; }
+.note-modal__name-save { color: var(--hl-ink); }
+@media (max-width: 768px) {
+  /* phones: rename, ✓ and settings a little bigger, easier to hit */
+  :is(.note-modal__name > .icon-btn, .note-modal__settings).small { width: 36px; height: 36px; font-size: 17px; }
+}

@@ -27,6 +27,7 @@ import { FolderSelect, StatusPill } from './taskMeta'
 import { TagPicker } from './tags'
 import { useThreadState } from './Threads'
 import { tip } from './Tooltip'
+import { AgentFace } from './AgentFace'
 
 // A thread (?thread=<id>): the chat with the manager on the left, in the thread's own session (server:
 // work/threads.ts); on the right what the topic made: its tasks, the files its reports carry, its reports. Phones:
@@ -80,7 +81,7 @@ function MentionButton({ onPick }: { onPick: (name: string) => void }) {
           {agents.map((a) => (
             <button key={a.id} role="menuitem" className="mention__item" onClick={() => (onPick(`@${a.name} `), setOpen(false))}>
               <span className="avatar avatar--xs" style={avatarStyle(a.look.shirt)}>
-                {a.name[0]}
+                <AgentFace look={a.look} />
               </span>
               <span className="truncate">{a.name}</span>
               <span className="muted truncate">{a.role || a.profile.role}</span>
@@ -547,7 +548,7 @@ export function ThreadModal({ id, newSub, onClose: close, onMinimize: minimize }
                   edit: (qid, text) => liveApi.editQueued(t.id, qid, text),
                   unsend: (qid) => liveApi.unsendQueued(t.id, qid),
                 },
-                names: agents.filter((a) => a.kind !== 'manager').map((a) => ({ name: a.name, role: a.role || a.profile.role, color: a.look.shirt })),
+                names: agents.filter((a) => a.kind !== 'manager').map((a) => ({ name: a.name, role: a.role || a.profile.role, color: a.look.shirt, look: a.look })),
               }}
             />
           )}

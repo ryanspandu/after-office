@@ -606,7 +606,7 @@ export const requireJsonForWrites: MiddlewareHandler = async (c, next) => {
   const upload =
     type === 'application/octet-stream' &&
     !!c.req.header('x-file-name') &&
-    ((c.req.method === 'POST' && /^\/api\/(agents\/[^/]+\/uploads|workspaces\/files|migrate\/upload\/[\w-]+)$/.test(c.req.path)) ||
+    ((c.req.method === 'POST' && /^\/api\/(agents\/[^/]+\/uploads|workspaces\/files|note-images|migrate\/upload\/[\w-]+)$/.test(c.req.path)) ||
       (c.req.method === 'PUT' && /^\/api\/agents\/[^/]+\/uploads\/[0-9a-f-]{36}\/chunk$/.test(c.req.path)))
   if (type !== 'application/json' && !upload) return c.json({ error: 'Expected application/json' }, 415)
   const site = c.req.header('sec-fetch-site')

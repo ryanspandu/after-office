@@ -9,7 +9,7 @@ import { Vehicle } from './Vehicle'
 import { placeLabel } from './labels'
 import { agentPose, agentWorld, setAgentWorld } from './focus'
 import { findPath } from './pathing'
-import { freeSeat, outingKind, outings, seatAt, takeSeat } from './outings'
+import { freeSeat, outingKind, outings, seatAt, takeSeat, townView } from './outings'
 import { Driver, Headlights, streets } from './Traffic'
 import { useLayout } from './useLayout'
 import { dampAngle } from './math'
@@ -339,7 +339,9 @@ export function Agent({ agent, leaving = false, out = false }: { agent: OfficeAg
     }
     vehicle.current.position.set(c.pos[0], 0, c.pos[1])
     vehicle.current.rotation.y = c.rotY
-    vehicle.current.visible = n.phase !== 'gone'
+    // out in town while the town isn't showing (closer in than scene/zoom.ts CITY_HIDE): not drawn either
+    const offView = !townView.shown && (n.phase === 'seated' || n.phase === 'riding' || n.phase === 'riding-home')
+    vehicle.current.visible = n.phase !== 'gone' && !offView
     lights.current.visible = n.phase === 'driving-in' || n.phase === 'driving-out' || n.phase === 'riding' || n.phase === 'riding-home'
 
     if (n.phase === 'driving-in' && !c.path.length) {
@@ -363,7 +365,7 @@ export function Agent({ agent, leaving = false, out = false }: { agent: OfficeAg
       }
     }
     const shown = n.phase === 'walking-in' || n.phase === 'present' || n.phase === 'walking-out' || n.phase === 'to-seat' || n.phase === 'seated'
-    root.current.visible = shown
+    root.current.visible = shown && !offView
     const rider = vehicle.current.getObjectByName('rider')
     if (rider) rider.visible = !shown && n.phase !== 'gone'
 
@@ -435,7 +437,7 @@ export function Agent({ agent, leaving = false, out = false }: { agent: OfficeAg
     const tag = placeLabel(agent.id, anchor.set(tagAt[0], shown ? 2.3 + j.rootY : 1.9, tagAt[1]), camera, size.width, size.height)
     if (tag) {
       // only what changed is written (every write makes the browser redo the page's layout)
-      const opacity = n.phase === 'gone' ? '0' : leaving || out ? '0.6' : '1'
+      const opacity = n.phase === 'gone' || offView ? '0' : leaving || out ? '0.6' : '1'
       if (tag.style.opacity !== opacity) tag.style.opacity = opacity
       if (tag.dataset.pose !== pose) tag.dataset.pose = pose
       const bubble = tag.firstElementChild as HTMLElement
