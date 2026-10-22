@@ -7,7 +7,7 @@ import { addPending, getPending, publish, resolvePending, runtimeOf } from '../a
 import { isAsleep } from '../agents/sleep'
 import { joinThread } from './threads'
 import { bossMode, countBoss, officeSettings } from './settings'
-import { addComment, deliver, deliverToManager, isReadingAgentOutput, isReportedNow, endParallelSession, mainBusy, makesCycle, markTask, parallelBlocker, PARALLEL_NOTE, startParallel, publishWork, quotaPause, startTask, tickTasks, waitingOn } from './work'
+import { addComment, deliver, timezone, deliverToManager, isReadingAgentOutput, isReportedNow, endParallelSession, mainBusy, makesCycle, markTask, parallelBlocker, PARALLEL_NOTE, startParallel, publishWork, quotaPause, startTask, tickTasks, waitingOn } from './work'
 import { managerOrigin } from './origin'
 import { requestCheckApproval } from './gate'
 import { notifyUser } from './reports'
@@ -15,6 +15,18 @@ import { notify } from '../notify'
 
 // What the manager does with tasks (through the after-office MCP tools, src/mcp.ts): delegating, the owner's approval
 // of its tasks, assigning, editing, deleting and sending work back for another round.
+
+/** A task's deadline when none is given: the end of today in the office's time zone (23:59), so it shows on today in
+ *  the calendar; late in the day (under 3 hours left), the end of tomorrow. */
+export function defaultDeadline(now = Date.now()) {
+  const tz = timezone()
+  // the office's clock now, read as if it were UTC: its offset from the real time is the zone's offset
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(now).map((x) => [x.type, Number(x.value)]))
+  const wall = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second)
+  const offset = wall - Math.floor(now / 1000) * 1000
+  const endOf = (days: number) => Date.UTC(p.year, p.month - 1, p.day + days, 23, 59) - offset
+  return endOf(0) - now < 3 * 3_600_000 ? endOf(1) : endOf(0)
+}
 
 export interface DelegateInput {
   agent: string
@@ -54,7 +66,7 @@ export async function delegateTask(managerId: string, input: DelegateInput) {
     description: input.description.trim().slice(0, 20_000),
     agentId: target.id,
     ...(cleanFolder(input.folder) ? { folder: cleanFolder(input.folder) } : {}),
-    deadline: input.deadline ?? Date.now() + 24 * 3_600_000,
+    deadline: input.deadline ?? defaultDeadline(),
     priority: input.priority ?? 'medium',
     status: 'todo',
     mode: input.mode,
@@ -113,7 +125,7 @@ export function ownerTask(managerId: string, input: { title: string; description
     agentId: null,
     forOwner: true,
     ...(cleanFolder(input.folder) ? { folder: cleanFolder(input.folder) } : {}),
-    deadline: input.deadline ?? Date.now() + 24 * 3_600_000,
+    deadline: input.deadline ?? defaultDeadline(),
     priority: input.priority ?? 'medium',
     status: 'todo',
     delegatedBy: managerId,

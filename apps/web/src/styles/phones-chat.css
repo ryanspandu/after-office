@@ -33,8 +33,8 @@
   .drawer__grab { display: flex; justify-content: center; flex-shrink: 0; padding: 8px 0 0; cursor: grab; touch-action: none; }
   .drawer__grab::before { content: ''; width: 38px; height: 5px; border-radius: 999px; background: var(--line); }
   .drawer__head { touch-action: none; padding-top: 6px; }
-  /* full width is the only width on a phone */
-  .drawer .maximize-btn { display: none; }
+  /* full width is the only width on a phone: there, the button is the chat's full size (below), shown on the Chat tab */
+  .drawer:not(:has(.chat--mobile)) .maximize-btn { display: none; }
 }
 /* phones: fixed layers follow the visible area (above the keyboard); see state/visualViewport.ts */
 @media (max-width: 768px) {
@@ -55,13 +55,27 @@
    sessions and the floating buttons step aside (ui/agent/ChatTab.tsx useTypingStep: Back puts the keyboard away).
    Its open animation is left alone: switched off and back on, it would replay (a bounce on the way out) */
 @media (max-width: 768px) {
-  .drawer:has(.chat__composer:focus-within) {
+  .drawer:has(.chat__composer:focus-within), .drawer:has(.thread-new-sub:focus-within) {
     top: 0 !important; bottom: 0; height: auto !important; border-radius: 0; padding-top: env(safe-area-inset-top);
   }
   .drawer:has(.chat__composer:focus-within) :is(.drawer__grab, .drawer__tabs, .stabs-wrap, .chat__float, .chat__bar--sheet) { display: none; }
+  /* a new sub-thread's form: the sheet already takes the screen, so the keyboard doesn't push the form up out of it */
+  .drawer:has(.thread-new-sub:focus-within) .drawer__grab { display: none; }
   .drawer:has(.chat__composer:focus-within) .chat--mobile .chat__log { padding-top: 8px; }
   /* a thread: where it sits (its breadcrumb), its name and ✕ stay; its state and the other buttons step aside */
   .thread-drawer:has(.chat__composer:focus-within) :is(.thread-head__meta, .thread-drawer__actions > :not(:last-child)) { display: none; }
   /* the message box's hint on one line ("…" when it's longer) */
   .chat__composer textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* phones, a chat at full size (the head's ⤢; ui/Maximize.tsx useMaximize): the sheet takes the whole screen and the
+   chat the room of what steps aside: the tabs, the sessions, a thread's folder / tags / state, the role line. The
+   head (name, its buttons) stays; ⤡ brings them back */
+@media (max-width: 768px) {
+  .drawer.drawer--full:has(.chat--mobile) {
+    top: 0 !important; bottom: 0; height: auto !important; border-radius: 0; padding-top: env(safe-area-inset-top);
+  }
+  .drawer.drawer--full:has(.chat--mobile) :is(.drawer__grab, .drawer__tabs, .stabs-wrap, .chat__bar--sheet, .thread-head__meta, .drawer__title > p) { display: none; }
+  /* Ask Marcus on a note, at full size: its Edit / Suggest and one-tap jobs step aside too */
+  .note-assist-sheet.modal--full .note-assist__mode { display: none; }
 }

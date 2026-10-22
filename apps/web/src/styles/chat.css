@@ -155,7 +155,6 @@
 /* chat drawers at full width (desktop; ui/Maximize.tsx) */
 .drawer.drawer--full { width: calc(100vw - 24px); }
 .drawer__head > .maximize-btn { flex-shrink: 0; }
-@media (max-width: 768px) { .drawer__head > .maximize-btn { display: none; } }
 /* a report at full size: its text takes the room (ReportModal) */
 .modal--full .report { flex: 1; min-height: 0; }
 .modal--full .report .report__text { flex: 1; max-height: none; }

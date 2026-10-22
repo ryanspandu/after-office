@@ -186,7 +186,10 @@ export const ComposerBox = forwardRef<ComposerHandle, {
         const cs = getComputedStyle(t)
         for (const k of ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontSize', 'fontFamily', 'fontWeight', 'lineHeight', 'letterSpacing', 'borderRadius'] as const)
           m.style[k] = cs[k]
-        m.style.height = t.style.height
+        // as tall as the box really is (its max-height caps it), and as narrow once a scrollbar takes room in it
+        m.style.height = `${t.offsetHeight}px`
+        const bar = t.offsetWidth - t.clientWidth - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth)
+        m.style.paddingRight = `${parseFloat(cs.paddingRight) + Math.max(0, bar)}px`
         m.scrollTop = t.scrollTop
       }
     }

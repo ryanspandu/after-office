@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { LuArrowLeft, LuBookOpen, LuBookOpenCheck, LuBookPlus, LuCalendarDays, LuCheck, LuFolder, LuLoader, LuMinus, LuNotebookPen, LuPencil, LuPin, LuPinOff, LuUsers, LuPlus, LuListFilter, LuSearch, LuSettings2, LuTag, LuTrash2, LuX } from 'react-icons/lu'
 import type { OwnerNote, OwnerNoteSummary } from '@after-office/shared'
 import { api } from '../state/auth'
-import { closestCenter, DndContext, MouseSensor, pointerWithin, TouchSensor, useDndContext, useSensor, useSensors, type CollisionDetection } from '@dnd-kit/core'
+import { closestCenter, DndContext, pointerWithin, useDndContext, type CollisionDetection } from '@dnd-kit/core'
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useNow } from '../state/clock'
@@ -14,6 +14,7 @@ import { openUrl, setUrl, useParam } from '../state/url'
 import { NOTES, useMinimized } from '../state/minimized'
 import { confirm } from './Confirm'
 import { ago } from './FollowUps'
+import { listDragStarted, useListDragSensors } from './listDrag'
 import { useModalMaximize } from './Maximize'
 import { Modal } from './Modal'
 import { Select } from './Select'
@@ -151,7 +152,7 @@ function moveNote(activeId: string, overId: string | null) {
 }
 
 const useNoteSensors = () =>
-  useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }))
+  useListDragSensors()
 
 /** The notes, in their order; `sortable`: dragged into another order. `movable` (the notes window): in its drag
  *  (NoteMoves, not a DndContext of their own), dragged onto a page even where they can't be put in another order. */
@@ -167,7 +168,7 @@ function NoteItems({ notes, now, sortable, movable = false, onOpen, showPage }: 
   )
   if (movable) return rows
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => moveNote(String(e.active.id), e.over ? String(e.over.id) : null)}>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={listDragStarted} onDragEnd={(e) => moveNote(String(e.active.id), e.over ? String(e.over.id) : null)}>
       {rows}
     </DndContext>
   )
@@ -215,6 +216,7 @@ function NoteMoves({ sortable, children }: { sortable: boolean; children: ReactN
     <DndContext
       sensors={sensors}
       collisionDetection={noteOrPage}
+      onDragStart={listDragStarted}
       onDragEnd={(e) => {
         const a = e.active.data.current
         if (a?.kind !== 'note') return

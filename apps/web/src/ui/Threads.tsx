@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors, type CollisionDetection, type DragEndEvent } from '@dnd-kit/core'
+import { closestCenter, DndContext, type CollisionDetection, type DragEndEvent } from '@dnd-kit/core'
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { LuArchive, LuArchiveRestore, LuChevronDown, LuCornerDownRight, LuFolder, LuGitBranch, LuListTodo, LuMessagesSquare, LuPencil, LuPin, LuPinOff, LuPlus, LuSearch, LuTrash2, LuX } from 'react-icons/lu'
@@ -14,6 +14,7 @@ import { useOffice } from '../state/store'
 import { openUrl, setUrl } from '../state/url'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { ago } from './FollowUps'
+import { listDragStarted, useListDragSensors } from './listDrag'
 import { Modal } from './Modal'
 import { ScrollTabs } from './ScrollTabs'
 import { FolderSelect } from './taskMeta'
@@ -303,7 +304,7 @@ function ThreadList({ filter, q = '' }: { filter: Filter; q?: string }) {
   const roots = tree ? shown.filter((t) => !t.parentId || !shown.some((p) => p.id === t.parentId)).sort((a, b) => threadOrder(a, b, latest)) : shown
   // dragging (Active, no search): a thread among the threads, a sub-thread among its thread's sub-threads. A mouse
   // drags after moving a little (a click still opens), a finger after holding a moment (a swipe still scrolls).
-  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }))
+  const sensors = useListDragSensors()
   // where it can land: only next to its siblings (a sub-thread never lands on its own thread's row, which holds it)
   const groupOf = (id: string) => {
     const t = threads.find((x) => x.id === id)
@@ -329,7 +330,7 @@ function ThreadList({ filter, q = '' }: { filter: Filter; q?: string }) {
     void liveApi.reorderThreads(next).catch(() => {})
   }
   return (
-    <DndContext sensors={sensors} collisionDetection={amongSiblings} onDragEnd={drop}>
+    <DndContext sensors={sensors} collisionDetection={amongSiblings} onDragStart={listDragStarted} onDragEnd={drop}>
       <SortableContext items={roots.map((t) => t.id)} strategy={verticalListSortingStrategy} disabled={!tree}>
         <ul key={filter} className="list reports-panel__list threads-panel__list ui-switch">
           {roots.map((t) => {

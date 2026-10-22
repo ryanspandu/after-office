@@ -7,7 +7,7 @@ import { db, folderNotesRepo, notePagesRepo, ownerNotesRepo, reportsRepo, tasksR
 import { PROJECTS_DIR } from '../fsroots'
 import { moveProjectsToFolders } from './folders'
 import { workRoutes } from '../routes/work'
-import { listNotePages, moveFolderNotes, noteSummaries, plainText } from './notes'
+import { agentCreatePage, agentDeletePage, agentEditNote, agentNotes, agentPages, agentUpdatePage, agentWriteNote, findPage, listNotePages, moveFolderNotes, noteForAgent, noteSummaries, pagePath, plainText } from './notes'
 
 // The owner's notes (Docs → Notes, a folder's notes): the owner's own edits, checked like the rest of the work routes.
 // And the old projects: their tasks, reports and notes get the project's folder, then the projects are gone.
@@ -137,6 +137,44 @@ test('pages in pages: made inside one, no loops, listed; deleting one moves its 
 
   await call('DELETE', `/notes/${n.id}`)
   for (const id of [leaf.id, other.id]) await call('DELETE', `/note-pages/${id}`)
+})
+
+test("the agents' pages: found by id, path or a name only one has; notes put on them, listed by page", () => {
+  const top = agentCreatePage('Poplink')
+  const sub = agentCreatePage('Research', 'Poplink')
+  const twin = agentCreatePage('Research')
+  expect(pagePath(sub.id)).toBe('Poplink / Research')
+  expect(findPage('poplink / research').id).toBe(sub.id)
+  expect(findPage(sub.id).id).toBe(sub.id)
+  // a whole path wins ("Research": the top-level one); a name two sub-pages share isn't enough
+  expect(findPage('Research').id).toBe(twin.id)
+  const ideasA = agentCreatePage('Ideas', top.id)
+  const ideasB = agentCreatePage('Ideas', twin.id)
+  expect(() => findPage('Ideas')).toThrow(/More than one/)
+  for (const id of [ideasA.id, ideasB.id]) notePagesRepo.remove(id)
+  expect(() => findPage('Nope')).toThrow(/No page/)
+
+  const n = agentWriteNote('agent-x', { title: 'Ide', markdown: 'isi', page: 'Poplink / Research' })
+  expect(n.pageId).toBe(sub.id)
+  expect(noteForAgent(n, false).page).toBe('Poplink / Research')
+  // a page lists its sub-pages' notes too; "none": the notes on no page
+  expect(agentNotes({ page: 'Poplink' }).map((x) => x.id)).toContain(n.id)
+  expect(agentNotes({ page: twin.id }).map((x) => x.id)).not.toContain(n.id)
+  expect(agentNotes({ page: 'none' }).map((x) => x.id)).not.toContain(n.id)
+  const tree = agentPages().pages as { id: string; subPages?: { id: string; notes: number }[] }[]
+  expect(tree.find((p) => p.id === top.id)?.subPages?.[0]).toMatchObject({ id: sub.id, notes: 1 })
+
+  // moved off its page, then renamed / moved pages
+  expect(agentEditNote('agent-x', n.id, { page: '' }).pageId).toBeUndefined()
+  expect(agentEditNote('agent-x', n.id, { page: twin.id }).pageId).toBe(twin.id)
+  expect(pagePath(agentUpdatePage(twin.id, { name: 'Riset', parent: 'Poplink' }).id)).toBe('Poplink / Riset')
+  expect(() => agentUpdatePage('Poplink', { parent: 'Poplink / Riset' })).toThrow()
+  // deleting a page keeps its notes (up to its parent)
+  expect(agentDeletePage('Poplink / Riset')).toMatchObject({ moved: 1, pages: 0 })
+  expect(ownerNotesRepo.get(n.id)?.pageId).toBe(top.id)
+
+  ownerNotesRepo.remove(n.id)
+  for (const id of [sub.id, top.id]) notePagesRepo.remove(id)
 })
 
 test('plain text of a note: block ends become spaces, entities decoded', () => {

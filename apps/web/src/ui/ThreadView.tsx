@@ -515,7 +515,8 @@ export function ThreadModal({ id, newSub, onClose: close, onMinimize: minimize }
             <button className="icon-btn small ghost" data-tip="Minimize" aria-label="Minimize" onClick={onMinimize}>
               <LuMinus />
             </button>
-            {!mobile && <MaximizeButton full={max.full} onToggle={max.toggle} />}
+            {/* phones: the chat at full size (the sheet takes the screen; its tabs and details step aside) */}
+            <MaximizeButton full={max.full} onToggle={max.toggle} />
             <button className="icon-btn small ghost" data-tip="Close" aria-label="Close" onClick={onClose}>
               <LuX />
             </button>

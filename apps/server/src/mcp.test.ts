@@ -43,11 +43,11 @@ beforeAll(() => {
 })
 
 describe('after-office MCP', () => {
-  test('unknown agents are refused; workers get the shared notes tools only', async () => {
+  test('unknown agents are refused; workers get the shared notes and pages tools only', async () => {
     expect((await rpc('nobody', 'tools/list')).status).toBe(401)
     const w = await rpc('w1', 'tools/list')
     expect(w.status).toBe(200)
-    expect((w.body.result.tools as { name: string }[]).map((t) => t.name).sort()).toEqual(['delete_note', 'edit_note', 'list_notes', 'read_note', 'write_note'])
+    expect((w.body.result.tools as { name: string }[]).map((t) => t.name).sort()).toEqual(['create_note_page', 'delete_note', 'delete_note_page', 'edit_note', 'list_note_pages', 'list_notes', 'read_note', 'update_note_page', 'write_note'])
   })
 
   test('initialize', async () => {

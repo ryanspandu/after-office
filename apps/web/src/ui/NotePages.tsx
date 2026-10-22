@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { LuArrowLeft, LuArrowRight, LuBookCopy, LuBookOpen, LuBookPlus, LuCheck, LuChevronRight, LuEllipsis, LuFolderInput, LuInbox, LuLayers, LuPencil, LuPlus, LuTag, LuTrash2 } from 'react-icons/lu'
 import type { NotePage, OwnerNoteSummary } from '@after-office/shared'
-import { closestCenter, DndContext, MouseSensor, TouchSensor, useDndMonitor, useDroppable, useSensor, useSensors } from '@dnd-kit/core'
+import { closestCenter, DndContext, useDndMonitor, useDroppable } from '@dnd-kit/core'
 import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { api } from '../state/auth'
@@ -11,6 +11,7 @@ import { useLive } from '../state/live'
 import { ActionMenu } from './ActionMenu'
 import { confirm } from './Confirm'
 import { ago } from './FollowUps'
+import { listDragStarted, useListDragSensors } from './listDrag'
 import { Field, Modal } from './Modal'
 import { Select } from './Select'
 import { tip } from './Tooltip'
@@ -391,7 +392,7 @@ export function NotePageCards({ notes, parent, onOpen, noteDrop = false }: { not
   const [menu, setMenu] = useState<{ page: NotePage; x: number; y: number } | null>(null)
   const loose = parent ? [] : notes.filter((n) => !n.pageId)
   // the pages' order among their siblings: dragged (a held finger on a phone), shown at once, stored on the server
-  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }))
+  const sensors = useListDragSensors()
   const move = (from: string, to: string | null) => {
     const a = pages.findIndex((p) => p.id === from)
     const b = to ? pages.findIndex((p) => p.id === to) : -1
@@ -447,7 +448,7 @@ export function NotePageCards({ notes, parent, onOpen, noteDrop = false }: { not
           <PageOrder onMove={move} />
         </>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => move(String(e.active.id), e.over ? String(e.over.id) : null)}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={listDragStarted} onDragEnd={(e) => move(String(e.active.id), e.over ? String(e.over.id) : null)}>
           {sorted}
         </DndContext>
       )}

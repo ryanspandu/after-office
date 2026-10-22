@@ -307,12 +307,15 @@ const sharedNote = (id: string) => {
 }
 
 /** The notes the owner shared with the agents, pinned first, newest first. */
-export function agentNotes(opts: { query?: string; folder?: string } = {}) {
+export function agentNotes(opts: { query?: string; folder?: string; page?: string } = {}) {
   const words = (opts.query ?? '').toLowerCase().split(/\s+/).filter(Boolean)
+  // a page: its notes and its sub-pages' ("none": the notes on no page)
+  const page = opts.page?.trim() ? (opts.page.trim().toLowerCase() === 'none' ? null : findPage(opts.page).id) : undefined
   return ownerNotesRepo
     .all()
     .filter((n) => n.shared)
     .filter((n) => !opts.folder || n.folder === opts.folder || !!n.folder?.startsWith(`${opts.folder}/`))
+    .filter((n) => page === undefined || (page === null ? !n.pageId : !!n.pageId && isWithin(n.pageId, page)))
     .filter((n) => {
       const hay = `${n.title} ${plainText(n.html)}`.toLowerCase()
       return words.every((w) => hay.includes(w))
@@ -323,7 +326,7 @@ export function agentNotes(opts: { query?: string; folder?: string } = {}) {
 export const agentReadNote = (id: string) => sharedNote(id)
 
 /** An agent writes a note: shared (it's theirs as much as the owner's), Markdown turned into the editor's rich text. */
-export function agentWriteNote(agentId: string, input: { title: string; markdown: string; folder?: string; tags?: string[] }) {
+export function agentWriteNote(agentId: string, input: { title: string; markdown: string; folder?: string; tags?: string[]; page?: string }) {
   const markdown = input.markdown ?? ''
   if (markdown.length > HTML_MAX / 2) throw new AgentError(`A note is limited to ${HTML_MAX / 2000}k characters`, 400)
   const now = Date.now()
@@ -333,6 +336,7 @@ export function agentWriteNote(agentId: string, input: { title: string; markdown
     html: markdownToHtml(markdown),
     ...(cleanFolder(input.folder) ? { folder: cleanFolder(input.folder) } : {}),
     ...(input.tags?.length ? { tags: input.tags } : {}),
+    ...(input.page?.trim() ? { pageId: findPage(input.page).id } : {}),
     shared: true,
     author: agentId,
     rank: -now,
@@ -345,7 +349,7 @@ export function agentWriteNote(agentId: string, input: { title: string; markdown
 }
 
 /** An agent changes a shared note: its title, its whole text, or a part added at the end (keeps the owner's formatting). */
-export function agentEditNote(agentId: string, id: string, edit: { title?: string; markdown?: string; append?: string; folder?: string | null; tags?: string[] }) {
+export function agentEditNote(agentId: string, id: string, edit: { title?: string; markdown?: string; append?: string; folder?: string | null; tags?: string[]; page?: string | null }) {
   const prev = sharedNote(id)
   const next: OwnerNote = { ...prev, updatedAt: Date.now(), editedBy: agentId }
   if (edit.title !== undefined) next.title = edit.title.trim().slice(0, TITLE_MAX) || prev.title
@@ -359,6 +363,11 @@ export function agentEditNote(agentId: string, id: string, edit: { title?: strin
   if (edit.tags) {
     if (edit.tags.length) next.tags = edit.tags
     else delete next.tags
+  }
+  // onto a page (its id or name), or off every page ("" / null)
+  if (edit.page !== undefined) {
+    if (edit.page?.trim()) next.pageId = findPage(edit.page).id
+    else delete next.pageId
   }
   if (next.html.length > HTML_MAX) throw new AgentError(`A note is limited to ${HTML_MAX / 1000}k characters`, 400)
   ownerNotesRepo.put(next)
@@ -386,8 +395,69 @@ export function noteForAgent(n: OwnerNote, withText: boolean) {
     lastEditedBy: n.editedBy ? who(n.editedBy) : n.author ? undefined : 'the owner',
     updatedAt: new Date(n.updatedAt).toISOString(),
     folder: n.folder,
+    page: n.pageId && notePagesRepo.get(n.pageId) ? pagePath(n.pageId) : undefined,
     ...(withText ? { markdown: htmlToMarkdown(n.html) } : { preview: plainText(n.html).slice(0, 160) }),
   }
+}
+
+// ── pages for the agents: named by their id, their path ("Poplink / Research") or a name only one page has ──
+
+/** A page's place: its parents' names and its own, "Poplink / Research / Ideas". */
+export function pagePath(id: string) {
+  const names: string[] = []
+  const seen = new Set<string>()
+  for (let cur = notePagesRepo.get(id); cur && !seen.has(cur.id); cur = cur.parentId ? notePagesRepo.get(cur.parentId) : null) {
+    names.unshift(cur.name)
+    seen.add(cur.id)
+  }
+  return names.join(' / ')
+}
+
+/** The page an agent means: its id, its whole path, or its name when only one page has it. */
+export function findPage(ref: string) {
+  const want = ref.trim()
+  const byId = notePagesRepo.get(want)
+  if (byId) return byId
+  const norm = (v: string) => v.toLowerCase().split('/').map((x) => x.trim()).filter(Boolean).join(' / ')
+  const all = notePagesRepo.all()
+  const byPath = all.filter((p) => norm(pagePath(p.id)) === norm(want))
+  if (byPath.length === 1) return byPath[0]
+  const byName = all.filter((p) => p.name.trim().toLowerCase() === want.toLowerCase())
+  if (byName.length === 1) return byName[0]
+  if (byPath.length > 1 || byName.length > 1)
+    throw new AgentError(`More than one page is called "${want}": ${[...byPath, ...byName].map((p) => `${pagePath(p.id)} (${p.id})`).join(', ')}. Use its id or whole path.`, 409)
+  throw new AgentError(`No page "${want}"; see list_note_pages`, 404)
+}
+
+/** Every page, as a tree in the owner's order: id, name, path, and how many shared notes sit right on it. */
+export function agentPages() {
+  const pages = listNotePages()
+  const shared = ownerNotesRepo.all().filter((n) => n.shared)
+  const of = (parent?: string): unknown[] =>
+    pages
+      .filter((p) => (p.parentId ?? undefined) === parent)
+      .map((p) => {
+        const subPages = of(p.id)
+        return { id: p.id, name: p.name, path: pagePath(p.id), notes: shared.filter((n) => n.pageId === p.id).length, ...(subPages.length ? { subPages } : {}) }
+      })
+  return { pages: of(undefined), notesOnNoPage: shared.filter((n) => !n.pageId || !notePagesRepo.get(n.pageId)).length }
+}
+
+/** An agent makes a page (on the top level, or inside another one: a sub-page). */
+export const agentCreatePage = (name: string, parent?: string) => createPage({ name, ...(parent?.trim() ? { parentId: findPage(parent).id } : {}) })
+
+/** An agent renames a page or moves it (into another page, or "" to the top level). */
+export function agentUpdatePage(ref: string, edit: { name?: string; parent?: string | null }) {
+  const page = findPage(ref)
+  return updatePage(page.id, {
+    ...(edit.name !== undefined ? { name: edit.name } : {}),
+    ...(edit.parent !== undefined ? { parentId: edit.parent?.trim() ? findPage(edit.parent).id : null } : {}),
+  })
+}
+
+export const agentDeletePage = (ref: string) => {
+  const page = findPage(ref)
+  return { page, ...deletePage(page.id) }
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

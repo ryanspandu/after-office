@@ -21,8 +21,8 @@ test('what an agent writes is text, never markup', () => {
   expect(markdownToHtml('<script>alert(1)</script> & [x](javascript:alert(1))')).toBe('<p>&lt;script&gt;alert(1)&lt;/script&gt; &amp; [x](javascript:alert(1))</p>')
 })
 
-test("the editor's collapsible section reads as its summary and its content", () => {
-  expect(htmlToMarkdown('<details><summary>Lihat</summary><div data-type="detailsContent"><p>isi</p></div></details>')).toBe('**Lihat**\n\nisi')
+test("the editor's collapsible section reads as <details>: its summary, then its content", () => {
+  expect(htmlToMarkdown('<details><summary>Lihat</summary><div data-type="detailsContent"><p>isi</p></div></details>')).toBe('<details>\n<summary>Lihat</summary>\n\nisi\n\n</details>')
 })
 
 test('code blocks keep their language, tables and callouts survive the trip', () => {
@@ -74,6 +74,45 @@ test("a drawing reads as a stand-in with its strokes counted, and isn't drawn ba
   expect(markdownToHtml('lihat [drawing: 1 stroke] di atas')).toBe('<p>lihat [drawing: 1 stroke] di atas</p>')
 })
 
-test('a font size on some text is dropped in Markdown, its words kept', () => {
-  expect(htmlToMarkdown('<p>Teks <span style="font-size: 20px">besar</span> dan <strong><span style="font-size: 12px">kecil</span></strong></p>')).toBe('Teks besar dan **kecil**')
+test('a font size on some text is kept in Markdown as its <span style>; other styles dropped, the words kept', () => {
+  expect(htmlToMarkdown('<p>Teks <span style="font-size: 20px">besar</span> dan <strong><span style="font-size: 12px">kecil</span></strong></p>')).toBe(
+    'Teks <span style="font-size: 20px">besar</span> dan **<span style="font-size: 12px">kecil</span>**',
+  )
+  expect(htmlToMarkdown('<p><span style="font-family: serif">biasa</span></p>')).toBe('biasa')
+})
+
+test('toggles, underline, highlights, colours and sizes: Markdown both ways, nothing else let through', () => {
+  const md = [
+    'Ada <u>garis</u>, ==stabilo==, <mark data-color="#fde68a">kuning</mark> dan <span style="color: #e11d48; font-size: 20px">merah</span>.',
+    '',
+    '<details>',
+    '<summary>Klik aku</summary>',
+    '',
+    '- satu',
+    '',
+    '<details>',
+    '<summary>Dalam</summary>',
+    '',
+    'isi dalam',
+    '',
+    '</details>',
+    '',
+    '</details>',
+  ].join('\n')
+  const html = markdownToHtml(md)
+  expect(html).toContain('<u>garis</u>')
+  expect(html).toContain('<mark>stabilo</mark>')
+  expect(html).toContain('<mark data-color="#fde68a" style="background-color: #fde68a; color: inherit">kuning</mark>')
+  expect(html).toContain('<span style="color: #e11d48; font-size: 20px">merah</span>')
+  expect(html).toContain('<details><summary>Klik aku</summary><div data-type="detailsContent"><ul><li><p>satu</p></li></ul><details><summary>Dalam</summary>')
+  // back to the same Markdown, and from it to the same HTML
+  expect(htmlToMarkdown(html)).toBe(md)
+  expect(markdownToHtml(htmlToMarkdown(html))).toBe(html)
+  // only a colour and a size: other styles, other tags and bad colours stay text
+  expect(markdownToHtml('<span style="background: url(x); color: red">a</span>')).toBe('<p><span style="color: red">a</span></p>')
+  expect(markdownToHtml('<mark data-color="url(x)">a</mark> <script>b</script>')).toBe('<p><mark>a</mark> &lt;script&gt;b&lt;/script&gt;</p>')
+  // the editor's own: a text colour as rgb(), a highlight with its style
+  expect(htmlToMarkdown('<p><span style="color: rgb(225, 29, 72)">x</span> <mark data-color="#bbf7d0" style="background-color: #bbf7d0; color: inherit">y</mark></p>')).toBe(
+    '<span style="color: rgb(225, 29, 72)">x</span> <mark data-color="#bbf7d0">y</mark>',
+  )
 })

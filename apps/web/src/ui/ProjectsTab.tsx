@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { listDragStarted, useListDragSensors } from './listDrag'
 import { matchesSearch, SearchBox } from './SearchBox'
 import { LuCopy, LuFolder, LuFolderGit2, LuFolderPlus, LuGitBranch, LuGitCommitHorizontal, LuPlus, LuRefreshCw, LuSettings2, LuTrash2, LuEye, LuEyeOff, LuChevronRight, LuFolderOpen, LuCheck, LuX, LuListTodo, LuFileText, LuFile, LuRotateCcw, LuSquareTerminal, LuNotebookPen, LuMinus } from 'react-icons/lu'
 import { FolderReports } from './Reports'
@@ -23,7 +24,7 @@ import { StatusPill } from './taskMeta'
 import { Previews } from './Previews'
 import { Chevron, FolderTree, TreeContext, type ProjectAt } from './FolderTree'
 import { FolderMenuLayer, folderMenuHandler } from './FolderMenu'
-import { closestCenter, DndContext, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { closestCenter, DndContext } from '@dnd-kit/core'
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { AgentFace } from './AgentFace'
@@ -55,7 +56,7 @@ export function FoldersTab({ q = '' }: { q?: string }) {
   const ws = useWorkspaceData()
   const [order, saveOrder] = useFolderOrder()
   // a mouse drags after moving a little (a click still opens); a finger after holding a moment (a swipe still scrolls)
-  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }))
+  const sensors = useListDragSensors()
   const agents = useOffice((s) => s.agents)
   const now = useNow(60_000).getTime()
   // the office's trash (the trash button above the folders)
@@ -205,7 +206,7 @@ export function FoldersTab({ q = '' }: { q?: string }) {
             <div className="empty">{q.trim() ? 'No folders match.' : 'No folders yet. New folder makes one here.'}</div>
           ) : (
             // drag a folder to put it elsewhere in the list (not while searching: only some are shown)
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => moveFolder(String(e.active.id), e.over ? String(e.over.id) : null)}>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={listDragStarted} onDragEnd={(e) => moveFolder(String(e.active.id), e.over ? String(e.over.id) : null)}>
               <SortableContext items={homeProjects.map((p) => p.path)} strategy={verticalListSortingStrategy} disabled={!!q.trim()}>
                 <ul className="ws__projects ws__projects--flat">
                   {homeProjects.map((p) => (

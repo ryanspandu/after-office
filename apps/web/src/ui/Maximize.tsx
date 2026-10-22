@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { dropStep, forgetStep, pushStep } from '../state/url'
 import { flushSync } from 'react-dom'
 import { LuMaximize2, LuMinimize2 } from 'react-icons/lu'
+import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 
 // Full-width panels (desktop): the manager's and the agents' chat drawers can take the whole window. The choice is
 // remembered per panel in this browser, and the switch animates the panel's width.
@@ -32,8 +33,11 @@ export function useMaximize(key: string) {
 }
 
 export function MaximizeButton({ full, onToggle }: { full: boolean; onToggle: () => void }) {
+  // phones: the chat at full size (the sheet takes the screen), not a width
+  const phone = useMediaQuery(MOBILE)
+  const label = full ? 'Smaller' : phone ? 'Full size' : 'Full width'
   return (
-    <button className="icon-btn small ghost maximize-btn" data-tip={full ? 'Smaller' : 'Full width'} aria-label={full ? 'Smaller' : 'Full width'} aria-pressed={full} onClick={onToggle}>
+    <button className="icon-btn small ghost maximize-btn" data-tip={label} aria-label={label} aria-pressed={full} onClick={onToggle}>
       {full ? <LuMinimize2 /> : <LuMaximize2 />}
     </button>
   )

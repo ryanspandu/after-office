@@ -19,7 +19,7 @@ import { statusLabel } from './work/statuses'
 import { stopActiveTask, markTask, isReadingAgentOutput, managerReviseTask, MAX_MANAGER_REVISIONS, addComment, assignTask, checkFor, taskFolder, deliver, delegateTask, expectReply, managerDeleteTask, managerUpdateTask, notifyUser, retagReports, quotaPause, waitingOn, changeCron, cronFrom, pendingCronChanges, timezone, parallelBlocker, ownerTask } from './work/work'
 import { listTags, tagIdsByName, tagNames } from './work/tags'
 import { cleanFolder } from './work/folders'
-import { agentDeleteNote, agentEditNote, agentNotes, agentReadNote, agentWriteNote, noteForAgent } from './work/notes'
+import { agentCreatePage, agentDeleteNote, agentDeletePage, agentEditNote, agentNotes, agentPages, agentReadNote, agentUpdatePage, agentWriteNote, noteForAgent, pagePath } from './work/notes'
 import { cleanPacks } from './agents/rules'
 
 // The after-office MCP server: the manager agent's hands. Its Claude Code session reaches it over loopback
@@ -110,7 +110,8 @@ function buildServer(managerId: string, session = '') {
       instructions:
         `Tools of the After Office dashboard. You are ${me?.name ?? 'the manager'}, the general manager: every other agent ` +
         'works for you, grouped into divisions by role. Delegate to any active agent with delegate_task and report back to ' +
-        'the owner in chat. Finished work arrives in chat as "[After Office] Report from …".',
+        'the owner in chat. Finished work arrives in chat as "[After Office] Report from …". ' +
+        NOTES_GUIDE,
     },
   )
 
@@ -173,7 +174,7 @@ function buildServer(managerId: string, session = '') {
         title: z.string().min(1).max(200).describe('short task title'),
         description: z.string().min(1).max(20_000).describe('what to do, where, and what done looks like'),
         priority: z.enum(['low', 'medium', 'high']).optional(),
-        deadlineHours: z.number().positive().max(24 * 60).optional().describe('hours from now; default 24'),
+        deadlineHours: z.number().positive().max(24 * 60).optional().describe('hours from now; default: the end of today (23:59, office time), or of tomorrow when under 3 h are left'),
         mode: z.enum(['default', 'acceptEdits', 'auto']).optional().describe("permission mode for this task; default: the agent's current mode"),
         folder: z.string().max(1000).optional().describe("absolute path of the folder to work in (an agent's folder, a repo, or one in the office's folder); the agent is given access when the task starts. Unset: the agent's own folder"),
         after: z
@@ -812,7 +813,7 @@ function buildServer(managerId: string, session = '') {
         title: z.string().min(1).max(200).describe('what they need to do, short'),
         description: z.string().max(20_000).optional().describe('why, and what done looks like'),
         priority: z.enum(['low', 'medium', 'high']).optional(),
-        deadlineHours: z.number().positive().max(24 * 60).optional().describe('hours from now; default 24'),
+        deadlineHours: z.number().positive().max(24 * 60).optional().describe('hours from now; default: the end of today (23:59, office time), or of tomorrow when under 3 h are left'),
         folder: z.string().max(1000).optional().describe('absolute path of the folder it is about'),
         after: z.array(z.string()).max(20).optional().describe('task ids that should be finished first'),
         tags: z.array(z.string().max(40)).max(10).optional().describe('tag names the owner made (see list_tags)'),
@@ -937,6 +938,23 @@ function buildServer(managerId: string, session = '') {
  * The owner's notes that are shared with the agents (Reports → Notes, "Share with agents"): every agent can list, read,
  * write, change and delete them. Notes the owner didn't share don't exist here.
  */
+/** How the owner's Notes are laid out, for the servers' instructions (the manager's and every agent's). */
+const NOTES_GUIDE =
+  "The owner's Notes are kept on pages (notebooks; pages inside pages, any depth: sub-pages). When the owner talks about " +
+  'a page or sub-page, that is a Notes page: list_note_pages shows them, create_note_page makes one (parent: a sub-page), ' +
+  'update_note_page renames or moves one, and write_note / edit_note take a page to put a note on. Notes are rich text: ' +
+  'tables, checklists, callouts, toggles (collapsible sections), highlights, colours; write_note describes the Markdown.'
+
+/** What a note's Markdown can hold: everything the owner's editor makes (packages/shared noteText.ts). */
+const NOTE_MARKDOWN =
+  'Markdown, everything the owner\'s editor has: # to ###### headings; **bold**, *italic*, ~~strike~~, `code`, ' +
+  '[links](https://…); <u>underline</u>; ==highlight== or <mark data-color="#fde68a">a coloured highlight</mark>; ' +
+  '<span style="color: #e11d48; font-size: 20px">coloured / sized text</span> (only color and font-size); - lists, ' +
+  '1. numbered lists, - [ ] / - [x] checklists; > quotes; callouts: a quote led by 💡 ⚠️ ✅ ❗ or 📌 ("> 💡 Tip: …"); ' +
+  '```lang code blocks; GFM tables (| a | b | then | --- | --- |); --- for a divider; a collapsible section (a toggle): ' +
+  'a line "<details>", then "<summary>Its title</summary>", a blank line, its Markdown, a blank line, "</details>" ' +
+  '(they nest). Put a blank line between blocks.'
+
 function registerNoteTools(server: McpServer, agentId: string) {
   const wrap = <A,>(fn: (a: A) => Text | Promise<Text>) => async (a: A) => {
     try {
@@ -949,16 +967,17 @@ function registerNoteTools(server: McpServer, agentId: string) {
     'list_notes',
     {
       description:
-        "The owner's notes shared with the agents (pinned first, then the owner's order): id, title, folder, tags, who wrote it, " +
-        'a preview. Ideas, decisions, plans and references the owner keeps for the team. read_note for the whole text.',
+        "The owner's notes shared with the agents (pinned first, then the owner's order): id, title, page, folder, tags, who " +
+        'wrote it, a preview. Ideas, decisions, plans and references the owner keeps for the team. read_note for the whole text.',
       inputSchema: {
         query: z.string().optional().describe('words to find in the title or text'),
         folder: z.string().optional().describe('only notes about this folder (absolute path; folders inside it too)'),
+        page: z.string().optional().describe('only notes on this page and its sub-pages (id, path "A / B" or name); "none": notes on no page'),
       },
     },
-    wrap(({ query, folder }: { query?: string; folder?: string }) => {
-      const notes = agentNotes({ query, folder: cleanFolder(folder) })
-      if (!notes.length) return text(query || folder ? 'No shared note matches.' : 'The owner has not shared any notes yet.')
+    wrap(({ query, folder, page }: { query?: string; folder?: string; page?: string }) => {
+      const notes = agentNotes({ query, folder: cleanFolder(folder), page })
+      if (!notes.length) return text(query || folder || page ? 'No shared note matches.' : 'The owner has not shared any notes yet.')
       return json(notes.map((n) => noteForAgent(n, false)))
     }),
   )
@@ -971,26 +990,27 @@ function registerNoteTools(server: McpServer, agentId: string) {
     'write_note',
     {
       description:
-        "Add a note to the owner's Notes (shared, so the team can read it too). Markdown: # headings, - lists, " +
-        '- [ ] checklists, **bold**, *italic*, `code`, [links](https://…), > quotes, ``` code blocks.',
+        "Add a note to the owner's Notes (shared, so the team can read it too), on a page if you name one. " + NOTE_MARKDOWN,
       inputSchema: {
         title: z.string().describe('a short title'),
         markdown: z.string().describe('the text'),
         folder: z.string().optional().describe('absolute path of the folder it is about'),
         tags: z.array(z.string()).optional().describe('existing tag names'),
+        page: z.string().optional().describe('the page it goes on: its id, its path ("Poplink / Research") or its name (list_note_pages)'),
       },
     },
-    wrap(({ title, markdown, folder, tags }: { title: string; markdown: string; folder?: string; tags?: string[] }) => {
-      const n = agentWriteNote(agentId, { title, markdown, folder, tags: tagIdsByName(tags) })
-      return text(`Added the note "${n.title}" (${n.id}).`)
+    wrap(({ title, markdown, folder, tags, page }: { title: string; markdown: string; folder?: string; tags?: string[]; page?: string }) => {
+      const n = agentWriteNote(agentId, { title, markdown, folder, tags: tagIdsByName(tags), page })
+      return text(`Added the note "${n.title}" (${n.id})${n.pageId ? ` on the page ${pagePath(n.pageId)}` : ''}.`)
     }),
   )
   server.registerTool(
     'edit_note',
     {
       description:
-        'Change a shared note: its title, its whole text (markdown: replaces it, losing colours and other formatting the ' +
-        'owner added), or add to its end (append: keeps everything before). Also its folder or tags.',
+        'Change a shared note: its title, its whole text (markdown: replaces it; read_note first, its Markdown keeps the ' +
+        "note's formatting, so edit that), or add to its end (append: keeps everything before). Also its page, folder or " +
+        'tags. ' + NOTE_MARKDOWN,
       inputSchema: {
         id: z.string().describe('the note id'),
         title: z.string().optional(),
@@ -998,10 +1018,11 @@ function registerNoteTools(server: McpServer, agentId: string) {
         append: z.string().optional().describe('Markdown added at the end'),
         folder: z.string().optional().describe('absolute path of the folder it is about; empty string: none'),
         tags: z.array(z.string()).optional().describe('the tag names it should have (empty: none)'),
+        page: z.string().optional().describe('move it onto this page (id, path or name); empty string: off every page'),
       },
     },
-    wrap(({ id, title, markdown, append, folder, tags }: { id: string; title?: string; markdown?: string; append?: string; folder?: string; tags?: string[] }) => {
-      const n = agentEditNote(agentId, id, { title, markdown, append, folder: folder === undefined ? undefined : folder.trim() || null, tags: tags === undefined ? undefined : (tagIdsByName(tags) ?? []) })
+    wrap(({ id, title, markdown, append, folder, tags, page }: { id: string; title?: string; markdown?: string; append?: string; folder?: string; tags?: string[]; page?: string }) => {
+      const n = agentEditNote(agentId, id, { title, markdown, append, folder: folder === undefined ? undefined : folder.trim() || null, tags: tags === undefined ? undefined : (tagIdsByName(tags) ?? []), page })
       return text(`Updated the note "${n.title}".`)
     }),
   )
@@ -1009,6 +1030,58 @@ function registerNoteTools(server: McpServer, agentId: string) {
     'delete_note',
     { description: 'Delete a shared note for good. Only when the owner asked for it, or the note is clearly yours and obsolete.', inputSchema: { id: z.string() } },
     wrap(({ id }: { id: string }) => text(`Deleted the note "${agentDeleteNote(id).title || 'Untitled'}".`)),
+  )
+  // pages: the owner's notebooks (Notes → By page), pages inside pages at any depth
+  server.registerTool(
+    'list_note_pages',
+    {
+      description:
+        "The pages of the owner's Notes as a tree (sub-pages inside their page), in the owner's order: id, name, path " +
+        '("Poplink / Research"), how many shared notes sit right on it. A note goes on one page (write_note / edit_note page); ' +
+        'list_notes page shows a page with its sub-pages.',
+      inputSchema: {},
+    },
+    wrap(() => json(agentPages())),
+  )
+  server.registerTool(
+    'create_note_page',
+    {
+      description: 'Make a page in the owner\'s Notes, on the top level or inside another page (a sub-page). Check list_note_pages first: reuse a page that fits instead of making a twin.',
+      inputSchema: {
+        name: z.string().describe('its name'),
+        parent: z.string().optional().describe('the page it goes inside (id, path or name); left out: the top level'),
+      },
+    },
+    wrap(({ name, parent }: { name: string; parent?: string }) => {
+      const p = agentCreatePage(name, parent)
+      return text(`Made the page ${pagePath(p.id)} (${p.id}).`)
+    }),
+  )
+  server.registerTool(
+    'update_note_page',
+    {
+      description: 'Rename a page of the owner\'s Notes, or move it inside another page (or to the top level). Its notes and sub-pages go with it.',
+      inputSchema: {
+        page: z.string().describe('the page (id, path or name)'),
+        name: z.string().optional().describe('its new name'),
+        parent: z.string().optional().describe('the page it goes inside (id, path or name); empty string: the top level'),
+      },
+    },
+    wrap(({ page, name, parent }: { page: string; name?: string; parent?: string }) => {
+      const p = agentUpdatePage(page, { name, parent })
+      return text(`The page is now ${pagePath(p.id)}.`)
+    }),
+  )
+  server.registerTool(
+    'delete_note_page',
+    {
+      description: 'Delete a page of the owner\'s Notes. Its notes and sub-pages are kept: they move up to its parent page (or the top level). Only when the owner asks.',
+      inputSchema: { page: z.string().describe('the page (id, path or name)') },
+    },
+    wrap(({ page }: { page: string }) => {
+      const r = agentDeletePage(page)
+      return text(`Deleted the page "${r.page.name}"; ${r.moved} note(s) and ${r.pages} sub-page(s) moved up.`)
+    }),
   )
 }
 
@@ -1021,7 +1094,8 @@ function buildWorkerServer(agentId: string) {
       instructions:
         `Tools of the After Office dashboard for ${me?.name ?? 'an agent'}: the notes the owner shares with the team ` +
         '(ideas, decisions, plans, references). Check them when a task touches what they cover; add or update one when ' +
-        'the owner asks, or when what you learned is worth keeping for the team.',
+        'the owner asks, or when what you learned is worth keeping for the team. ' +
+        NOTES_GUIDE,
     },
   )
   registerNoteTools(server, agentId)

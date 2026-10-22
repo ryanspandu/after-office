@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObjec
 import { createPortal } from 'react-dom'
 import { forgetStep, pushStep } from '../state/url'
 import { MOBILE } from '../state/useMediaQuery'
+import { useCloseOnListDrag } from './listDrag'
 
 // A small menu of actions under a "⋯" button (a file in the file manager, a tag in the Tags tab), floating over the
 // page and kept inside the screen; also the right-click / long-press menus (threads, folders, files). Closes on a pick,
@@ -32,6 +33,8 @@ export function ActionMenu({ x, y, above, width, title, actions, onClose, classN
     setPos({ left: Math.max(8, Math.min(left, innerWidth - w - 8)), top: y + h > innerHeight - 8 ? Math.max(8, (above ?? y) - h) : y })
   }, [x, y, above, width])
   const release = useMenuDismiss(ref, true, onClose)
+  // held on past the long press: the row starts being dragged, the menu gives way
+  useCloseOnListDrag(onClose)
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === 'Escape' && (e.stopPropagation(), onClose())
     document.addEventListener('keydown', key, true)

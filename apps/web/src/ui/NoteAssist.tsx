@@ -7,6 +7,7 @@ import { ComposerBox, type ComposerHandle } from './agent/ComposerBox'
 import { MOBILE, useMediaQuery } from '../state/useMediaQuery'
 import { confirm } from './Confirm'
 import type { RichNotesApi } from './FolderNotes'
+import { useModalMaximize } from './Maximize'
 import { Modal } from './Modal'
 import { NoteBlockContext, type NoteBlockActions } from './noteBlocks'
 import { tip } from './Tooltip'
@@ -317,9 +318,12 @@ export function NoteAssistPanel({ noteId, editor, closing, onClose }: { noteId: 
 /** Phones (and a folder's inline note): a sheet over the note, with the panel's header. */
 export function NoteAssistSheet({ noteId, editor, onClose }: { noteId: string; editor: RefObject<RichNotesApi | null>; onClose: () => void }) {
   const manager = useOffice((s) => s.agents.find((a) => a.kind === 'manager'))
+  // full size: the whole screen, and the chat the room of its Edit / Suggest bar (styles/phones-chat.css)
+  const max = useModalMaximize(480, 'after-office:note-assist-full')
+  const { className, ...modal } = max.modalProps
   return (
-    <Modal open onClose={onClose} title={`${manager?.name ?? 'Marcus'} · Writing help`} heading={<AssistHeading manager={manager} />} width={480} className="note-assist-sheet">
-      <div className="modal__body note-assist__body">
+    <Modal open onClose={onClose} title={`${manager?.name ?? 'Marcus'} · Writing help`} heading={<AssistHeading manager={manager} />} {...modal} className={`note-assist-sheet${className ? ` ${className}` : ''}`}>
+      <div ref={max.bodyRef} className="modal__body note-assist__body">
         <NoteAssistChat noteId={noteId} editor={editor} />
       </div>
     </Modal>

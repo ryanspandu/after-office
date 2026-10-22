@@ -145,6 +145,7 @@ export function noteHelperContext(t: OfficeThread) {
     `[Note helper: "${title}"] The owner is writing one of their notes in the dashboard and wants help with the writing. Answer in chat.`,
     'To change the note yourself (the owner asks you to write, fix, rewrite, shorten or add to it), put the WHOLE new note in one fenced block that starts with ```note-edit (Markdown): it replaces the note at once and the owner can undo it.',
     'For options to choose from (a few versions, a piece to add somewhere), use fenced blocks that start with ```note instead: the owner inserts those with a button.',
+    "The note's Markdown carries its formatting: tables, checklists, callouts (> 💡 …), toggles (<details><summary>…</summary> … </details>), <u>underline</u>, ==highlight== / <mark data-color>, <span style=\"color / font-size\">. Keep them when you rewrite it, and use them where they help.",
     "Don't edit or create notes with tools and don't delegate unless the owner asks.",
   ].join('\n')
 }

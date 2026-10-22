@@ -1,7 +1,8 @@
 // Notes are rich text (TipTap's HTML) in the dashboard; agents read and write them as Markdown. Both ways cover what
 // the editor makes: headings, paragraphs, lists (bulleted, numbered, checklists), quotes, callouts ("> 💡 …"), code
-// blocks (with their language), tables (GFM, plain text cells), rules, bold, italic, strike, inline code, links and the
-// note's own pictures (/api/note-images/…). A drawing (ui/NoteDrawing.tsx) reads as "[drawing: N strokes]" and isn't made
+// blocks (with their language), tables (GFM, plain text cells), rules, collapsible sections (<details>), bold, italic,
+// strike, underline (<u>), highlight (==…== or <mark data-color>), text colour and size (<span style>), inline code, links
+// and the note's own pictures (/api/note-images/…). A drawing (ui/NoteDrawing.tsx) reads as "[drawing: N strokes]" and isn't made
 // back from it (an agent's Markdown has no drawings). Anything else is kept as its text.
 
 const decode = (s: string) =>
@@ -19,6 +20,16 @@ function inlineMd(html: string) {
   return decode(
     html
       .replace(/<br\s*\/?>/gi, '\n')
+      // underline, highlight, colour / size: kept as their own small HTML (no Markdown for them), past the tag strip below
+      .replace(/<u\b[^>]*>([\s\S]*?)<\/u>/gi, `${LT}u${GT}$1${LT}/u${GT}`)
+      .replace(/<mark\b([^>]*)>([\s\S]*?)<\/mark>/gi, (_m, attrs: string, text: string) => {
+        const color = safeColor(attr(`<x ${attrs}>`, 'data-color'))
+        return color ? `${LT}mark data-color="${color}"${GT}${text}${LT}/mark${GT}` : `==${text}==`
+      })
+      .replace(/<span\b([^>]*)>([\s\S]*?)<\/span>/gi, (_m, attrs: string, text: string) => {
+        const style = safeStyle(decode(attr(`<x ${attrs}>`, 'style')))
+        return style ? `${LT}span style="${style}"${GT}${text}${LT}/span${GT}` : text
+      })
       .replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, '**$2**')
       .replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, '*$2*')
       .replace(/<(s|del|strike)\b[^>]*>([\s\S]*?)<\/\1>/gi, '~~$2~~')
@@ -26,7 +37,28 @@ function inlineMd(html: string) {
       .replace(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, href: string, text: string) => (SAFE_HREF.test(decode(href)) ? `[${text}](${href})` : text))
       .replace(/<img\b[^>]*>/gi, imageMd)
       .replace(/<[^>]+>/g, ''),
-  ).trim()
+  )
+    .replace(/\uE000/g, '<')
+    .replace(/\uE001/g, '>')
+    .trim()
+}
+
+/** Stand-ins for "<" and ">" of the tags inlineMd keeps (its last step strips every other tag). */
+const LT = '\uE000'
+const GT = '\uE001'
+/** A colour as the editor writes it: #hex, rgb()/rgba(), or a plain name. */
+const safeColor = (v: string) => (/^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.\s,%]+\)|[a-z]{3,20})$/i.test(v.trim()) ? v.trim() : '')
+/** A text style an agent may read or write: its colour and its size, nothing else. */
+function safeStyle(style: string) {
+  const out: string[] = []
+  for (const part of style.split(';')) {
+    const [k, ...rest] = part.split(':')
+    const key = k?.trim().toLowerCase()
+    const v = rest.join(':').trim()
+    if (key === 'color' && safeColor(v)) out.push(`color: ${safeColor(v)}`)
+    else if (key === 'font-size' && /^\d{1,3}(\.\d+)?(px|pt|em|rem)$/.test(v)) out.push(`font-size: ${v}`)
+  }
+  return out.join('; ')
 }
 
 /** A link an agent may read or write: the web or an e-mail address (no javascript:, data: …). */
@@ -136,11 +168,12 @@ export function htmlToMarkdown(html: string): string {
       })
       out.push(lines.join('\n'))
     } else if (tag === 'details') {
+      // a collapsible section: <details>, its title in <summary>, what it folds away in Markdown between them
       const summary = b.match(/<summary\b[^>]*>([\s\S]*?)<\/summary>/i)?.[1] ?? ''
-      out.push(`**${inlineMd(summary)}**`)
       const rest = b.replace(/<summary\b[\s\S]*?<\/summary>/i, '').replace(/^<details[^>]*>|<\/details>$/gi, '')
-      const inner = htmlToMarkdown(rest)
-      if (inner) out.push(inner)
+      // the editor keeps the folded part in its own <div data-type="detailsContent">
+      const inner = htmlToMarkdown(topBlocks(rest).map((x) => (/^<div\b[^>]*data-type="detailsContent"/i.test(x) ? innerOf(x) : x)).join(''))
+      out.push(['<details>', `<summary>${inlineMd(summary).replace(/\n+/g, ' ')}</summary>`, '', ...(inner ? [inner, ''] : []), '</details>'].join('\n'))
     } else {
       const t = inlineMd(b)
       if (t) out.push(t)
@@ -156,6 +189,17 @@ function inlineHtml(md: string) {
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
     .replace(/~~([^~]+)~~/g, '<s>$1</s>')
+    .replace(/==([^=]+)==/g, '<mark>$1</mark>')
+    // the small HTML an agent may use (escaped above): underline, a coloured highlight, a text colour / size
+    .replace(/&lt;u&gt;([\s\S]*?)&lt;\/u&gt;/g, '<u>$1</u>')
+    .replace(/&lt;mark data-color=&quot;([^&]*)&quot;&gt;([\s\S]*?)&lt;\/mark&gt;/g, (m, c: string, text: string) => {
+      const color = safeColor(c)
+      return color ? `<mark data-color="${color}" style="background-color: ${color}; color: inherit">${text}</mark>` : `<mark>${text}</mark>`
+    })
+    .replace(/&lt;span style=&quot;([^&]*)&quot;&gt;([\s\S]*?)&lt;\/span&gt;/g, (_m, st: string, text: string) => {
+      const style = safeStyle(st)
+      return style ? `<span style="${style}">${text}</span>` : text
+    })
     .replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g, '<a href="$2">$1</a>')
 }
 
@@ -196,6 +240,23 @@ export function markdownToHtml(md: string): string {
       const code: string[] = []
       while (++i < lines.length && !/^```/.test(lines[i])) code.push(lines[i])
       out.push(`<pre><code${lang ? ` class="language-${escape(lang.toLowerCase())}"` : ''}>${escape(code.join('\n'))}</code></pre>`)
+      continue
+    }
+    // a collapsible section: "<details>", "<summary>Title</summary>", its Markdown, "</details>" (sections inside it too)
+    if (/^\s*<details>\s*$/i.test(line)) {
+      flushPara()
+      flushList()
+      const inner: string[] = []
+      let depth = 1
+      for (i++; i < lines.length; i++) {
+        if (/^\s*<details>\s*$/i.test(lines[i])) depth++
+        else if (/^\s*<\/details>\s*$/i.test(lines[i]) && !--depth) break
+        inner.push(lines[i])
+      }
+      const first = inner.findIndex((l) => l.trim())
+      const title = first >= 0 ? inner[first].match(/^\s*<summary>([\s\S]*?)<\/summary>\s*$/i) : null
+      if (title) inner.splice(first, 1)
+      out.push(`<details><summary>${inlineHtml(title?.[1] ?? '')}</summary><div data-type="detailsContent">${markdownToHtml(inner.join('\n')) || '<p></p>'}</div></details>`)
       continue
     }
     // a table (GFM): a row of cells, then its "| --- |" line, then its rows
